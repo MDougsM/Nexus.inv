@@ -1,0 +1,64 @@
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import ConsultaPublica from './pages/ConsultaPublica';
+
+import Layout from './components/Layout';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import Configuracoes from './pages/Configuracoes';
+import Cadastro from './pages/Cadastro';
+import Auditoria from './pages/Auditoria';
+import CadastrosBase from './pages/CadastrosBase';
+
+// ==========================================
+// GUARDA DE SEGURANÇA (ROTA PROTEGIDA)
+// ==========================================
+const RotaProtegida = ({ children }) => {
+  const logado = !!localStorage.getItem('usuario'); // Verifica se há usuário no cofre do navegador
+  
+  // Se não estiver logado, bloqueia a renderização e chuta de volta pro Login
+  return logado ? children : <Navigate to="/login" replace />;
+};
+
+export default function App() {
+  
+  // Função central de Logout (Passada para o Layout)
+  const handleLogout = () => {
+    if (window.confirm("Deseja realmente sair do sistema?")) {
+      localStorage.clear(); // Limpa a sessão
+      window.location.href = '/login'; // O href força um reload total, limpando a memória RAM do app
+    }
+  };
+
+  return (
+    <Router>
+      <ToastContainer position="top-right" autoClose={3000} theme="colored" />
+      
+      <Routes>
+        {/* ROTA PÚBLICA (Fora do Layout, ou seja, sem Menu Lateral) */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/consulta/:patrimonio" element={<ConsultaPublica />} />
+
+        {/* TODAS AS ROTAS PRIVADAS FICAM AQUI DENTRO */}
+        <Route path="/*" element={
+          <RotaProtegida>
+            <Layout onLogout={handleLogout} usuarioAtual={localStorage.getItem('usuario')}>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/cadastro" element={<Cadastro />} />
+                <Route path="/auditoria" element={<Auditoria />} />
+                <Route path="/cadastros-base" element={<CadastrosBase />} />
+                <Route path="/config" element={<Configuracoes />} />
+                
+                {/* Rota de fallback: Digitou algo errado? Volta pro Dashboard */}
+                <Route path="*" element={<Navigate to="/" />} />
+              </Routes>
+            </Layout>
+          </RotaProtegida>
+        } />
+      </Routes>
+    </Router>
+  );
+}
