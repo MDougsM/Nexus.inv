@@ -46,76 +46,133 @@ export default function ModaisOperacao({
     } catch (e) { toast.error("Erro ao transferir."); }
   };
 
+  const imprimirFicha = () => {
+    window.print();
+  };
+
   return (
     <>
+      {/* 🌟 O NOVO "RG" DA MÁQUINA (FICHA TÉCNICA PREMIUM) */}
       {modalFicha.aberto && modalFicha.dados && (() => { 
         const { ativo, historico } = modalFicha.dados;
         const camposPermitidos = parseCamposDinamicos(categorias.find(c => c.id === ativo.categoria_id));
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setModalFicha({ aberto: false, dados: null })}>
-            <div className="w-full max-w-4xl max-h-[90vh] rounded-xl shadow-2xl border overflow-hidden flex flex-col" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }} onClick={e => e.stopPropagation()}>
-              <div className="p-6 border-b flex justify-between items-center" style={{ backgroundColor: 'var(--bg-sidebar)', borderColor: 'var(--border-light)' }}>
-                <div><h3 className="text-xl font-black text-white uppercase tracking-tight">Ficha Técnica: {ativo.patrimonio}</h3><p className="text-xs font-bold text-blue-400 uppercase tracking-widest mt-1">{getNomeTipoEquipamento(ativo, categorias)} • {ativo.marca} {ativo.modelo}</p></div>
-                <button onClick={() => setModalFicha({ aberto: false, dados: null })} className="text-white text-3xl opacity-50 hover:opacity-100">&times;</button>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in print:bg-white print:p-0 print:block" onClick={() => setModalFicha({ aberto: false, dados: null })}>
+            <div className="w-full max-w-5xl max-h-[95vh] rounded-3xl shadow-2xl border overflow-hidden flex flex-col print:border-none print:shadow-none print:max-h-none print:h-auto" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }} onClick={e => e.stopPropagation()}>
+              
+              {/* CABEÇALHO DO RG */}
+              <div className="p-8 border-b flex justify-between items-start bg-gradient-to-r from-blue-600 to-blue-800 text-white print:bg-none print:text-black print:border-b-2 print:border-black">
+                <div className="flex gap-6 items-center">
+                  <div className="w-20 h-20 rounded-2xl bg-white p-2 shadow-inner hidden md:block print:block">
+                    <QRCodeSVG value={`${window.location.origin}/consulta/${ativo.patrimonio}`} size={64} level="H" includeMargin={false} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-80 mb-1 print:text-gray-500">Registro Geral de Ativo</p>
+                    <h3 className="text-3xl font-black tracking-tight mb-1">{ativo.patrimonio}</h3>
+                    <p className="text-sm font-bold uppercase tracking-widest opacity-90 print:text-gray-700">{getNomeTipoEquipamento(ativo, categorias)} • {ativo.marca} {ativo.modelo}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2 print:hidden">
+                  <button onClick={imprimirFicha} className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all backdrop-blur-sm" title="Imprimir PDF">🖨️</button>
+                  <button onClick={() => setModalFicha({ aberto: false, dados: null })} className="w-10 h-10 rounded-xl bg-white/10 hover:bg-red-500/80 flex items-center justify-center transition-all backdrop-blur-sm">&times;</button>
+                </div>
               </div>
-              <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6 custom-scrollbar" style={{ backgroundColor: 'var(--bg-page)' }}>
-                <div className="lg:col-span-1 space-y-6">
-                  <div className="p-4 rounded-xl border shadow-sm" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
-                    <h4 className="text-xs font-black mb-4 uppercase text-blue-500">📍 Localização & Status</h4>
-                    <div className="space-y-3">
-                      <div><p className="text-[10px] font-bold opacity-50" style={{ color: 'var(--text-muted)' }}>Secretaria</p><p className="font-bold" style={{ color: 'var(--text-main)' }}>{ativo.secretaria}</p></div>
-                      <div><p className="text-[10px] font-bold opacity-50" style={{ color: 'var(--text-muted)' }}>Setor</p><p className="font-bold" style={{ color: 'var(--text-main)' }}>{ativo.setor}</p></div>
-                      <div><p className="text-[10px] font-bold opacity-50 mt-2 mb-1" style={{ color: 'var(--text-muted)' }}>Status</p>{getStatusBadge(ativo.status)}</div>
+
+              {/* CORPO DO RG */}
+              <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 custom-scrollbar print:overflow-visible print:p-4">
+                
+                {/* COLUNA ESQUERDA (DADOS TÉCNICOS) */}
+                <div className="lg:col-span-4 space-y-6">
+                  <div className="p-6 rounded-3xl border shadow-sm print:border-gray-300" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
+                    <h4 className="text-[11px] font-black mb-6 uppercase tracking-widest flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
+                      <span className="text-blue-500 text-lg">📍</span> Localização Atual
+                    </h4>
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-[9px] font-black opacity-50 uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Secretaria / Prédio</p>
+                        <p className="font-black text-sm" style={{ color: 'var(--text-main)' }}>{ativo.secretaria || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black opacity-50 uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Setor / Sala</p>
+                        <p className="font-black text-sm" style={{ color: 'var(--text-main)' }}>{ativo.setor || 'N/A'}</p>
+                      </div>
+                      <div className="pt-2">
+                        <p className="text-[9px] font-black opacity-50 uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>Status de Operação</p>
+                        {getStatusBadge(ativo.status)}
+                      </div>
                     </div>
                   </div>
+
                   {ativo.dados_dinamicos && camposPermitidos.length > 0 && (
-                    <div className="p-4 rounded-xl border shadow-sm" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
-                      <h4 className="text-xs font-black mb-4 uppercase text-blue-500">⚙️ Especificações</h4>
-                      <div className="space-y-3">
+                    <div className="p-6 rounded-3xl border shadow-sm print:border-gray-300" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
+                      <h4 className="text-[11px] font-black mb-6 uppercase tracking-widest flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
+                        <span className="text-blue-500 text-lg">⚙️</span> Hardware
+                      </h4>
+                      <div className="space-y-4">
                         {camposPermitidos.map((campoNome) => ( ativo.dados_dinamicos[campoNome] ? (
-                            <div key={campoNome} className="border-b pb-2 last:border-0" style={{ borderColor: 'var(--border-light)' }}><p className="text-[10px] font-bold opacity-50 uppercase" style={{ color: 'var(--text-muted)' }}>{campoNome}</p><p className="font-bold text-sm" style={{ color: 'var(--text-main)' }}>{ativo.dados_dinamicos[campoNome]}</p></div>
+                            <div key={campoNome}>
+                              <p className="text-[9px] font-black opacity-50 uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>{campoNome}</p>
+                              <p className="font-black text-sm" style={{ color: 'var(--text-main)' }}>{ativo.dados_dinamicos[campoNome]}</p>
+                            </div>
                         ) : null ))}
                       </div>
                     </div>
                   )}
                 </div>
-                <div className="lg:col-span-2 p-6 rounded-xl border shadow-sm" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
-                  <h4 className="text-xs font-black mb-6 uppercase text-blue-500">📜 Linha do Tempo</h4>
-                  <div className="relative pl-6 border-l-2" style={{ borderColor: 'var(--border-light)' }}>
-                    {historico.length === 0 ? <p className="text-sm italic" style={{ color: 'var(--text-muted)' }}>Nenhum histórico encontrado.</p> :
+
+                {/* COLUNA DIREITA (HISTÓRICO) */}
+                <div className="lg:col-span-8 p-8 rounded-3xl border shadow-sm print:border-none print:shadow-none print:p-0" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
+                  <h4 className="text-[11px] font-black mb-8 uppercase tracking-widest flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
+                    <span className="text-blue-500 text-lg">📜</span> Ciclo de Vida (Auditoria)
+                  </h4>
+                  <div className="relative pl-8 border-l-2 space-y-8" style={{ borderColor: 'var(--border-light)' }}>
+                    {historico.length === 0 ? <p className="text-sm font-bold italic opacity-50" style={{ color: 'var(--text-muted)' }}>Nenhuma movimentação registrada.</p> :
                      historico.map((log, idx) => (
-                      <div key={idx} className="mb-6 relative">
-                        <div className="absolute -left-[33px] top-1 w-4 h-4 rounded-full border-4 shadow-sm" style={{ backgroundColor: 'var(--color-blue)', borderColor: 'var(--bg-card)' }}></div>
-                        <div className="text-[10px] font-bold opacity-50" style={{ color: 'var(--text-muted)' }}>{new Date(log.data_hora).toLocaleDateString()} • {log.acao}</div>
-                        <p className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>{log.usuario}</p>
-                        <p className="text-xs italic mt-1 p-2 rounded border" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)', borderColor: 'var(--border-light)' }}>{log.detalhes}</p>
+                      <div key={idx} className="relative group">
+                        <div className="absolute -left-[41px] top-1.5 w-5 h-5 rounded-full border-4 shadow-sm bg-blue-500 print:border-black" style={{ borderColor: 'var(--bg-card)' }}></div>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-1 gap-1">
+                          <p className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
+                            <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-500">{log.acao}</span>
+                            {new Date(log.data_hora).toLocaleDateString()}
+                          </p>
+                          <p className="text-[10px] font-bold opacity-50 flex items-center gap-1" style={{ color: 'var(--text-main)' }}><span>👤</span> {log.usuario}</p>
+                        </div>
+                        <div className="mt-2 p-4 rounded-2xl border text-sm font-medium leading-relaxed transition-all group-hover:shadow-md" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-muted)' }}>
+                          {log.detalhes}
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
-              </div>
-              <div className="p-4 border-t flex justify-end gap-3" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
-                <button onClick={() => setModalFicha({ aberto: false, dados: null })} className="px-6 py-2 rounded-lg font-bold text-sm" style={{ color: 'var(--text-muted)' }}>Fechar</button>
+
               </div>
             </div>
           </div> 
         );
       })()}
 
+      {/* MODAL QR INDIVIDUAL (TEMA DARK CORRIGIDO) */}
       {modalQR.aberto && ( 
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setModalQR({ aberto: false, ativo: null })}>
-          <div className="w-full max-w-sm rounded-xl shadow-2xl border p-8 flex flex-col items-center text-center" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }} onClick={e => e.stopPropagation()}>
-            <h3 className="font-black text-2xl mb-1" style={{ color: 'var(--text-main)' }}>NEXUS.INV</h3>
-            <p className="text-xs font-bold uppercase mb-6 border-b pb-4 w-full" style={{ color: 'var(--text-muted)', borderColor: 'var(--border-light)' }}>Patrimônio Oficial</p>
-            <div className="p-4 border-4 rounded-2xl shadow-sm mb-6 bg-white"><QRCodeSVG value={`${window.location.origin}/consulta/${modalQR.ativo?.patrimonio}`} size={180} level="H" includeMargin={false} /></div>
-            <div className="text-4xl font-black font-mono mb-2" style={{ color: 'var(--text-main)' }}>{modalQR.ativo?.patrimonio}</div>
-            <div className="text-sm font-bold" style={{ color: 'var(--text-muted)' }}>{getNomeTipoEquipamento(modalQR.ativo, categorias)} • {modalQR.ativo?.marca}</div>
-            <button onClick={() => window.print()} className="mt-8 w-full py-3 rounded-lg font-bold text-white shadow-md hover:opacity-90" style={{ backgroundColor: 'var(--color-blue)' }}>🖨️ Imprimir Etiqueta</button>
-            <button onClick={() => setModalQR({ aberto: false, ativo: null })} className="mt-3 w-full py-2 font-bold" style={{ color: 'var(--text-muted)' }}>Fechar</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in print:bg-white print:p-0 print:block" onClick={() => setModalQR({ aberto: false, ativo: null })}>
+          <div className="w-full max-w-sm rounded-3xl shadow-2xl border p-8 flex flex-col items-center text-center print:border-none print:shadow-none" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }} onClick={e => e.stopPropagation()}>
+            <h3 className="font-black text-2xl mb-1 tracking-tight" style={{ color: 'var(--text-main)' }}>NEXUS.INV</h3>
+            <p className="text-[10px] font-black uppercase mb-8 border-b pb-4 w-full tracking-widest opacity-50" style={{ color: 'var(--text-muted)', borderColor: 'var(--border-light)' }}>Patrimônio Oficial</p>
+            
+            {/* O SEGREDO DO QR CODE NO DARK MODE: FUNDO BRANCO FORÇADO AQUI */}
+            <div className="p-4 border rounded-2xl shadow-lg mb-8 bg-white" style={{ borderColor: 'var(--border-light)' }}>
+              <QRCodeSVG value={`${window.location.origin}/consulta/${modalQR.ativo?.patrimonio}`} size={200} level="H" includeMargin={false} />
+            </div>
+            
+            <div className="text-4xl font-black font-mono mb-2 tracking-wider" style={{ color: 'var(--text-main)' }}>{modalQR.ativo?.patrimonio}</div>
+            <div className="text-sm font-bold opacity-80" style={{ color: 'var(--text-muted)' }}>{getNomeTipoEquipamento(modalQR.ativo, categorias)} • {modalQR.ativo?.marca}</div>
+            
+            <button onClick={() => window.print()} className="mt-10 w-full py-3.5 rounded-xl font-black text-white shadow-lg hover:bg-blue-700 bg-blue-600 transition-all active:scale-95 print:hidden">🖨️ Imprimir Etiqueta</button>
+            <button onClick={() => setModalQR({ aberto: false, ativo: null })} className="mt-3 w-full py-3 rounded-xl font-bold opacity-60 hover:opacity-100 transition-all print:hidden" style={{ color: 'var(--text-main)' }}>Cancelar</button>
           </div>
         </div> 
       )}
 
+      {/* (O resto do código dos modais de Lote, Excluir e Transferir continua igual...) */}
       {modalQRLote.aberto && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm print:p-0 print:bg-white print:block" onClick={() => setModalQRLote({ aberto: false, ativos: [] })}>
           <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl p-8 print:p-0 print:shadow-none print:border-none print:max-h-none print:w-full" style={{ backgroundColor: 'var(--bg-card)' }} onClick={e => e.stopPropagation()}>

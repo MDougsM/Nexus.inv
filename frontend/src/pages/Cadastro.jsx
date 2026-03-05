@@ -8,11 +8,15 @@ import AbaManutencao from './AbaManutencao';
 import ModaisEdicao from '../components/Cadastro/ModaisEdicao';
 import ModaisOperacao from '../components/Cadastro/ModaisOperacao';
 import { getNomeTipoEquipamento, getStatusBadge } from '../utils/helpers';
+import BarraPesquisa from '../components/Cadastro/BarraPesquisa';
+import BarraAcoesLote from '../components/Cadastro/BarraAcoesLote';
+import TabelaInventario from '../components/Cadastro/TabelaInventario';
 
 export default function Cadastro() {
   const [abaAtiva, setAbaAtiva] = useState('lista'); 
   const usuarioAtual = localStorage.getItem('usuario') || 'admin';
   const location = useLocation();
+  const [ativoClonado, setAtivoClonado] = useState(null);
 
   const [ativos, setAtivos] = useState([]);
   const [historicoManut, setHistoricoManut] = useState([]);
@@ -83,6 +87,36 @@ export default function Cadastro() {
   const abrirFicha = async (patrimonio) => { try { setModalFicha({ aberto: true, dados: (await api.get(`/api/inventario/ficha/detalhes/${patrimonio}`)).data }); } catch (e) { toast.error("Erro."); } };
   const abrirEdicao = (ativo) => { let din = {}; if (typeof ativo.dados_dinamicos === 'string') { try { din = JSON.parse(ativo.dados_dinamicos); } catch(e){} } else if (ativo.dados_dinamicos) { din = ativo.dados_dinamicos; } setModalEdicao({ aberto: true, ativo, form: { ...ativo, dados_dinamicos: din }}); };
 
+  const exportarParaExcel = () => {
+    if (ativosFiltrados.length === 0) return toast.warn("Nenhum dado para exportar.");
+    
+    // Cabeçalhos das colunas
+    let csv = "Patrimônio;Status;Equipamento;Marca;Modelo;Secretaria;Setor\n";
+    
+    // Preenchendo as linhas com os dados filtrados
+    ativosFiltrados.forEach(a => {
+      const catNome = getNomeTipoEquipamento(a, categorias) || 'Sem Categoria';
+      // Limpando textos para evitar quebra de linha do CSV
+      const sec = (a.secretaria || '').replace(/;/g, ',');
+      const set = (a.setor || '').replace(/;/g, ',');
+      const mar = (a.marca || '').replace(/;/g, ',');
+      const mod = (a.modelo || '').replace(/;/g, ',');
+      
+      csv += `${a.patrimonio};${a.status};${catNome};${mar};${mod};${sec};${set}\n`;
+    });
+    
+    // Criando o arquivo com suporte a acentuação (UTF-8 BOM)
+    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Inventario_Nexus_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success(`Planilha gerada com ${ativosFiltrados.length} registros! 📊`);
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 relative pb-10">
       
@@ -100,89 +134,53 @@ export default function Cadastro() {
       {abaAtiva === 'lista' && (
         <div className="space-y-4 animate-fade-in">
           
-          {/* BARRA DE PESQUISA ORIGINAL */}
-          <div className="p-4 rounded-xl shadow-sm border flex flex-col lg:flex-row gap-4 items-end" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
-            <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold mb-1" style={{ color: 'var(--text-muted)' }}>PESQUISA MÚLTIPLA (Ex: PC-01, Lousa-02)</label>
-                <input type="text" placeholder="Separe os itens por vírgula..." value={buscaGeral} onChange={(e) => {setBuscaGeral(e.target.value); setPaginaAtual(1);}} className="w-full p-2.5 rounded-lg border outline-none text-sm" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} />
-              </div>
-              <div>
-                <label className="block text-xs font-bold mb-1" style={{ color: 'var(--text-muted)' }}>STATUS</label>
-                <select value={filtroStatus} onChange={(e) => {setFiltroStatus(e.target.value); setPaginaAtual(1);}} className="w-full p-2.5 rounded-lg border outline-none font-bold" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}><option value="">Todos</option><option value="ATIVO">Ativos</option><option value="MANUTENÇÃO">Manutenção</option><option value="SUCATA">Sucata (Descartados)</option></select>
-              </div>
-            </div>
-          </div>
+          {/* BARRA DE PESQUISA MODULARIZADA */}
+          <BarraPesquisa 
+            buscaGeral={buscaGeral} 
+            setBuscaGeral={setBuscaGeral}
+            filtroStatus={filtroStatus} 
+            setFiltroStatus={setFiltroStatus}
+            setPaginaAtual={setPaginaAtual}
+            exportarParaExcel={exportarParaExcel}
+          />
 
-          {/* BARRA DE AÇÕES EM LOTE ORIGINAL */}
-          {selecionados.length > 0 && (
-            <div className="p-4 rounded-xl shadow-sm border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
-              <div className="font-bold text-sm" style={{ color: 'var(--text-main)' }}>
-                ☑️ {selecionados.length} iten(s) selecionado(s)
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button onClick={() => setModalQRLote({ aberto: true, ativos: getAtivosSelecionadosObj() })} className="px-4 py-2.5 rounded font-bold border transition-colors hover:bg-gray-50 text-xs shadow-sm" style={{ borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>🖨️ Imprimir QRs</button>
-                <button onClick={() => setModalTransferencia({ aberto: true, ativos: getAtivosSelecionadosObj() })} className="px-4 py-2.5 rounded font-bold border transition-colors hover:bg-gray-50 text-xs shadow-sm" style={{ borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>🚚 Transferir</button>
-                <button onClick={() => setModalStatus({ aberto: true, ativos: getAtivosSelecionadosObj() })} className="px-4 py-2.5 rounded font-bold border transition-colors hover:bg-gray-50 text-xs shadow-sm" style={{ borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>🛠️ Mudar Status</button>
-                <div className="hidden sm:block border-l mx-1" style={{ borderColor: 'var(--border-light)' }}></div>
-                <button onClick={() => setModalEdicaoMassa({ aberto: true, ativos: getAtivosSelecionadosObj() })} className="px-4 py-2.5 rounded font-bold border transition-colors hover:bg-gray-50 text-xs shadow-sm" style={{ borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>✏️ Editar Lote</button>
-                <button onClick={() => { setModalExcluir({ aberto: true, ativos: getAtivosSelecionadosObj() }); setMotivoExclusao(''); }} className="px-4 py-2.5 rounded font-bold border transition-colors text-xs shadow-sm hover:bg-red-50 hover:text-red-600 hover:border-red-200" style={{ borderColor: 'var(--border-light)', color: 'var(--color-red)' }}>🗑️ Excluir</button>
-              </div>
-            </div>
-          )}
+          {/* BARRA DE AÇÕES EM LOTE MODULARIZADA */}
+          <BarraAcoesLote 
+            selecionados={selecionados}
+            setSelecionados={setSelecionados}
+            ativosFiltrados={ativosFiltrados}
+            setModalQRLote={setModalQRLote}
+            setModalTransferencia={setModalTransferencia}
+            setModalEdicaoMassa={setModalEdicaoMassa}
+            setModalStatus={setModalStatus}
+            setModalExcluir={setModalExcluir}
+            setMotivoExclusao={setMotivoExclusao}
+          />
 
           <div className="rounded-xl border shadow-sm overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
             <div className="overflow-x-auto min-h-[400px]">
-              <table className="w-full text-left text-sm">
-                <thead style={{ backgroundColor: 'var(--bg-page)', color: 'var(--text-muted)', borderBottom: '1px solid var(--border-light)' }}>
-                  <tr>
-                    <th className="p-4 w-10"><input type="checkbox" className="w-4 h-4 rounded cursor-pointer" checked={selecionados.length === ativosPaginaAtual.length && ativosPaginaAtual.length > 0} onChange={handleSelectAll} /></th>
-                    <th className="p-4 font-semibold">Patrimônio</th>
-                    <th className="p-4 font-semibold">Status</th>
-                    <th className="p-4 font-semibold">Equipamento</th>
-                    <th className="p-4 font-semibold">Localização</th>
-                    <th className="p-4 font-semibold text-center">Ações Rápidas</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? <tr><td colSpan="6" className="p-8 text-center text-muted">Carregando...</td></tr> : ativosPaginaAtual.length === 0 ? <tr><td colSpan="6" className="p-8 text-center text-muted">Nenhum equipamento encontrado.</td></tr> :
-                   ativosPaginaAtual.map(ativo => (
-                    <tr key={ativo.id} className="border-b last:border-0 transition-colors" style={{ borderColor: 'var(--border-light)', backgroundColor: selecionados.includes(ativo.patrimonio) ? 'rgba(85, 110, 230, 0.05)' : 'transparent' }}>
-                      <td className="p-4"><input type="checkbox" className="w-4 h-4 rounded cursor-pointer" checked={selecionados.includes(ativo.patrimonio)} onChange={(e) => handleSelectOne(e, ativo.patrimonio)} /></td>
-                      <td className="p-4 font-mono font-bold" style={{ color: 'var(--color-blue)' }}>{ativo.patrimonio}</td>
-                      <td className="p-4">{getStatusBadge(ativo.status)}</td>
-                      <td className="p-4"><div className="font-bold" style={{color: 'var(--text-main)'}}>{getNomeTipoEquipamento(ativo, categorias) || '-'}</div><div className="text-xs" style={{color:'var(--text-muted)'}}>{ativo.marca} {ativo.modelo}</div></td>
-                      <td className="p-4"><div className="font-bold text-xs" style={{color: 'var(--text-main)'}}>{ativo.secretaria || 'N/A'}</div><div className="text-xs" style={{color:'var(--text-muted)'}}>{ativo.setor || 'N/A'}</div></td>
-                      
-                      {/* O MENU DROPDOWN ORIGINAL RESTAURADO! */}
-                      <td className="p-4 flex justify-center items-center gap-2 relative">
-                        <button onClick={() => abrirFicha(ativo.patrimonio)} title="Ficha Completa" className="p-1.5 rounded transition-colors hover:bg-gray-100 border text-gray-500 hover:text-gray-800" style={{ borderColor: 'var(--border-light)' }}>👁️</button>
-                        <button onClick={() => setModalQR({ aberto: true, ativo })} title="Imprimir Etiqueta" className="p-1.5 rounded transition-colors hover:bg-gray-100 border text-gray-500 hover:text-gray-800" style={{ borderColor: 'var(--border-light)' }}>🖨️</button>
-                        
-                        <div>
-                          <button onClick={() => setDropdownAberto(dropdownAberto === ativo.id ? null : ativo.id)} className="flex items-center gap-1 px-3 py-1.5 rounded border text-xs font-bold transition-colors hover:bg-gray-50" style={{ borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
-                            Opções ▾
-                          </button>
-                          
-                          {dropdownAberto === ativo.id && (
-                            <>
-                              <div className="fixed inset-0 z-40" onClick={() => setDropdownAberto(null)}></div>
-                              <div className="absolute right-8 top-10 w-48 rounded-lg border shadow-xl z-50 py-1 animate-fade-in" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
-                                <button onClick={() => {abrirEdicao(ativo); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-gray-50 font-medium" style={{ color: 'var(--text-main)' }}>✏️ Editar Cadastro</button>
-                                <button onClick={() => {setModalTransferencia({ aberto: true, ativos: [ativo] }); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-gray-50 font-medium" style={{ color: 'var(--text-main)' }}>🚚 Transferir Local</button>
-                                <button onClick={() => {setModalStatus({ aberto: true, ativos: [ativo] }); setFormStatus({...formStatus, novo_status: ativo.status === 'MANUTENÇÃO' ? 'ATIVO' : 'MANUTENÇÃO'}); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-gray-50 font-medium" style={{ color: 'var(--text-main)' }}>🛠️ Alterar Status</button>
-                                <div className="border-t my-1" style={{ borderColor: 'var(--border-light)' }}></div>
-                                <button onClick={() => {setModalExcluir({ aberto: true, ativos: [ativo] }); setMotivoExclusao(''); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-red-50 font-bold" style={{ color: 'var(--color-red)' }}>🗑️ Excluir Definitivo</button>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </td>
-
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              
+              {/* TABELA PRINCIPAL MODULARIZADA */}
+          <TabelaInventario 
+            ativosPaginaAtual={ativosPaginaAtual}
+            selecionados={selecionados}
+            handleSelectAll={handleSelectAll}
+            handleSelectOne={handleSelectOne}
+            categorias={categorias}
+            dropdownAberto={dropdownAberto}
+            setDropdownAberto={setDropdownAberto}
+            abrirFicha={abrirFicha}
+            setModalQR={setModalQR}
+            setAtivoClonado={setAtivoClonado}
+            setAbaAtiva={setAbaAtiva}
+            abrirEdicao={abrirEdicao}
+            setModalTransferencia={setModalTransferencia}
+            setModalStatus={setModalStatus}
+            formStatus={formStatus}
+            setFormStatus={setFormStatus}
+            setModalExcluir={setModalExcluir}
+            setMotivoExclusao={setMotivoExclusao}
+          />
             </div>
 
             {/* PAGINAÇÃO ORIGINAL */}
@@ -204,8 +202,8 @@ export default function Cadastro() {
         </div>
       )}
 
-      {abaAtiva === 'novo' && <AbaNovoCadastro categorias={categorias} secretarias={secretarias} usuarioAtual={usuarioAtual} carregarDados={carregarDados} setAbaAtiva={setAbaAtiva} />}
-      {abaAtiva === 'manutencao' && <AbaManutencao historicoManut={historicoManut} />}
+      {abaAtiva === 'novo' && <AbaNovoCadastro categorias={categorias} secretarias={secretarias} usuarioAtual={usuarioAtual} carregarDados={carregarDados} setAbaAtiva={setAbaAtiva} ativoClonado={ativoClonado} setAtivoClonado={setAtivoClonado} />}
+      {abaAtiva === 'manutencao' && <AbaManutencao historicoManut={historicoManut} carregarDados={carregarDados} />}
 
       {/* COMPONENTES DE MODAIS EXECUTANDO EM SEGUNDO PLANO */}
       <ModaisEdicao modalEdicao={modalEdicao} setModalEdicao={setModalEdicao} modalEdicaoMassa={modalEdicaoMassa} setModalEdicaoMassa={setModalEdicaoMassa} categorias={categorias} secretarias={secretarias} usuarioAtual={usuarioAtual} carregarDados={carregarDados} setSelecionados={setSelecionados} />

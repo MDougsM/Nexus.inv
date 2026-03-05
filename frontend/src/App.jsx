@@ -2,8 +2,8 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import ConsultaPublica from './pages/ConsultaPublica';
 
+import ConsultaPublica from './pages/ConsultaPublica';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -11,6 +11,7 @@ import Configuracoes from './pages/Configuracoes';
 import Cadastro from './pages/Cadastro';
 import Auditoria from './pages/Auditoria';
 import CadastrosBase from './pages/CadastrosBase';
+import Ajuda from './pages/Ajuda';
 
 // ==========================================
 // GUARDA DE SEGURANÇA (ROTA PROTEGIDA)
@@ -51,6 +52,7 @@ export default function App() {
                 <Route path="/auditoria" element={<Auditoria />} />
                 <Route path="/cadastros-base" element={<CadastrosBase />} />
                 <Route path="/config" element={<Configuracoes />} />
+                <Route path="/ajuda" element={<Ajuda />} />
                 
                 {/* Rota de fallback: Digitou algo errado? Volta pro Dashboard */}
                 <Route path="*" element={<Navigate to="/" />} />

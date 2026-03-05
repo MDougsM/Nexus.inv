@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import TiposEquipamento from './TiposEquipamento';
 import Unidades from './Unidades';
-import Usuarios from './Usuarios';
 
 export default function CadastrosBase() {
   const [abaAtiva, setAbaAtiva] = useState('tipos');
@@ -38,21 +37,12 @@ export default function CadastrosBase() {
         >
           🏢 Secretarias e Setores
         </button>
-
-        <button
-          onClick={() => setAbaAtiva('usuarios')}
-            className={`flex items-center gap-2 px-6 py-3 text-sm font-bold border-b-2 transition-colors ${abaAtiva === 'usuarios' ? 'border-blue-600 text-blue-600' : 'border-transparent hover:border-gray-300'}`}
-            style={{ color: abaAtiva === 'usuarios' ? 'var(--color-blue)' : 'var(--text-muted)' }}
-        >
-            👥 Gestão de Usuários
-        </button>
       </div>
 
       {/* CONTEÚDO DA ABA SELECIONADA */}
       <div className="pt-4 animate-fade-in">
         {abaAtiva === 'tipos' && <TiposEquipamento />}
         {abaAtiva === 'unidades' && <Unidades />}
-        {abaAtiva === 'usuarios' && <Usuarios />}
       </div>
     </div>
   );
