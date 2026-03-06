@@ -22,7 +22,7 @@ export default function TabelaInventario({
   setMotivoExclusao
 }) {
   return (
-    <div className="flex-1 overflow-x-auto mt-2">
+    <div className="flex-1 overflow-x-auto mt-2 min-h-[350px] pb-20">
       <table className="w-full text-left text-sm">
         <thead style={{ backgroundColor: 'var(--bg-input)', borderBottom: '1px solid var(--border-light)' }}>
           <tr>

@@ -83,15 +83,6 @@ export default function AbaNovoCadastro({
     try {
       await api.post('/api/inventario/', payload);
       
-      // REGISTRO DE AUDITORIA DO CLONE OU NOVO
-      await api.post('/api/auditoria/', {
-        usuario: usuarioAtual,
-        acao: 'NOVO CADASTRO',
-        detalhes: ativoClonado 
-          ? `Criou um novo ativo clonado a partir do patrimônio ${ativoClonado.patrimonio}.` 
-          : `Cadastrou um novo equipamento no sistema.`
-      });
-
       toast.success("✅ Ativo cadastrado com sucesso!");
       limparFormNovo();
       carregarDados();
@@ -108,7 +99,7 @@ export default function AbaNovoCadastro({
   const camposDinamicosNovo = formNovo.categoria_id ? parseCamposDinamicos(categorias.find(c => c.id == formNovo.categoria_id)) : [];
 
   return (
-    <div className="max-w-4xl mx-auto animate-fade-in pb-10">
+    <div className="max-full animate-fade-in pb-10">
       <div className="p-8 rounded-3xl border shadow-xl transition-all relative overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
         
         {ativoClonado && (

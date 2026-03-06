@@ -12,6 +12,7 @@ import Cadastro from './pages/Cadastro';
 import Auditoria from './pages/Auditoria';
 import CadastrosBase from './pages/CadastrosBase';
 import Ajuda from './pages/Ajuda';
+import MeuPerfil from './pages/MeuPerfil';
 
 // ==========================================
 // GUARDA DE SEGURANÇA (ROTA PROTEGIDA)
@@ -53,6 +54,7 @@ export default function App() {
                 <Route path="/cadastros-base" element={<CadastrosBase />} />
                 <Route path="/config" element={<Configuracoes />} />
                 <Route path="/ajuda" element={<Ajuda />} />
+                <Route path="/perfil" element={<MeuPerfil usuarioAtual={localStorage.getItem('usuario')} />} />
                 
                 {/* Rota de fallback: Digitou algo errado? Volta pro Dashboard */}
                 <Route path="*" element={<Navigate to="/" />} />

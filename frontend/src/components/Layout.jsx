@@ -13,14 +13,26 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
+  const [nomeUsuario, setNomeUsuario] = useState(localStorage.getItem(`nome_${usuarioAtual}`) || usuarioAtual);
+  const [avatarUsuario, setAvatarUsuario] = useState(localStorage.getItem(`avatar_${usuarioAtual}`) || 'letras');
 
   const borderStrong = theme === 'light' ? '1.5px solid #b8c5d6' : '1.5px solid #475569';
 
   useEffect(() => {
+    const atualizarDadosPerfil = () => {
+      setNomeUsuario(localStorage.getItem(`nome_${usuarioAtual}`) || usuarioAtual);
+      setAvatarUsuario(localStorage.getItem(`avatar_${usuarioAtual}`) || 'letras');
+    };
+    window.addEventListener('perfilAtualizado', atualizarDadosPerfil);
+    return () => window.removeEventListener('perfilAtualizado', atualizarDadosPerfil);
+  }, [usuarioAtual]);
+
+  
+  useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
-
+  
   const atualizarNotificacoes = async () => {
     try {
       const res = await api.get('/api/inventario/');
@@ -104,7 +116,7 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
           {isSidebarOpen ? (
             <>
               <span className="text-[10px] font-black tracking-[0.2em] text-gray-500 uppercase">Nexus System</span>
-              <span className="text-[9px] font-mono font-bold text-blue-500 mt-1">v1.5.0.0</span>
+              <span className="text-[9px] font-mono font-bold text-blue-500 mt-1">v2.0.0.3</span>
             </>
           ) : (
             <span className="text-[9px] font-mono font-bold text-blue-500">v1.0</span>
@@ -132,19 +144,30 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
           </div>
           
           <div className="flex items-center gap-3">
-            {/* BOTÃO DE TEMA CORRIGIDO */}
-            <button onClick={toggleTheme} className="w-10 h-10 rounded-xl flex items-center justify-center hover:border-blue-400 transition-all shadow-sm" style={{ backgroundColor: 'var(--bg-card)', border: borderStrong }}>
-              {theme === 'light' ? '🌙' : '☀️'}
+
+            {/* BOTÃO TEMA DARK/LIGHT */}
+            <button 
+              onClick={toggleTheme} 
+              className="w-10 h-10 rounded-xl flex items-center justify-center transition-all hover:bg-gray-500/10 shadow-sm text-lg" 
+              style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', borderStyle: 'solid', borderWidth: '1px' }}
+            >
+              <span style={{ textShadow: theme === 'light' ? '0px 0px 2px rgba(0,0,0,0.4), 0px 2px 5px rgba(0,0,0,0.2)' : 'none' }}>
+                {theme === 'light' ? '🌙' : '☀️'}
+              </span>
             </button>
 
-            {/* NOTIFICAÇÃO CORRIGIDA */}
+            {/* NOTIFICAÇÃO */}
             <div className="relative">
               <button onClick={handleOpenNotif} 
-                      className="w-10 h-10 rounded-xl flex items-center justify-center hover:border-blue-400 transition-all relative group shadow-sm" 
-                      style={{ backgroundColor: 'var(--bg-card)', border: borderStrong }}>
-                <span className="text-xl group-hover:rotate-12 transition-transform">🔔</span>
+                      className="w-10 h-10 rounded-xl flex items-center justify-center transition-all hover:bg-gray-500/10 relative group shadow-sm" 
+                      style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', borderStyle: 'solid', borderWidth: '1px' }}>
+                
+                <span className="text-xl group-hover:rotate-12 transition-transform" style={{ textShadow: theme === 'light' ? '0px 0px 2px rgba(0,0,0,0.4), 0px 2px 5px rgba(0,0,0,0.2)' : 'none' }}>
+                  🔔
+                </span>
+                
                 {hasNewNotif && (
-                  <span className="absolute top-2 right-2 w-3.5 h-3.5 rounded-full bg-red-600 border-2 border-white animate-bounce"></span>
+                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-red-500 border-2 shadow-sm animate-bounce" style={{ borderColor: 'var(--bg-card)' }}></span>
                 )}
               </button>
 
@@ -187,26 +210,42 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
             
             <div className="h-6 border-l mx-1" style={{ borderLeft: borderStrong }}></div>
 
-            {/* PERFIL CORRIGIDO */}
-            <button onClick={() => setDropdownOpen(!dropdownOpen)} 
-                    className="flex items-center gap-3 p-1.5 pr-4 rounded-2xl border shadow-sm transition-all hover:border-blue-400 relative" 
-                    style={{ backgroundColor: 'var(--bg-card)', border: borderStrong }}>
-              <div className="w-8 h-8 rounded-xl bg-gray-900 flex items-center justify-center text-[10px] font-black text-white uppercase shadow-md">
-                {usuarioAtual ? usuarioAtual.substring(0, 2).toUpperCase() : 'AD'}
-              </div>
-              <div className="text-left hidden md:block">
-                <div className="text-[12px] font-black uppercase tracking-tight" style={{ color: 'var(--text-main)' }}>{usuarioAtual}</div>
-                <div className="text-[9px] font-bold text-blue-600 uppercase">Administrador</div>
-              </div>
+            {/* MENU DE USUÁRIO E PERFIL */}
+            <div className="relative">
+              <button onClick={() => setDropdownOpen(!dropdownOpen)} 
+                      className="flex items-center gap-3 p-1.5 pr-4 rounded-2xl shadow-sm transition-all hover:border-blue-400" 
+                      style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', borderStyle: 'solid', borderWidth: '1px' }}>
+                
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black shadow-md ${avatarUsuario === 'letras' ? 'bg-gray-900 text-white text-[10px] uppercase' : 'bg-transparent text-lg'}`}
+                     style={{ textShadow: avatarUsuario !== 'letras' && theme === 'light' ? '0px 0px 2px rgba(0,0,0,0.4), 0px 2px 5px rgba(0,0,0,0.2)' : 'none' }}>
+                  {avatarUsuario === 'letras' ? (usuarioAtual ? usuarioAtual.substring(0, 2).toUpperCase() : 'AD') : avatarUsuario}
+                </div>
+                
+                <div className="text-left hidden md:block">
+                  <div className="text-[12px] font-black tracking-tight capitalize" style={{ color: 'var(--text-main)' }}>{nomeUsuario}</div>
+                </div>
+              </button>
 
               {dropdownOpen && (
-                <div className="absolute right-0 top-12 w-52 rounded-2xl border shadow-2xl z-50 overflow-hidden" 
+                <div className="absolute right-0 top-14 w-52 rounded-2xl border shadow-2xl z-50 overflow-hidden animate-scale-up" 
                      style={{ backgroundColor: 'var(--bg-card)', border: borderStrong }}>
-                  <Link to="/config" className="flex items-center gap-3 px-4 py-3 text-sm font-bold opacity-80 hover:opacity-100 transition-colors" style={{ color: 'var(--text-main)' }}>⚙️ Configurações</Link>
-                  <button onClick={onLogout} className="flex items-center gap-3 w-full text-left px-4 py-3 text-sm font-black text-red-500 hover:bg-red-500/10 transition-colors border-t" style={{ borderTop: borderStrong }}>🚪 Sair do Sistema</button>
+                  
+                  <Link to="/perfil" onClick={() => setDropdownOpen(false)} className="flex items-center gap-3 px-4 py-3.5 text-sm font-bold opacity-80 hover:opacity-100 transition-all hover:bg-gray-500/5" style={{ color: 'var(--text-main)' }}>
+                    👤 Meu Perfil
+                  </Link>
+                  
+                  {usuarioAtual === 'admin' && (
+                    <Link to="/config" onClick={() => setDropdownOpen(false)} className="flex items-center gap-3 px-4 py-3.5 text-sm font-bold opacity-80 hover:opacity-100 transition-all hover:bg-gray-500/5" style={{ color: 'var(--text-main)' }}>
+                      ⚙️ Configurações
+                    </Link>
+                  )}
+
+                  <button onClick={() => { setDropdownOpen(false); onLogout(); }} className="flex items-center gap-3 w-full text-left px-4 py-3.5 text-sm font-black text-red-500 hover:bg-red-500/10 transition-colors border-t" style={{ borderTop: borderStrong }}>
+                    🚪 Sair do Sistema
+                  </button>
                 </div>
               )}
-            </button>
+            </div>
           </div>
         </header>
 

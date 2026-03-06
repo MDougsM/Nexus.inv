@@ -31,26 +31,19 @@ export default function ModaisEdicao({
   }, [modalEdicao.aberto]);
 
   const salvarEdicao = async () => {
-    // NOVO: Validação do motivo
     if (!motivoEdicao.trim()) {
       return toast.warning("O motivo da alteração é obrigatório.");
     }
-    // Validação básica do patrimônio
     if (!modalEdicao.form.patrimonio || !modalEdicao.form.patrimonio.trim()) {
       return toast.warning("O Patrimônio não pode ficar vazio.");
     }
 
     try {
+        // Agora enviamos o motivo junto com a requisição de edição!
         await api.put(`/api/inventario/ficha/editar/${modalEdicao.ativo.patrimonio}`, {
             ...modalEdicao.form,
-            usuario_acao: usuarioAtual
-        });
-
-        // NOVO: Registro na auditoria logo após a edição bem sucedida
-        await api.post('/api/auditoria/', {
-            usuario: usuarioAtual,
-            acao: 'EDIÇÃO DE CADASTRO',
-            detalhes: `Ativo modificado. Patrimônio: ${modalEdicao.form.patrimonio}. Motivo: ${motivoEdicao}`
+            usuario_acao: usuarioAtual,
+            motivo: motivoEdicao 
         });
 
         toast.success("Cadastro atualizado com sucesso!");
@@ -149,14 +142,40 @@ export default function ModaisEdicao({
                 </div>
               </div>
 
-              {/* NOVO: Campo de Motivo */}
+              {/* NOVO: Campo de Motivo com Dropdown Inteligente */}
               <div className="pt-6 border-t" style={{borderColor: 'var(--border-light)'}}>
-                <div className="space-y-2">
-                  <label className="block text-[10px] font-black uppercase opacity-80 text-blue-500">Justificativa da Alteração *</label>
+                <div className="space-y-3">
+                  
+                  {/* Linha com a Label e o Select de Respostas Rápidas */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <label className="block text-[10px] font-black uppercase opacity-80 text-blue-500">Justificativa da Alteração *</label>
+                    
+                    <select 
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          // Se já tiver algo escrito, ele junta. Se não, ele substitui.
+                          const textoAtual = motivoEdicao.trim() ? `${motivoEdicao} - ` : '';
+                          setMotivoEdicao(textoAtual + e.target.value);
+                          e.target.value = ""; // Reseta o botão para o estado original
+                        }
+                      }}
+                      className="text-[10px] p-1.5 rounded-lg border font-bold outline-none cursor-pointer hover:bg-gray-500/10 transition-all shadow-sm"
+                      style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}
+                    >
+                      <option value="">⚡ Respostas Rápidas...</option>
+                      <option value="Atualização Cadastral">Atualização Cadastral</option>
+                      <option value="Mudança de Patrimônio">Mudança de Patrimônio</option>
+                      <option value="Correção de Especificações">Correção de Especificações</option>
+                      <option value="Upgrade de Hardware">Upgrade de Hardware</option>
+                      <option value="Correção de Digitação">Correção de Digitação</option>
+                    </select>
+                  </div>
+
+                  {/* Caixa de Texto que recebe o valor */}
                   <textarea 
                     className="w-full p-3 rounded-xl border font-medium outline-none focus:ring-2 focus:ring-blue-500/20 min-h-[80px] transition-all" 
                     style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} 
-                    placeholder="Ex: Correção de digitação no patrimônio, upgrade de memória..." 
+                    placeholder="Selecione uma resposta rápida acima ou digite o motivo aqui..." 
                     value={motivoEdicao} 
                     onChange={e => setMotivoEdicao(e.target.value)} 
                   />
