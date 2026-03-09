@@ -188,15 +188,46 @@ export default function Unidades() {
       </div>
 
       {/* ------------------------------------------- */}
-      {/* MODAIS (MANTIDOS IGUAIS) */}
+      {/* MODAL DE EDIÇÃO COM RESPOSTAS RÁPIDAS */}
       {/* ------------------------------------------- */}
       {modalEdicao.aberto && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4">
           <div className="w-full max-w-md rounded-xl p-6 shadow-2xl animate-fade-in" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
             <h3 className="text-lg font-bold mb-2" style={{ color: 'var(--color-blue)' }}>Editar {modalEdicao.tipo}</h3>
             <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>Alterar o nome de <strong>{modalEdicao.nomeAntigo}</strong>.</p>
+            
             <input autoFocus className="w-full p-3 rounded-lg border outline-none mb-4" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} value={modalEdicao.nomeNovo} onChange={e => setModalEdicao({...modalEdicao, nomeNovo: e.target.value})} />
-            <textarea className="w-full p-3 rounded-lg border outline-none mb-4 min-h-[80px]" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} placeholder="Motivo da alteração..." value={motivo} onChange={e => setMotivo(e.target.value)} />
+            
+            <div className="mb-4 space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <label className="block text-[10px] font-black uppercase opacity-80 text-blue-500">Motivo da alteração *</label>
+                <select 
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      const textoAtual = motivo.trim() ? `${motivo} - ` : '';
+                      setMotivo(textoAtual + e.target.value);
+                      e.target.value = ""; 
+                    }
+                  }}
+                  className="text-[10px] p-1.5 rounded-lg border font-bold outline-none cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-all shadow-sm"
+                  style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}
+                >
+                  <option value="">⚡ Respostas Rápidas...</option>
+                  <option value="Correção de Digitação">Correção de Digitação</option>
+                  <option value="Atualização de Nomenclatura">Atualização de Nomenclatura</option>
+                  <option value="Reestruturação de Setores">Reestruturação de Setores</option>
+                  <option value="Mudança de Prédio/Endereço">Mudança de Prédio/Endereço</option>
+                </select>
+              </div>
+              <textarea 
+                className="w-full p-3 rounded-lg border outline-none min-h-[80px]" 
+                style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} 
+                placeholder="Selecione uma resposta rápida acima ou digite o motivo aqui..." 
+                value={motivo} 
+                onChange={e => setMotivo(e.target.value)} 
+              />
+            </div>
+
             <div className="flex gap-3 justify-end">
               <button onClick={() => {setModalEdicao({ aberto: false, tipo: '', id: null, nomeAntigo: '', nomeNovo: '' }); setMotivo('')}} className="px-4 py-2 rounded font-bold" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-main)' }}>Cancelar</button>
               <button onClick={confirmarEdicao} className="px-4 py-2 rounded font-bold text-white bg-blue-500 hover:bg-blue-600">Salvar Alteração</button>
@@ -205,6 +236,9 @@ export default function Unidades() {
         </div>
       )}
 
+      {/* ------------------------------------------- */}
+      {/* MODAL DE EXCLUSÃO COM RESPOSTAS RÁPIDAS */}
+      {/* ------------------------------------------- */}
       {modalExclusao.aberto && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4">
           <div className="w-full max-w-md rounded-xl p-6 shadow-2xl animate-fade-in" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
@@ -213,7 +247,37 @@ export default function Unidades() {
               Apagar <strong>{modalExclusao.nome}</strong>? 
               {modalExclusao.tipo === 'Secretaria' && " Isso vai apagar TODOS os setores vinculados a ela!"}
             </p>
-            <textarea autoFocus className="w-full p-3 rounded-lg border outline-none mb-4 min-h-[100px]" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} placeholder="Digite o motivo da exclusão..." value={motivo} onChange={e => setMotivo(e.target.value)} />
+
+            <div className="mb-4 space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <label className="block text-[10px] font-black uppercase opacity-80 text-red-500">Motivo da exclusão *</label>
+                <select 
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      const textoAtual = motivo.trim() ? `${motivo} - ` : '';
+                      setMotivo(textoAtual + e.target.value);
+                      e.target.value = ""; 
+                    }
+                  }}
+                  className="text-[10px] p-1.5 rounded-lg border font-bold outline-none cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-all shadow-sm"
+                  style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}
+                >
+                  <option value="">⚡ Respostas Rápidas...</option>
+                  <option value="Setor Desativado/Extinto">Setor Desativado/Extinto</option>
+                  <option value="Cadastro Duplicado">Cadastro Duplicado</option>
+                  <option value="Erro de Lançamento">Erro de Lançamento</option>
+                  <option value="Reestruturação Organizacional">Reestruturação Organizacional</option>
+                </select>
+              </div>
+              <textarea 
+                className="w-full p-3 rounded-lg border outline-none min-h-[100px]" 
+                style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} 
+                placeholder="Selecione uma resposta rápida acima ou digite o motivo aqui..." 
+                value={motivo} 
+                onChange={e => setMotivo(e.target.value)} 
+              />
+            </div>
+
             <div className="flex gap-3 justify-end">
               <button onClick={() => {setModalExclusao({ aberto: false, tipo: '', id: null, nome: '' }); setMotivo('')}} className="px-4 py-2 rounded font-bold" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-main)' }}>Cancelar</button>
               <button onClick={confirmarExclusao} className="px-4 py-2 rounded font-bold text-white bg-red-500 hover:bg-red-600">Confirmar Exclusão</button>

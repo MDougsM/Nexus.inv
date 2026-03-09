@@ -62,6 +62,8 @@ class Usuario(Base):
     username = Column(String, unique=True, index=True)
     password = Column(String)
     is_admin = Column(Boolean, default=False)
+    nome_exibicao = Column(String, nullable=True)
+    avatar = Column(String, default="letras")
 
 class Transferencia(Base):
     __tablename__ = "transferencias"

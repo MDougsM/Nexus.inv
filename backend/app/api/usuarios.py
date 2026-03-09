@@ -15,7 +15,6 @@ def get_db():
 
 # ==========================================
 # CONFIGURAÇÃO DE SEGURANÇA E CRIPTOGRAFIA
-# (DEVE FICAR AQUI NO TOPO!)
 # ==========================================
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -23,15 +22,13 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 def verify_password(plain_password, hashed_password):
-    # Trata o caso em que o banco antigo tem senha em texto puro (admin123)
-    # Se a senha salva no banco não tiver o formato do bcrypt, ele compara direto
     try:
         return pwd_context.verify(plain_password, hashed_password)
     except ValueError:
         return plain_password == hashed_password
 
 # ==========================================
-# MODELOS DE DADOS
+# MODELOS DE DADOS (DEVEM FICAR ANTES DAS ROTAS)
 # ==========================================
 class UsuarioCreate(BaseModel):
     username: str
@@ -41,7 +38,7 @@ class UsuarioCreate(BaseModel):
 
 class UsuarioUpdate(BaseModel):
     username: str
-    password: str = None # Opcional na edição
+    password: str = None
     is_admin: bool
     usuario_acao: str
     motivo: str
@@ -50,23 +47,38 @@ class JustificativaRequest(BaseModel):
     usuario: str
     motivo: str
 
+# 👇 AQUI ESTÃO OS MODELOS QUE ESTAVAM DANDO ERRO NO SEU PRINT
+class PerfilUpdate(BaseModel):
+    username: str
+    nome_exibicao: str
+    avatar: str
+
+class SenhaUpdate(BaseModel):
+    username: str
+    senha_atual: str
+    senha_nova: str
+
 # ==========================================
 # ROTAS
 # ==========================================
 @router.get("/")
 def listar_usuarios(db: Session = Depends(get_db)):
     usuarios = db.query(Usuario).all()
-    return [{"id": u.id, "username": u.username, "is_admin": u.is_admin} for u in usuarios]
+    return [{
+        "id": u.id, 
+        "username": u.username, 
+        "is_admin": u.is_admin,
+        # O getattr evita que o sistema quebre se a coluna ainda não existir no banco
+        "nome_exibicao": getattr(u, 'nome_exibicao', u.username) or u.username,
+        "avatar": getattr(u, 'avatar', 'letras') or 'letras'
+    } for u in usuarios]
 
 @router.post("/")
 def criar_usuario(req: UsuarioCreate, db: Session = Depends(get_db)):
     if not req.username.strip(): raise HTTPException(400, "Nome não pode ser vazio.")
-    
-    # Verifica duplicidade ignorando case
     if db.query(Usuario).filter(func.lower(Usuario.username) == req.username.strip().lower()).first():
         raise HTTPException(400, "Este usuário já existe.")
     
-    # Salva com a senha Criptografada (HASH)
     novo_user = Usuario(
         username=req.username.strip(), 
         password=get_password_hash(req.password), 
@@ -80,25 +92,41 @@ def criar_usuario(req: UsuarioCreate, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Criado com sucesso"}
 
+@router.put("/perfil/atualizar")
+def atualizar_perfil(req: PerfilUpdate, db: Session = Depends(get_db)):
+    user = db.query(Usuario).filter(Usuario.username == req.username).first()
+    if not user: raise HTTPException(404, "Usuário não encontrado")
+
+    user.nome_exibicao = req.nome_exibicao
+    user.avatar = req.avatar
+    db.commit()
+    return {"message": "Perfil atualizado"}
+
+@router.put("/senha/trocar")
+def trocar_senha(req: SenhaUpdate, db: Session = Depends(get_db)):
+    user = db.query(Usuario).filter(Usuario.username == req.username).first()
+    if not user or not verify_password(req.senha_atual, user.password):
+        raise HTTPException(401, "Senha atual incorreta")
+
+    user.password = get_password_hash(req.senha_nova)
+    db.commit()
+    return {"message": "Senha atualizada com sucesso"}
+
 @router.put("/{user_id}")
 def editar_usuario(user_id: int, req: UsuarioUpdate, db: Session = Depends(get_db)):
     user = db.query(Usuario).filter(Usuario.id == user_id).first()
     if not user: raise HTTPException(404, "Usuário não encontrado.")
-    
     if user.username == "admin" and req.username.lower() != "admin":
         raise HTTPException(400, "O nome do administrador mestre não pode ser alterado.")
 
     nome_antigo = user.username
     novo_nome = req.username.strip()
 
-    # Verifica se o novo nome já pertence a outra pessoa
     if db.query(Usuario).filter(func.lower(Usuario.username) == novo_nome.lower(), Usuario.id != user_id).first():
         raise HTTPException(400, "Já existe outro usuário com este nome.")
 
     user.username = novo_nome
     user.is_admin = req.is_admin
-    
-    # Atualiza a senha criptografada só se o usuário digitou uma nova
     if req.password: 
         user.password = get_password_hash(req.password)
 
@@ -118,24 +146,18 @@ def deletar_usuario(user_id: int, req: JustificativaRequest, db: Session = Depen
     db.commit()
     return {"message": "Excluído"}
 
-# ==========================================
-# ROTA DE LOGIN (AUTENTICAÇÃO)
-# ==========================================
 @router.post("/login")
 def fazer_login(dados: dict, db: Session = Depends(get_db)):
     username = dados.get("username")
     password = dados.get("password")
     
-    # Procura o utilizador no banco
     usuario = db.query(Usuario).filter(Usuario.username == username).first()
     
-    # Se não existir ou a password estiver errada
     if not usuario or not verify_password(password, usuario.password):
         db.add(LogAuditoria(usuario=username, acao="LOGIN FALHADO", entidade="Segurança", identificador="N/A", detalhes="Tentativa de login com credenciais inválidas."))
         db.commit()
         raise HTTPException(status_code=401, detail="Usuário ou senha incorretos!")
     
-    # Regista o sucesso do login
     db.add(LogAuditoria(usuario=usuario.username, acao="LOGIN", entidade="Segurança", identificador="N/A", detalhes="Sessão iniciada com sucesso."))
     db.commit()
     

@@ -72,7 +72,16 @@ export default function Cadastro() {
   const ativosFiltrados = ativos.filter(a => {
     const termos = buscaGeral.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
     const tipoNome = getNomeTipoEquipamento(a, categorias)?.toLowerCase() || '';
-    const matchBusca = termos.length === 0 || termos.some(termo => a.patrimonio.toLowerCase().includes(termo) || (a.marca && a.marca.toLowerCase().includes(termo)) || (a.modelo && a.modelo.toLowerCase().includes(termo)) || tipoNome.includes(termo));
+    
+    const matchBusca = termos.length === 0 || termos.some(termo => 
+      a.patrimonio.toLowerCase().includes(termo) || 
+      (a.marca && a.marca.toLowerCase().includes(termo)) || 
+      (a.modelo && a.modelo.toLowerCase().includes(termo)) || 
+      tipoNome.includes(termo) ||
+      (a.secretaria && a.secretaria.toLowerCase().includes(termo)) || // 🧠 Busca por Secretaria adicionada!
+      (a.setor && a.setor.toLowerCase().includes(termo))              // 🧠 Busca por Setor adicionada!
+    );
+    
     const matchStatus = filtroStatus ? (a.status?.toUpperCase() === filtroStatus.toUpperCase()) : true;
     return matchBusca && matchStatus;
   });
@@ -84,7 +93,18 @@ export default function Cadastro() {
   const handleSelectOne = (e, pat) => setSelecionados(prev => e.target.checked ? [...prev, pat] : prev.filter(p => p !== pat));
   const getAtivosSelecionadosObj = () => ativos.filter(a => selecionados.includes(a.patrimonio));
 
-  const abrirFicha = async (patrimonio) => { try { setModalFicha({ aberto: true, dados: (await api.get(`/api/inventario/ficha/detalhes/${patrimonio}`)).data }); } catch (e) { toast.error("Erro."); } };
+  const abrirFicha = async (patrimonio) => { 
+    try { 
+      // Codifica a barra (/) de S/P_ para a web entender sem quebrar a URL
+      const patrimonioSeguro = encodeURIComponent(patrimonio);
+      const res = await api.get(`/api/inventario/ficha/detalhes/${patrimonioSeguro}`);
+      setModalFicha({ aberto: true, dados: res.data }); 
+    } catch (e) { 
+      toast.error("Erro ao carregar a ficha da máquina."); 
+      console.error(e);
+    } 
+  };
+  
   const abrirEdicao = (ativo) => { let din = {}; if (typeof ativo.dados_dinamicos === 'string') { try { din = JSON.parse(ativo.dados_dinamicos); } catch(e){} } else if (ativo.dados_dinamicos) { din = ativo.dados_dinamicos; } setModalEdicao({ aberto: true, ativo, form: { ...ativo, dados_dinamicos: din }}); };
 
   const exportarParaExcel = () => {
@@ -202,11 +222,11 @@ export default function Cadastro() {
         </div>
       )}
 
-      {abaAtiva === 'novo' && <AbaNovoCadastro categorias={categorias} secretarias={secretarias} usuarioAtual={usuarioAtual} carregarDados={carregarDados} setAbaAtiva={setAbaAtiva} ativoClonado={ativoClonado} setAtivoClonado={setAtivoClonado} />}
+      {abaAtiva === 'novo' && <AbaNovoCadastro categorias={categorias} secretarias={secretarias} usuarioAtual={usuarioAtual} carregarDados={carregarDados} setAbaAtiva={setAbaAtiva} ativoClonado={ativoClonado} setAtivoClonado={setAtivoClonado} ativos={ativos} />}
       {abaAtiva === 'manutencao' && <AbaManutencao historicoManut={historicoManut} carregarDados={carregarDados} />}
 
       {/* COMPONENTES DE MODAIS EXECUTANDO EM SEGUNDO PLANO */}
-      <ModaisEdicao modalEdicao={modalEdicao} setModalEdicao={setModalEdicao} modalEdicaoMassa={modalEdicaoMassa} setModalEdicaoMassa={setModalEdicaoMassa} categorias={categorias} secretarias={secretarias} usuarioAtual={usuarioAtual} carregarDados={carregarDados} setSelecionados={setSelecionados} />
+      <ModaisEdicao modalEdicao={modalEdicao} setModalEdicao={setModalEdicao} modalEdicaoMassa={modalEdicaoMassa} setModalEdicaoMassa={setModalEdicaoMassa} categorias={categorias} secretarias={secretarias} usuarioAtual={usuarioAtual} carregarDados={carregarDados} setSelecionados={setSelecionados} ativos={ativos} />
       <ModaisOperacao modalFicha={modalFicha} setModalFicha={setModalFicha} modalQR={modalQR} setModalQR={setModalQR} modalQRLote={modalQRLote} setModalQRLote={setModalQRLote} modalStatus={modalStatus} setModalStatus={setModalStatus} formStatus={formStatus} setFormStatus={setFormStatus} modalTransferencia={modalTransferencia} setModalTransferencia={setModalTransferencia} formTransfer={formTransfer} setFormTransfer={setFormTransfer} modalExcluir={modalExcluir} setModalExcluir={setModalExcluir} motivoExclusao={motivoExclusao} setMotivoExclusao={setMotivoExclusao} categorias={categorias} secretarias={secretarias} usuarioAtual={usuarioAtual} carregarDados={carregarDados} setSelecionados={setSelecionados} />
     </div>
   );

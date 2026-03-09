@@ -3,7 +3,8 @@ import { useParams } from 'react-router-dom';
 import api from '../api/api';
 
 export default function ConsultaPublica() {
-  const { patrimonio } = useParams();
+  const params = useParams();
+  const patrimonio = params["*"];
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState(false);
 

@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
-import api from '../api/api'; // <-- CAMINHO CORRIGIDO!
-import { parseCamposDinamicos } from '../utils/helpers'; // <-- CAMINHO CORRIGIDO!
+import api from '../api/api';
 
 export default function AbaNovoCadastro({ 
   categorias, secretarias, usuarioAtual, carregarDados, setAbaAtiva, 
-  ativoClonado, setAtivoClonado 
+  ativoClonado, setAtivoClonado, ativos // 🧠 <- Agora ele recebe os ativos para poder contar!
 }) {
   const [formNovo, setFormNovo] = useState({
     patrimonio: '',
@@ -49,7 +48,6 @@ export default function AbaNovoCadastro({
     }
   }, [ativoClonado, secretarias]);
 
-
   const limparFormNovo = () => {
     setFormNovo({ patrimonio: '', categoria_id: '', marca: '', modelo: '', dados_dinamicos: {} });
     setSecIdNovo(''); setSetorNovo(''); setSetoresNovo([]);
@@ -72,8 +70,31 @@ export default function AbaNovoCadastro({
     if (!formNovo.categoria_id) return toast.warn("Selecione o tipo de equipamento.");
     if (!secIdNovo || !setorNovo) return toast.warn("Selecione o local.");
 
+    // 🧠 GERAÇÃO AUTOMÁTICA DE PATRIMÔNIO (S/P_XX)
+    let patrimonioFinal = formNovo.patrimonio.trim();
+    
+    if (!patrimonioFinal) {
+      if (ativos && ativos.length > 0) {
+        // Encontra todos os patrimônios que começam com S/P_
+        const spAtivos = ativos.filter(a => a.patrimonio && a.patrimonio.startsWith('S/P_'));
+        
+        // Pega só os números para descobrir qual é o maior
+        const numeros = spAtivos.map(a => {
+          const numPart = a.patrimonio.split('_')[1];
+          return parseInt(numPart);
+        }).filter(n => !isNaN(n));
+        
+        const maxNumero = numeros.length > 0 ? Math.max(...numeros) : 0;
+        patrimonioFinal = `S/P_${maxNumero + 1}`;
+      } else {
+        patrimonioFinal = `S/P_1`; // Caso seja a primeira máquina do sistema
+      }
+      toast.info(`Patrimônio gerado automaticamente: ${patrimonioFinal}`);
+    }
+
     const payload = {
       ...formNovo,
+      patrimonio: patrimonioFinal, // <- Envia o patrimônio finalizado
       secretaria: secretarias.find(s => s.id == secIdNovo)?.nome,
       setor: setorNovo,
       status: 'ATIVO',
@@ -96,98 +117,158 @@ export default function AbaNovoCadastro({
     }
   };
 
-  const camposDinamicosNovo = formNovo.categoria_id ? parseCamposDinamicos(categorias.find(c => c.id == formNovo.categoria_id)) : [];
+  const categoriaSelecionada = categorias.find(c => c.id == formNovo.categoria_id);
+  let camposFormulario = [];
+  
+  if (categoriaSelecionada && categoriaSelecionada.campos_config) {
+    let cfg = categoriaSelecionada.campos_config;
+    try {
+      if (typeof cfg === 'string') cfg = JSON.parse(cfg);
+      if (Array.isArray(cfg)) {
+        camposFormulario = cfg.map(item => typeof item === 'string' ? item : item.nome).filter(Boolean);
+      }
+    } catch (e) {
+      console.error("Erro ao processar campos dinâmicos:", e);
+    }
+  }
 
   return (
-    <div className="max-full animate-fade-in pb-10">
-      <div className="p-8 rounded-3xl border shadow-xl transition-all relative overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
-        
-        {ativoClonado && (
-          <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 animate-pulse"></div>
-        )}
+    <div className="max-w-5xl mx-auto space-y-8 animate-fade-in pb-10 mt-4">
+      
+      {/* CABEÇALHO PREMIUM */}
+      <div className="flex items-center gap-4 border-b pb-6" style={{ borderColor: 'var(--border-light)' }}>
+        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-lg border ${ativoClonado ? 'bg-blue-600 border-blue-500/50' : 'bg-green-600 border-green-500/50'}`} style={{ color: '#fff' }}>
+          {ativoClonado ? '📋' : '✨'}
+        </div>
+        <div>
+          <h2 className="text-2xl font-black tracking-tight" style={{ color: 'var(--text-main)' }}>
+            {ativoClonado ? 'Clonagem de Ativo' : 'Cadastro de Novo Ativo'}
+          </h2>
+          <p className="text-xs font-bold uppercase tracking-widest mt-1" style={{ color: ativoClonado ? 'var(--color-blue)' : 'var(--color-green)' }}>
+            {ativoClonado ? `Baseado no Patrimônio ${ativoClonado.patrimonio}` : 'Adicione um novo equipamento ao inventário'}
+          </p>
+        </div>
+      </div>
 
-        <div className="flex items-center gap-4 border-b pb-6 mb-6" style={{ borderColor: 'var(--border-light)' }}>
-          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl text-white shadow-lg ${ativoClonado ? 'bg-blue-600 shadow-blue-500/30' : 'bg-gray-900 shadow-gray-500/30'}`}>
-            {ativoClonado ? '📋' : '➕'}
+      <form onSubmit={salvarNovoCadastro} className="space-y-6">
+        
+        {/* BLOCO 1: IDENTIDADE */}
+        <div className="p-8 rounded-3xl border shadow-xl transition-all relative overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
+          {ativoClonado && <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 animate-pulse"></div>}
+          
+          <div className="flex items-center gap-3 mb-8 pb-4 border-b" style={{ borderColor: 'var(--border-light)' }}>
+            <span className="text-2xl">🏷️</span>
+            <div>
+              <h4 className="font-black text-lg tracking-tight" style={{ color: 'var(--text-main)' }}>Identidade Principal</h4>
+              <p className="text-[10px] font-bold uppercase tracking-widest mt-1 opacity-50" style={{ color: 'var(--text-main)' }}>Dados básicos do equipamento</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-2xl font-black tracking-tight" style={{ color: 'var(--text-main)' }}>
-              {ativoClonado ? 'Clonando Máquina' : 'Novo Ativo'}
-            </h2>
-            <p className="text-xs font-bold uppercase tracking-widest mt-1 opacity-50" style={{ color: 'var(--text-muted)' }}>
-              {ativoClonado ? `Baseado no P. ${ativoClonado.patrimonio}` : 'Adicionar ao inventário'}
-            </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Patrimônio (Opcional)</label>
+              <input 
+                autoFocus={!!ativoClonado} 
+                value={formNovo.patrimonio} 
+                onChange={e => setFormNovo({...formNovo, patrimonio: e.target.value})} 
+                placeholder="Deixe em branco para auto-gerar" 
+                className="w-full p-4 rounded-xl border font-black text-lg outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm" 
+                style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} 
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Tipo de Equipamento *</label>
+              <select required value={formNovo.categoria_id} onChange={handleMudarCategoriaNovo} className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm cursor-pointer" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
+                <option value="">Selecione a Categoria...</option>
+                {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+            </div>
           </div>
         </div>
 
-        <form onSubmit={salvarNovoCadastro} className="space-y-8">
+        {/* BLOCO 2: ESPECIFICAÇÕES */}
+        {formNovo.categoria_id && (
+          <div className="p-8 rounded-3xl border shadow-xl transition-all animate-fade-in" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
+            <div className="flex items-center gap-3 mb-8 pb-4 border-b" style={{ borderColor: 'var(--border-light)' }}>
+              <span className="text-2xl">⚙️</span>
+              <div>
+                <h4 className="font-black text-lg tracking-tight" style={{ color: 'var(--text-main)' }}>Especificações Técnicas</h4>
+                <p className="text-[10px] font-bold uppercase tracking-widest mt-1 opacity-50" style={{ color: 'var(--text-main)' }}>Marca, modelo e dados extras</p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              <div>
+                <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Marca do Equipamento</label>
+                <input value={formNovo.marca} onChange={e => setFormNovo({...formNovo, marca: e.target.value})} placeholder="Ex: Dell, HP, Mercusys..." className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}/>
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Modelo</label>
+                <input value={formNovo.modelo} onChange={e => setFormNovo({...formNovo, modelo: e.target.value})} placeholder="Ex: Optiplex 3020..." className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}/>
+              </div>
+            </div>
+
+            {camposFormulario.length > 0 && (
+              <div className="p-6 rounded-2xl border bg-black/5 dark:bg-white/5" style={{ borderColor: 'var(--border-light)' }}>
+                <h5 className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-4">Campos Exclusivos da Categoria</h5>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  {camposFormulario.map(c => (
+                    <div key={c}>
+                      <label className="block text-[9px] font-black uppercase opacity-80 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>{c}</label>
+                      <input 
+                        className="w-full p-3.5 rounded-xl border font-medium outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm" 
+                        style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} 
+                        placeholder={`Definir ${c}...`} 
+                        value={formNovo.dados_dinamicos[c] || ''} 
+                        onChange={e => setFormNovo({...formNovo, dados_dinamicos: {...formNovo.dados_dinamicos, [c]: e.target.value}})} 
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* BLOCO 3: LOCALIZAÇÃO */}
+        <div className="p-8 rounded-3xl border shadow-xl transition-all" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
+          <div className="flex items-center gap-3 mb-8 pb-4 border-b" style={{ borderColor: 'var(--border-light)' }}>
+            <span className="text-2xl">📍</span>
+            <div>
+              <h4 className="font-black text-lg tracking-tight" style={{ color: 'var(--text-main)' }}>Localização Física</h4>
+              <p className="text-[10px] font-bold uppercase tracking-widest mt-1 opacity-50" style={{ color: 'var(--text-main)' }}>Onde o equipamento será instalado</p>
+            </div>
+          </div>
           
-          <div className="p-6 rounded-3xl border" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-            <h3 className="text-xs font-black uppercase tracking-[2px] mb-6 text-blue-500 flex items-center gap-2"><span>1.</span> Identidade Principal</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1" style={{ color: 'var(--text-main)' }}>Patrimônio (Opcional)</label>
-                <input 
-                  autoFocus={!!ativoClonado} 
-                  value={formNovo.patrimonio} 
-                  onChange={e => setFormNovo({...formNovo, patrimonio: e.target.value})} 
-                  placeholder="Deixe em branco para auto-gerar" 
-                  className="w-full p-4 rounded-xl border outline-none font-black text-lg focus:ring-2 focus:ring-blue-500/20 transition-all" 
-                  style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} 
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1" style={{ color: 'var(--text-main)' }}>Tipo de Equipamento *</label>
-                <select required value={formNovo.categoria_id} onChange={handleMudarCategoriaNovo} className="w-full p-4 rounded-xl border font-black text-sm outline-none focus:ring-2 focus:ring-blue-500/20 transition-all" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
-                  <option value="">Selecione a Categoria...</option>
-                  {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                </select>
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Secretaria / Prédio *</label>
+              <select required value={secIdNovo} onChange={handleMudarSecretariaNovo} className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm cursor-pointer" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
+                <option value="">Selecione o Local...</option>
+                {secretarias.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Setor / Sala *</label>
+              <select required value={setorNovo} onChange={e => setSetorNovo(e.target.value)} disabled={setoresNovo.length === 0} className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm disabled:opacity-50 cursor-pointer" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
+                <option value="">Selecione o Setor...</option>
+                {setoresNovo.map(s => <option key={s.id} value={s.nome}>{s.nome}</option>)}
+              </select>
             </div>
           </div>
+        </div>
 
-          {formNovo.categoria_id && (
-            <div className="p-6 rounded-3xl border animate-fade-in" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-              <h3 className="text-xs font-black uppercase tracking-[2px] mb-6 text-blue-500 flex items-center gap-2"><span>2.</span> Especificações Técnicas</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div className="space-y-1"><label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1" style={{ color: 'var(--text-main)' }}>Marca</label><input value={formNovo.marca} onChange={e => setFormNovo({...formNovo, marca: e.target.value})} className="w-full p-3 rounded-xl border outline-none font-bold focus:ring-2 focus:ring-blue-500/20" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}/></div>
-                <div className="space-y-1"><label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1" style={{ color: 'var(--text-main)' }}>Modelo</label><input value={formNovo.modelo} onChange={e => setFormNovo({...formNovo, modelo: e.target.value})} className="w-full p-3 rounded-xl border outline-none font-bold focus:ring-2 focus:ring-blue-500/20" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}/></div>
-              </div>
+        {/* BOTÕES DE AÇÃO */}
+        <div className="pt-6 flex flex-col sm:flex-row items-center justify-end gap-4">
+          <button type="button" onClick={() => { limparFormNovo(); setAbaAtiva('lista'); }} className="w-full sm:w-auto px-8 py-4 rounded-xl font-bold opacity-60 hover:opacity-100 transition-all hover:bg-gray-500/10" style={{ color: 'var(--text-main)' }}>
+            Cancelar Operação
+          </button>
+          <button type="submit" className={`w-full sm:w-auto px-10 py-4 rounded-xl font-black text-white shadow-xl transition-all active:scale-95 ${ativoClonado ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/30' : 'bg-green-600 hover:bg-green-700 shadow-green-500/30'}`}>
+            {ativoClonado ? '💾 Salvar Clone' : '✨ Cadastrar Equipamento'}
+          </button>
+        </div>
 
-              {camposDinamicosNovo.length > 0 && (
-                <>
-                  <hr className="my-6 border-dashed" style={{ borderColor: 'var(--border-light)' }} />
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                    {camposDinamicosNovo.map(c => (
-                      <div key={c} className="p-3 rounded-2xl border transition-all focus-within:border-blue-500 focus-within:shadow-sm" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
-                        <label className="block text-[9px] font-black uppercase opacity-60 mb-1" style={{ color: 'var(--text-main)' }}>{c}</label>
-                        <input className="w-full bg-transparent border-none p-0 text-sm font-bold outline-none" style={{ color: 'var(--text-main)' }} placeholder={`Ex: ${c}...`} value={formNovo.dados_dinamicos[c] || ''} onChange={e => setFormNovo({...formNovo, dados_dinamicos: {...formNovo.dados_dinamicos, [c]: e.target.value}})} />
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          <div className="p-6 rounded-3xl border" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-            <h3 className="text-xs font-black uppercase tracking-[2px] mb-6 text-blue-500 flex items-center gap-2"><span>3.</span> Localização Física</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-1"><label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1" style={{ color: 'var(--text-main)' }}>Secretaria / Prédio *</label><select required value={secIdNovo} onChange={handleMudarSecretariaNovo} className="w-full p-3 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}><option value="">Selecione...</option>{secretarias.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></div>
-              <div className="space-y-1"><label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1" style={{ color: 'var(--text-main)' }}>Setor / Sala *</label><select required value={setorNovo} onChange={e => setSetorNovo(e.target.value)} disabled={setoresNovo.length === 0} className="w-full p-3 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}><option value="">Selecione...</option>{setoresNovo.map(s => <option key={s.id} value={s.nome}>{s.nome}</option>)}</select></div>
-            </div>
-          </div>
-
-          <div className="pt-4 flex items-center justify-end gap-4">
-            <button type="button" onClick={() => { limparFormNovo(); setAbaAtiva('lista'); }} className="px-6 py-3 rounded-xl font-bold opacity-60 hover:opacity-100 transition-all" style={{ color: 'var(--text-main)' }}>Cancelar</button>
-            <button type="submit" className={`px-10 py-3 rounded-xl font-black text-white shadow-lg transition-all active:scale-95 ${ativoClonado ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/30' : 'bg-gray-900 hover:bg-black shadow-gray-500/30'}`}>
-              {ativoClonado ? 'Salvar Clone' : 'Salvar Equipamento'}
-            </button>
-          </div>
-
-        </form>
-      </div>
+      </form>
     </div>
   );
 }

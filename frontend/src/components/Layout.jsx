@@ -13,16 +13,37 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
-  const [nomeUsuario, setNomeUsuario] = useState(localStorage.getItem(`nome_${usuarioAtual}`) || usuarioAtual);
-  const [avatarUsuario, setAvatarUsuario] = useState(localStorage.getItem(`avatar_${usuarioAtual}`) || 'letras');
+  
+  // Estados do Perfil puxados do banco
+  const [nomeUsuario, setNomeUsuario] = useState(usuarioAtual);
+  const [avatarUsuario, setAvatarUsuario] = useState('letras');
 
   const borderStrong = theme === 'light' ? '1.5px solid #b8c5d6' : '1.5px solid #475569';
 
+  // 🧠 A MÁGICA: Função que busca seu rosto e nome real no banco de dados
+  const carregarPerfil = async () => {
+    if (!usuarioAtual) return;
+    try {
+      const res = await api.get('/api/usuarios/');
+      const meuUser = res.data.find(u => u.username === usuarioAtual);
+      if (meuUser) {
+        setNomeUsuario(meuUser.nome_exibicao || usuarioAtual);
+        setAvatarUsuario(meuUser.avatar || 'letras');
+      }
+    } catch (e) {
+      console.error("Erro ao buscar perfil para o Header", e);
+    }
+  };
+
   useEffect(() => {
+    // Carrega assim que a tela abre
+    carregarPerfil();
+
+    // Fica escutando o grito da tela de "MeuPerfil" para atualizar ao vivo
     const atualizarDadosPerfil = () => {
-      setNomeUsuario(localStorage.getItem(`nome_${usuarioAtual}`) || usuarioAtual);
-      setAvatarUsuario(localStorage.getItem(`avatar_${usuarioAtual}`) || 'letras');
+      carregarPerfil(); 
     };
+    
     window.addEventListener('perfilAtualizado', atualizarDadosPerfil);
     return () => window.removeEventListener('perfilAtualizado', atualizarDadosPerfil);
   }, [usuarioAtual]);
@@ -116,10 +137,10 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
           {isSidebarOpen ? (
             <>
               <span className="text-[10px] font-black tracking-[0.2em] text-gray-500 uppercase">Nexus System</span>
-              <span className="text-[9px] font-mono font-bold text-blue-500 mt-1">v2.0.0.3</span>
+              <span className="text-[9px] font-mono font-bold text-blue-500 mt-1">v2.1.0.0</span>
             </>
           ) : (
-            <span className="text-[9px] font-mono font-bold text-blue-500">v1.0</span>
+            <span className="text-[9px] font-mono font-bold text-blue-500">v2.0</span>
           )}
         </div>
       </aside>
@@ -216,6 +237,7 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
                       className="flex items-center gap-3 p-1.5 pr-4 rounded-2xl shadow-sm transition-all hover:border-blue-400" 
                       style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', borderStyle: 'solid', borderWidth: '1px' }}>
                 
+                {/* 👽 A FOTO E NOME OFICIAIS AGORA APARECEM AQUI */}
                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black shadow-md ${avatarUsuario === 'letras' ? 'bg-gray-900 text-white text-[10px] uppercase' : 'bg-transparent text-lg'}`}
                      style={{ textShadow: avatarUsuario !== 'letras' && theme === 'light' ? '0px 0px 2px rgba(0,0,0,0.4), 0px 2px 5px rgba(0,0,0,0.2)' : 'none' }}>
                   {avatarUsuario === 'letras' ? (usuarioAtual ? usuarioAtual.substring(0, 2).toUpperCase() : 'AD') : avatarUsuario}

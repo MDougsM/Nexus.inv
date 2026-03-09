@@ -2,28 +2,58 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import api from '../api/api';
 
-export default function MeuPerfil({ usuarioAtual }) {
+// Tiramos a prop (usuarioAtual) daqui e vamos puxar direto da fonte!
+export default function MeuPerfil() {
+  // 🛡️ Puxando o nome REAL do usuário direto do navegador (localStorage)
+  const userSafe = localStorage.getItem('usuario') || 'admin';
+
   const [senhas, setSenhas] = useState({ atual: '', nova: '', confirmacao: '' });
 
-  // Pegando dados salvos no navegador (ou usando o padrão)
-  const [nomeExibicao, setNomeExibicao] = useState(localStorage.getItem(`nome_${usuarioAtual}`) || usuarioAtual);
-  const [avatarAtivo, setAvatarAtivo] = useState(localStorage.getItem(`avatar_${usuarioAtual}`) || 'letras');
+  // Puxando dados do backend (ou localStorage provisório)
+  const [nomeExibicao, setNomeExibicao] = useState(localStorage.getItem(`nome_${userSafe}`) || userSafe);
+  const [avatarAtivo, setAvatarAtivo] = useState(localStorage.getItem(`avatar_${userSafe}`) || 'letras');
 
   // Galeria de Avatares Criativos
   const avatares = ['🤖', '🦊', '🐱', '🐼', '🦉', '👽', '👻', '😎', '🤓', '👩‍💻', '👨‍💻', '🚀', '⚡', '🔥', '👾', '🦖'];
 
-  const salvarPerfil = (e) => {
+  // Busca os dados reais do banco assim que a tela abre
+  useEffect(() => {
+    const buscarDadosDoBanco = async () => {
+      try {
+        const res = await api.get('/api/usuarios/');
+        const meuUsuario = res.data.find(u => u.username === userSafe);
+        if (meuUsuario) {
+          setNomeExibicao(meuUsuario.nome_exibicao || userSafe);
+          setAvatarAtivo(meuUsuario.avatar || 'letras');
+        }
+      } catch (e) {
+        console.error("Erro ao buscar dados do perfil");
+      }
+    };
+    buscarDadosDoBanco();
+  }, [userSafe]);
+
+  const salvarPerfil = async (e) => {
     e.preventDefault();
     if (!nomeExibicao.trim()) return toast.warn("O nome não pode ficar vazio.");
     
-    // Salva no navegador do usuário
-    localStorage.setItem(`nome_${usuarioAtual}`, nomeExibicao);
-    localStorage.setItem(`avatar_${usuarioAtual}`, avatarAtivo);
-    
-    toast.success("Perfil atualizado com sucesso! ✨");
-    
-    // Mágica para avisar o Layout (Header) para atualizar a foto na hora!
-    window.dispatchEvent(new Event('perfilAtualizado'));
+    try {
+      // Avisa o Banco de Dados!
+      await api.put('/api/usuarios/perfil/atualizar', {
+        username: userSafe,
+        nome_exibicao: nomeExibicao,
+        avatar: avatarAtivo
+      });
+
+      // Salva no navegador também para efeito imediato
+      localStorage.setItem(`nome_${userSafe}`, nomeExibicao);
+      localStorage.setItem(`avatar_${userSafe}`, avatarAtivo);
+      
+      toast.success("Perfil atualizado com sucesso! ✨");
+      window.dispatchEvent(new Event('perfilAtualizado'));
+    } catch (e) {
+      toast.error("Erro ao salvar o perfil no banco de dados.");
+    }
   };
 
   const salvarSenha = async (e) => {
@@ -33,7 +63,7 @@ export default function MeuPerfil({ usuarioAtual }) {
 
     try {
       await api.put('/api/usuarios/senha/trocar', {
-        username: usuarioAtual,
+        username: userSafe,
         senha_atual: senhas.atual,
         senha_nova: senhas.nova
       });
@@ -68,10 +98,10 @@ export default function MeuPerfil({ usuarioAtual }) {
             <div className="flex flex-col items-center text-center mb-8 pb-8 border-b" style={{ borderColor: 'var(--border-light)' }}>
               <div className="w-28 h-28 rounded-3xl flex items-center justify-center text-5xl font-black text-white uppercase shadow-xl mb-4 transition-all hover:scale-105 cursor-pointer" 
                    style={{ backgroundColor: avatarAtivo === 'letras' ? '#111827' : 'var(--bg-input)', border: avatarAtivo === 'letras' ? '2px solid rgba(255,255,255,0.1)' : '2px solid var(--border-light)' }}>
-                {avatarAtivo === 'letras' ? usuarioAtual.substring(0, 2).toUpperCase() : avatarAtivo}
+                {avatarAtivo === 'letras' ? userSafe.substring(0, 2).toUpperCase() : avatarAtivo}
               </div>
               <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border shadow-sm text-blue-500 border-blue-500/30 bg-blue-500/10">
-                Login: {usuarioAtual}
+                Login: {userSafe}
               </span>
             </div>
 
@@ -85,7 +115,7 @@ export default function MeuPerfil({ usuarioAtual }) {
                 <label className="block text-[10px] font-black uppercase opacity-60 mb-2 ml-1" style={{ color: 'var(--text-main)' }}>Escolha seu Avatar</label>
                 <div className="grid grid-cols-4 gap-2">
                   <button type="button" onClick={() => setAvatarAtivo('letras')} className={`aspect-square rounded-xl flex items-center justify-center text-sm font-black transition-all ${avatarAtivo === 'letras' ? 'bg-blue-600 text-white shadow-lg scale-105' : 'bg-transparent border hover:bg-gray-500/10'}`} style={{ borderColor: avatarAtivo === 'letras' ? 'transparent' : 'var(--border-light)', color: avatarAtivo === 'letras' ? '#fff' : 'var(--text-main)' }}>
-                    {usuarioAtual.substring(0, 2).toUpperCase()}
+                    {userSafe.substring(0, 2).toUpperCase()}
                   </button>
                   {avatares.map(emoji => (
                     <button key={emoji} type="button" onClick={() => setAvatarAtivo(emoji)} className={`aspect-square rounded-xl flex items-center justify-center text-2xl transition-all ${avatarAtivo === emoji ? 'bg-blue-600 shadow-lg scale-105' : 'bg-transparent border hover:bg-gray-500/10'}`} style={{ borderColor: avatarAtivo === emoji ? 'transparent' : 'var(--border-light)' }}>

@@ -41,7 +41,7 @@ export default function App() {
       <Routes>
         {/* ROTA PÚBLICA (Fora do Layout, ou seja, sem Menu Lateral) */}
         <Route path="/login" element={<Login />} />
-        <Route path="/consulta/:patrimonio" element={<ConsultaPublica />} />
+        <Route path="/consulta/*" element={<ConsultaPublica />} />
 
         {/* TODAS AS ROTAS PRIVADAS FICAM AQUI DENTRO */}
         <Route path="/*" element={

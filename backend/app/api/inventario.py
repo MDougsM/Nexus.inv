@@ -7,7 +7,6 @@ from typing import List, Dict, Any, Optional
 
 import csv
 import io
-import json
 
 router = APIRouter(prefix="/inventario", tags=["Inventário"])
 
@@ -156,7 +155,7 @@ async def importar_csv(
 # ==========================================
 # BUSCAR FICHA COMPLETA (OLHO) - ROTA CORRIGIDA
 # ==========================================
-@router.get("/ficha/detalhes/{patrimonio}")
+@router.get("/ficha/detalhes/{patrimonio:path}")
 def obter_detalhes_ativo(patrimonio: str, db: Session = Depends(get_db)):
     try:
         ativo = db.query(Ativo).filter(Ativo.patrimonio == patrimonio).first()
@@ -173,46 +172,54 @@ def obter_detalhes_ativo(patrimonio: str, db: Session = Depends(get_db)):
 # ==========================================
 # EDITAR CADASTRO COMPLETO (LÁPIS) - 100% AUDITADO
 # ==========================================
-@router.put("/ficha/editar/{patrimonio_atual}")
-def editar_ativo(patrimonio_atual: str, dados: dict, db: Session = Depends(get_db)):
-    ativo = db.query(Ativo).filter(Ativo.patrimonio == patrimonio_atual).first()
+@router.put("/ficha/editar/{identificador}")
+def editar_ficha_ativo(identificador: str, dados: dict, db: Session = Depends(get_db)):
+    # Tenta achar pelo ID (se for um número) ou pelo Patrimônio
+    if identificador.isdigit():
+        ativo = db.query(Ativo).filter(Ativo.id == int(identificador)).first()
+    else:
+        ativo = db.query(Ativo).filter(Ativo.patrimonio == identificador).first()
+        
     if not ativo:
         raise HTTPException(status_code=404, detail="Ativo não encontrado")
+
+    usuario_acao = dados.get("usuario_acao", "Sistema")
+    motivo = dados.get("motivo", "Edição de dados via painel")
+
+    # Atualiza os dados básicos
+    if "patrimonio" in dados and dados["patrimonio"].strip():
+        ativo.patrimonio = dados["patrimonio"].strip()
     
-    novo_patrimonio = dados.get("patrimonio", ativo.patrimonio)
-    
-    # Rastreia mudança de patrimônio para atualizar os logs
-    if novo_patrimonio != ativo.patrimonio:
-        existe = db.query(Ativo).filter(Ativo.patrimonio == novo_patrimonio).first()
-        if existe: raise HTTPException(status_code=400, detail="Este patrimônio já existe!")
-        db.query(LogAuditoria).filter(LogAuditoria.identificador == ativo.patrimonio).update({"identificador": novo_patrimonio})
-        db.query(RegistroManutencao).filter(RegistroManutencao.patrimonio == ativo.patrimonio).update({"patrimonio": novo_patrimonio})
-    
-    ativo.patrimonio = novo_patrimonio
+    ativo.categoria_id = dados.get("categoria_id", ativo.categoria_id)
     ativo.marca = dados.get("marca", ativo.marca)
     ativo.modelo = dados.get("modelo", ativo.modelo)
-    ativo.secretaria = dados.get("secretaria", ativo.secretaria)
-    ativo.setor = dados.get("setor", ativo.setor)
-    
-    # ATUALIZA O TIPO DE EQUIPAMENTO
-    if "categoria_id" in dados and str(dados["categoria_id"]).strip():
-        ativo.categoria_id = int(dados["categoria_id"])
-    
-    if "dados_dinamicos" in dados:
-        ativo.dados_dinamicos = dados["dados_dinamicos"]
-    
-    usuario = dados.get("usuario_acao", "Sistema")
+
+    # Lida com os campos dinâmicos corretamente
+    novos_dinamicos = dados.get("dados_dinamicos", {})
+    if isinstance(novos_dinamicos, str):
+        try:
+            import json
+            novos_dinamicos = json.loads(novos_dinamicos)
+        except:
+            novos_dinamicos = {}
+            
+    ativo.dados_dinamicos = novos_dinamicos
+
     db.add(LogAuditoria(
-        usuario=usuario, acao="EDICAO", entidade="Ativo", identificador=novo_patrimonio,
-        detalhes="Correção Cadastral: Alterou dados principais, tipo de equipamento ou especificações técnicas."
+        usuario=usuario_acao, 
+        acao="EDICAO_FICHA", 
+        entidade="Ativo", 
+        identificador=ativo.patrimonio, 
+        detalhes=f"Motivo: {motivo}"
     ))
+    
     db.commit()
-    return {"message": "Equipamento atualizado com sucesso!"}
+    return {"message": "Ficha atualizada com sucesso"}
 
 # ==========================================
 # EXCLUIR EQUIPAMENTO (LIXEIRA TOTAL - OBRIGA MOTIVO)
 # ==========================================
-@router.delete("/{patrimonio}")
+@router.delete("/{patrimonio:path}")
 def deletar_ativo(patrimonio: str, usuario_acao: str = "Admin", motivo: str = "Sem motivo", db: Session = Depends(get_db)):
     ativo = db.query(Ativo).filter(Ativo.patrimonio == patrimonio).first()
     if not ativo:
@@ -265,3 +272,70 @@ def deletar_categoria(categoria_id: int, usuario_acao: str = "Admin", db: Sessio
     db.add(LogAuditoria(usuario=usuario_acao, acao="EXCLUSAO", entidade="Categoria", identificador=nome_apagado, detalhes=f"Excluiu o tipo de equipamento '{nome_apagado}'."))
     db.commit()
     return {"message": "Categoria excluída com sucesso!"}
+
+# ==========================================
+# ROTA EXCLUSIVA PARA O AGENTE DE COLETA v2.1
+# ==========================================
+@router.post("/agente/coleta")
+def agente_coleta_automatica(dados: dict, db: Session = Depends(get_db)):
+    tipo_equip = dados.get("tipo", "Desktop")
+    
+    categoria = db.query(Categoria).filter(Categoria.nome == tipo_equip).first()
+    if not categoria:
+        categoria = Categoria(
+            nome=tipo_equip, 
+            campos_config=["Processador", "Memória", "S.O", "Disco Rígido [SSD]", "Disco Rígido [HD]", "Nome", "Usuário"]
+        )
+        db.add(categoria)
+        db.flush()
+
+    ativos_sp = db.query(Ativo).filter(Ativo.patrimonio.like("S/P_%")).all()
+    max_num = 0
+    for a in ativos_sp:
+        try:
+            num = int(a.patrimonio.split("_")[1])
+            if num > max_num: max_num = num
+        except: pass
+    novo_patrimonio = f"S/P_{max_num + 1}"
+
+    tipo_disco_agente = dados.get("tipo_disco", "HD")
+    chave_disco = f"Disco Rígido [{tipo_disco_agente}]"
+
+    hardwares_dict = {
+        "Processador": dados.get("cpu", ""),
+        "Memória": dados.get("ram", ""),
+        "S.O": dados.get("os", ""),
+        "Nome": dados.get("nome_pc", ""),
+        "Usuário": dados.get("usuario_pc", ""),
+        "Número de Série": dados.get("serial", "Não identificado"), # <- NOVO!
+        "Endereço MAC": dados.get("mac", "Não identificado")        # <- NOVO!
+    }
+    # Injetando o disco na chave correta
+    hardwares_dict[chave_disco] = dados.get("disco", "Não identificado")
+
+    # 🧠 LENDO A LOCALIZAÇÃO DINÂMICA ENVIADA PELO AGENTE
+    sec_enviada = dados.get("secretaria", "Agente")
+    setor_enviado = dados.get("setor", "Coletas")
+
+    novo_ativo = Ativo(
+        patrimonio=novo_patrimonio,
+        categoria_id=categoria.id,
+        marca=dados.get("marca", "Desconhecida"),
+        modelo=dados.get("modelo", "Desconhecido"),
+        secretaria=sec_enviada, # <- Agora usa o que você escolheu na tela preta!
+        setor=setor_enviado,    # <- Agora usa o que você escolheu na tela preta!
+        status="ATIVO",
+        dados_dinamicos=hardwares_dict
+    )
+    
+    db.add(novo_ativo)
+    db.add(LogAuditoria(
+        usuario="Agente.Nexus", 
+        acao="COLETA AUTOMÁTICA", 
+        entidade="Ativo", 
+        identificador=novo_patrimonio, 
+        detalhes=f"Máquina {dados.get('nome_pc')} enviada direto para {sec_enviada} / {setor_enviado}."
+    ))
+    db.commit()
+    
+    return {"message": "Coleta registrada com sucesso", "patrimonio": novo_patrimonio}
