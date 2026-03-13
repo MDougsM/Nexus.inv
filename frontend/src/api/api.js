@@ -1,8 +1,10 @@
 import axios from 'axios';
 
-// Usa o hostname atual (seja localhost ou o IP da rede como 192.168.x.x)
+// ⚡ O TRUQUE: Deixamos a baseURL vazia (ou como '/')
+// Assim, o celular vai fazer os pedidos para o próprio link do Ngrok, 
+// e o Vite vai interceptar e mandar para o Python.
 const api = axios.create({
-  baseURL: `http://${window.location.hostname}:8001`,
+  baseURL: '/', 
 });
 
 api.interceptors.request.use((config) => {

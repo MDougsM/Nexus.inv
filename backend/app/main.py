@@ -14,17 +14,29 @@ Base.metadata.create_all(bind=engine)
 def create_initial_data():
     db = SessionLocal()
     try:       
-        # Garante o usuário admin com a senha que você escolheu
+        # Garante o usuário admin com a senha padrão
         user = db.query(Usuario).filter(Usuario.username == "admin").first()
         if not user:
             print("👤 Criando usuário mestre: admin / admin123")
-            db.add(Usuario(username="admin", password="admin123", is_admin=True)) # <- AQUI
+            # Adicionamos o campo 'nome' para evitar erros de colunas obrigatórias
+            novo_admin = Usuario(
+                username="admin", 
+                password="admin123", 
+                is_admin=True,
+                nome="Administrador do Sistema" # Previne erro se o model exigir nome
+            )
+            db.add(novo_admin)
+            db.commit()
+            print("✅ Usuário Admin criado e salvo com sucesso!")
+            
         elif user.password != "admin123":
             user.password = "admin123"
+            db.commit()
+            print("✅ Senha do Admin resetada para o padrão.")
             
-        db.commit()
     except Exception as e:
-        print(f"❌ Erro ao popular banco: {e}")
+        print(f"❌ Erro crítico ao popular banco: {e}")
+        db.rollback() # Muito importante: desfaz a operação falha para não travar o banco
     finally:
         db.close()
 
@@ -53,6 +65,19 @@ def download_backup():
     if os.path.exists(db_path):
         return FileResponse(path=db_path, filename="nexus_backup.db", media_type="application/octet-stream")
     return {"error": "Arquivo de banco de dados não encontrado."}
+
+@app.get("/api/download/agente")
+def baixar_agente():
+    # Caminho onde o arquivo está guardado dentro do Docker
+    caminho_arquivo = "/app/app/static/Nexus_Agente.exe"
+    
+    if os.path.exists(caminho_arquivo):
+        return FileResponse(
+            path=caminho_arquivo, 
+            filename="Nexus_Instalador.exe", 
+            media_type='application/octet-stream'
+        )
+    return {"erro": "Arquivo do agente não encontrado no servidor."}
 
     
 # Registrando as rotas (O prefixo /api é adicionado aqui)

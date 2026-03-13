@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
 import api from '../api/api';
-import agenteBatUrl from "../public/Agente_Nexus_GUI.bat?url";
 
 export default function Configuracoes() {
   const [abaAtiva, setAbaAtiva] = useState('usuarios'); 
@@ -9,7 +8,6 @@ export default function Configuracoes() {
   
   const [usuarios, setUsuarios] = useState([]);
   const [novoUser, setNovoUser] = useState({ username: '', password: '', is_admin: false });
-  // Atualizado: modalEdit agora também guarda o avatar do usuário clicado
   const [modalEdit, setModalEdit] = useState({ aberto: false, id: null, username: '', password: '', is_admin: false, avatar: 'letras' });
   const [modalExclusao, setModalExclusao] = useState({ aberto: false, id: null, username: '' });
   const [motivo, setMotivo] = useState('');
@@ -106,34 +104,48 @@ export default function Configuracoes() {
         </div>
       </div>
 
+      {/* NOVO CARD DO AGENTE (Abaixo do título, Fixo e Menor) */}
+      <div className="bg-gradient-to-br from-emerald-900 to-gray-900 border border-emerald-500/30 p-5 rounded-2xl shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500 rounded-full mix-blend-overlay filter blur-[50px] opacity-20"></div>
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-4">
+          <div>
+            <h3 className="text-lg font-black text-white flex items-center gap-2">
+              <span className="animate-pulse">📡</span> Agente Nexus Instalador (v4.3)
+            </h3>
+            <p className="text-emerald-100/70 mt-1 text-xs max-w-2xl font-medium">
+              Baixe o executável para varredura de hardware e telemetria de rede. Instalação silenciosa no diretório <code>C:\Nexus.inv</code> e execução automática (Ping de 1min).
+            </p>
+          </div>
+
+          {/* BOTÃO DO INSTALADOR PROFISSIONAL */}
+          <button 
+            onClick={async () => {
+              try {
+                toast.info("Preparando Instalador...");
+                const res = await api.get('/api/inventario/download/agente', { responseType: 'blob' });
+                const url = window.URL.createObjectURL(new Blob([res.data]));
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', 'Nexus_Instalador.exe'); // 👈 AQUI MUDA O NOME
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                toast.success("Download do Instalador concluído!");
+              } catch (e) {
+                toast.error("Erro ao baixar. O arquivo instalador não está na pasta static do servidor.");
+              }
+            }}
+            className="flex-shrink-0 flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-emerald-600/30 transform hover:scale-105 text-sm"
+          >
+            📥 Baixar Instalador (.EXE)
+          </button>
+        </div>
+      </div>
+
       <div className="flex space-x-8 border-b overflow-x-auto custom-scrollbar" style={{ borderColor: 'var(--border-light)' }}>
         <button onClick={() => setAbaAtiva('usuarios')} className={`pb-4 text-sm font-black tracking-wide border-b-2 transition-all whitespace-nowrap ${abaAtiva === 'usuarios' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>👥 Equipe & Usuários</button>
         <button onClick={() => setAbaAtiva('relatorios')} className={`pb-4 text-sm font-black tracking-wide border-b-2 transition-all whitespace-nowrap ${abaAtiva === 'relatorios' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>🏢 Dados da Empresa</button>
         <button onClick={() => setAbaAtiva('backup')} className={`pb-4 text-sm font-black tracking-wide border-b-2 transition-all whitespace-nowrap ${abaAtiva === 'backup' ? 'border-green-500 text-green-500' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>🚀 Migração & Backup</button>
-      </div>
-
-      {/* CARD DE DOWNLOAD DO AGENTE NEXUS */}
-      <div className="bg-gradient-to-br from-blue-900 to-gray-900 border border-blue-500/30 p-6 rounded-2xl shadow-xl mt-8 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500 rounded-full mix-blend-overlay filter blur-[50px] opacity-40"></div>
-        
-        <div className="relative z-10 flex flex-col sm:flex-row justify-between items-center gap-6">
-          <div>
-            <h3 className="text-xl font-black text-white flex items-center gap-2">
-              <span>⚡</span> Agente Nexus Auto Discovery
-            </h3>
-            <p className="text-blue-200 mt-2 text-sm max-w-xl">
-              Baixe o script executável para fazer a varredura automática de hardware (S/N, MAC, CPU-ID) em qualquer máquina da rede e enviar direto para o inventário.
-            </p>
-          </div>
-          
-          <a 
-            href={agenteBatUrl} 
-            download="Agente_Nexus_GUI.bat"
-            className="flex-shrink-0 flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-blue-600/30 transform hover:scale-105"
-          >
-            ⬇️ Baixar Agente v2.1
-          </a>
-        </div>
       </div>
 
       {abaAtiva === 'usuarios' && (
@@ -180,7 +192,6 @@ export default function Configuracoes() {
                   </thead>
                   <tbody>
                     {usuarios.map(user => {
-                      // 🧠 MÁGICA DEFINITIVA: Lendo direto do Banco de Dados
                       const avatar = user.avatar || 'letras';
                       const nomeExibicao = user.nome_exibicao || user.username;
 
@@ -204,7 +215,6 @@ export default function Configuracoes() {
                             }
                           </td>
                           <td className="p-4 text-right flex justify-end gap-2">
-                            {/* O BOTÃO EDITAR AGORA PASSA O AVATAR JUNTO! */}
                             <button onClick={() => setModalEdit({ aberto: true, id: user.id, username: user.username, password: '', is_admin: user.is_admin, avatar: avatar })} className="px-3 py-2 rounded-lg border text-[10px] font-black transition-all hover:bg-blue-500/10 hover:border-blue-400" style={{ borderColor: 'var(--border-light)', color: 'var(--color-blue)' }}>EDITAR</button>
                             {user.username !== 'admin' && (
                               <button onClick={() => setModalExclusao({ aberto: true, id: user.id, username: user.username })} className="px-3 py-2 rounded-lg border text-[10px] font-black text-red-500 border-red-500/30 hover:bg-red-500/10 transition-all active:scale-95">EXCLUIR</button>
@@ -231,7 +241,7 @@ export default function Configuracoes() {
                 <p className="text-xs font-bold opacity-50 uppercase tracking-widest" style={{ color: 'var(--text-main)' }}>Cabeçalhos oficiais de relatórios</p>
               </div>
             </div>
-             
+              
              <form onSubmit={salvarDadosEmpresa} className="space-y-6">
                 <div>
                   <label className="block text-[10px] font-black uppercase opacity-60 mb-1" style={{ color: 'var(--text-main)' }}>NOME DA EMPRESA / INSTITUIÇÃO</label>
@@ -311,7 +321,6 @@ export default function Configuracoes() {
         <div className="fixed inset-0 flex items-center justify-center bg-black/70 z-50 p-4 backdrop-blur-md animate-fade-in">
           <div className="w-full max-w-md rounded-3xl p-8 shadow-2xl border animate-scale-up" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
             
-            {/* CABEÇALHO DO MODAL CORRIGIDO PARA LER O AVATAR DO STATE */}
             <div className="flex items-center gap-4 mb-6 border-b pb-4" style={{ borderColor: 'var(--border-light)' }}>
               <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black shadow-md ${modalEdit.avatar && modalEdit.avatar !== 'letras' ? 'bg-transparent text-4xl' : 'bg-gray-900 text-white text-lg uppercase'}`}>
                 {modalEdit.avatar && modalEdit.avatar !== 'letras' ? modalEdit.avatar : modalEdit.username.substring(0,2).toUpperCase()}

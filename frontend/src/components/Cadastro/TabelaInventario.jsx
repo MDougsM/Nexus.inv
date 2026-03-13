@@ -21,6 +21,21 @@ export default function TabelaInventario({
   setModalExcluir,
   setMotivoExclusao
 }) {
+
+  const isOnline = (ultimaComunicacao) => {
+    if (!ultimaComunicacao) return false;
+    
+    // Converte a data do banco (UTC) para a data do navegador
+    const dataComunicacao = new Date(ultimaComunicacao + 'Z'); 
+    const agora = new Date();
+    
+    // Diferença convertida para DIAS (1000ms * 60s * 60m * 24h)
+    const diferencaDias = (agora - dataComunicacao) / (1000 * 60 * 60 * 24);
+    
+    // Se a diferença for menor que 3 dias, a bolinha fica verde!
+    return diferencaDias < 3; 
+  };
+  
   return (
     <div className="flex-1 overflow-x-auto mt-2 min-h-[350px] pb-20">
       <table className="w-full text-left text-sm">
@@ -52,7 +67,26 @@ export default function TabelaInventario({
                 </td>
 
                 {/* PATRIMÔNIO */}
-                <td className="p-4 font-mono font-black" style={{ color: 'var(--color-blue)' }}>{ativo.patrimonio}</td>
+                <td className="p-4">
+                  <div className="flex items-center gap-2">
+                    <div className="font-mono font-black" style={{ color: 'var(--color-blue)' }}>{ativo.patrimonio}</div>
+                    
+                    {/* Bolinha Verde (Online) ou Cinza (Offline) */}
+                    <div className="group relative flex items-center justify-center">
+                      <span className="relative flex h-3 w-3">
+                        {isOnline(ativo.ultima_comunicacao) && (
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        )}
+                        <span className={`relative inline-flex rounded-full h-3 w-3 ${isOnline(ativo.ultima_comunicacao) ? 'bg-emerald-500' : 'bg-gray-400/50'}`}></span>
+                      </span>
+                      
+                      {/* Tooltip Hover (Opcional, mas legal) */}
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-max bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded-lg z-50">
+                        {isOnline(ativo.ultima_comunicacao) ? '🟢 Agente Online' : '⚪ Agente Offline'}
+                      </div>
+                    </div>
+                  </div>
+                </td>
                 
                 {/* STATUS */}
                 <td className="p-4 hidden sm:table-cell">{getStatusBadge(ativo.status)}</td>

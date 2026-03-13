@@ -119,7 +119,7 @@ export default function Unidades() {
           </div>
         )}
 
-        {secretarias.map(sec => {
+        {[...secretarias].sort((a, b) => a.nome.localeCompare(b.nome)).map(sec => {
           const isExpanded = secExpandida === sec.id;
           const setoresDestaSec = setores.filter(s => s.secretaria_id === sec.id);
 
@@ -169,7 +169,7 @@ export default function Unidades() {
                     <div className="text-center text-sm py-4" style={{ color: 'var(--text-muted)' }}>Nenhum setor cadastrado nesta secretaria.</div>
                   ) : (
                     <div className="space-y-2">
-                      {setoresDestaSec.map(setor => (
+                      {[...setoresDestaSec].sort((a, b) => a.nome.localeCompare(b.nome)).map(setor => (
                         <div key={setor.id} className="flex justify-between items-center p-3 rounded-lg border transition-colors" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
                           <span className="font-bold text-sm" style={{ color: 'var(--text-main)' }}>{setor.nome}</span>
                           <div className="flex gap-2">

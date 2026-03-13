@@ -28,3 +28,23 @@ class AtivoResponse(BaseModel):
 class ExclusaoRequest(BaseModel):
     motivo: str
     usuario: str
+
+class AgenteColeta(BaseModel):
+    uuid_persistente: Optional[str] = None
+    tipo: str
+    marca: str
+    modelo: str
+    cpu: str
+    ram: str
+    os: str
+    disco: str
+    tipo_disco: str
+    nome_pc: str
+    usuario_pc: str
+    serial: str
+    mac: str
+    ip: str
+    secretaria: str
+    setor: str
+    patrimonio_manual: Optional[str] = ""
+    override_patrimonio: Optional[bool] = False

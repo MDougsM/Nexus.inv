@@ -9,7 +9,7 @@ Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
 
-$BaseURL = "http://192.168.3.98:8001"
+$BaseURL = "https://unidealistic-colourably-hae.ngrok-free.dev"
 $ColetaURL = "$BaseURL/api/inventario/agente/coleta"
 
 # WEBCLIENT NATIVO (Ignora bugs do PowerShell)

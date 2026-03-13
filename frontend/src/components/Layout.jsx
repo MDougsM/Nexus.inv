@@ -137,7 +137,7 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
           {isSidebarOpen ? (
             <>
               <span className="text-[10px] font-black tracking-[0.2em] text-gray-500 uppercase">Nexus System</span>
-              <span className="text-[9px] font-mono font-bold text-blue-500 mt-1">v2.1.0.0</span>
+              <span className="text-[9px] font-mono font-bold text-blue-500 mt-1">v4.4.0.0</span>
             </>
           ) : (
             <span className="text-[9px] font-mono font-bold text-blue-500">v2.0</span>
@@ -240,7 +240,9 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
                 {/* 👽 A FOTO E NOME OFICIAIS AGORA APARECEM AQUI */}
                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black shadow-md ${avatarUsuario === 'letras' ? 'bg-gray-900 text-white text-[10px] uppercase' : 'bg-transparent text-lg'}`}
                      style={{ textShadow: avatarUsuario !== 'letras' && theme === 'light' ? '0px 0px 2px rgba(0,0,0,0.4), 0px 2px 5px rgba(0,0,0,0.2)' : 'none' }}>
-                  {avatarUsuario === 'letras' ? (usuarioAtual ? usuarioAtual.substring(0, 2).toUpperCase() : 'AD') : avatarUsuario}
+                  {avatarUsuario === 'letras' 
+                    ? (nomeUsuario || localStorage.getItem('usuario') || 'US').substring(0, 2).toUpperCase() 
+                    : avatarUsuario}
                 </div>
                 
                 <div className="text-left hidden md:block">

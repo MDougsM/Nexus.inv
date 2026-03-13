@@ -4,11 +4,39 @@ from app.db.database import SessionLocal
 from app.models import Ativo, Categoria, LogAuditoria, RegistroManutencao
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
+from fastapi.responses import FileResponse
+from datetime import datetime
+from app.schemas import AgenteColeta # Adicione esta linha se não houver
 
 import csv
 import io
+import os
+
+# ==========================================
+# CONFIGURAÇÕES DO AGENTE
+# ==========================================
+VERSAO_DESTE_AGENTE = "4.4" # A versão que está rodando na máquina
+BASE_URL = "http://localhost:8001" # Seu IP
+COLETA_URL = f"{BASE_URL}/api/inventario/agente/coleta"
+VERSAO_URL = f"{BASE_URL}/api/inventario/agente/versao"
 
 router = APIRouter(prefix="/inventario", tags=["Inventário"])
+
+@router.get("/download/agente")
+def baixar_agente():
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    # Apontando para o Instalador Profissional gerado pelo Inno Setup
+    caminho_arquivo = os.path.join(BASE_DIR, "static", "Nexus_Instalador.exe")
+    
+    if os.path.exists(caminho_arquivo):
+        return FileResponse(
+            path=caminho_arquivo, 
+            filename="Nexus_Instalador.exe", 
+            media_type='application/octet-stream' # Volta a ser formato Executável
+        )
+    
+    raise HTTPException(status_code=404, detail=f"Arquivo não achado em: {caminho_arquivo}")
 
 def get_db():
     db = SessionLocal()
@@ -16,6 +44,14 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# 👇 NOVA ROTA DE CHECAGEM DE VERSÃO 👇
+@router.get("/agente/versao")
+def versao_agente():
+    return {
+        "versao_atual": "4.4", # <--- MUDE A VERÇÃO AQUI PARA ATUALIZAR O AGENTE (E NÃO ESQUEÇA DE MUDAR TAMBÉM NO CÓDIGO DO AGENTE EM PYTHON)
+        "url_download": "/api/inventario/download/agente"
+    }
 
 # --- SCHEMAS ---
 class CategoriaRequest(BaseModel):
@@ -69,8 +105,10 @@ def criar_ativo(req: AtivoRequest, db: Session = Depends(get_db)):
         secretaria=req.secretaria,
         setor=req.setor,
         tecnico=req.usuario_acao,
-        dados_dinamicos=req.dados_dinamicos
+        dados_dinamicos=req.dados_dinamicos,
+        ultima_comunicacao=datetime.utcnow() # <--- ADICIONE ESTA LINHA
     )
+
     db.add(novo_ativo)
     
     novo_log = LogAuditoria(
@@ -172,7 +210,7 @@ def obter_detalhes_ativo(patrimonio: str, db: Session = Depends(get_db)):
 # ==========================================
 # EDITAR CADASTRO COMPLETO (LÁPIS) - 100% AUDITADO
 # ==========================================
-@router.put("/ficha/editar/{identificador}")
+@router.put("/ficha/editar/{identificador:path}")
 def editar_ficha_ativo(identificador: str, dados: dict, db: Session = Depends(get_db)):
     # Tenta achar pelo ID (se for um número) ou pelo Patrimônio
     if identificador.isdigit():
@@ -274,68 +312,116 @@ def deletar_categoria(categoria_id: int, usuario_acao: str = "Admin", db: Sessio
     return {"message": "Categoria excluída com sucesso!"}
 
 # ==========================================
-# ROTA EXCLUSIVA PARA O AGENTE DE COLETA v2.1
+# ROTA EXCLUSIVA PARA O AGENTE (COLETA AUTO V4.4)
 # ==========================================
 @router.post("/agente/coleta")
-def agente_coleta_automatica(dados: dict, db: Session = Depends(get_db)):
-    tipo_equip = dados.get("tipo", "Desktop")
+def receber_coleta_agente(dados: AgenteColeta, db: Session = Depends(get_db)):
+    mac_recebido = dados.mac or "Desconhecido"
+    serial_recebido = dados.serial or "Desconhecido"
+    patrimonio_manual = (dados.patrimonio_manual or "").strip()
+    override = dados.override_patrimonio or False 
     
-    categoria = db.query(Categoria).filter(Categoria.nome == tipo_equip).first()
-    if not categoria:
-        categoria = Categoria(
-            nome=tipo_equip, 
-            campos_config=["Processador", "Memória", "S.O", "Disco Rígido [SSD]", "Disco Rígido [HD]", "Nome", "Usuário"]
-        )
-        db.add(categoria)
-        db.flush()
+    # ---------------------------------------------------------
+    # 🧠 LÓGICA DE RECONHECIMENTO (A VACINA ANTI-DUPLICIDADE)
+    # ---------------------------------------------------------
+    ativo_existente = None
 
-    ativos_sp = db.query(Ativo).filter(Ativo.patrimonio.like("S/P_%")).all()
-    max_num = 0
-    for a in ativos_sp:
-        try:
-            num = int(a.patrimonio.split("_")[1])
-            if num > max_num: max_num = num
-        except: pass
-    novo_patrimonio = f"S/P_{max_num + 1}"
+    # 1º Passo: Tenta achar pelo UUID (DNA da máquina)
+    if dados.uuid_persistente:
+        ativo_existente = db.query(Ativo).filter(Ativo.uuid_persistente == dados.uuid_persistente).first()
 
-    tipo_disco_agente = dados.get("tipo_disco", "HD")
-    chave_disco = f"Disco Rígido [{tipo_disco_agente}]"
+    # 2º Passo: Se não achou, tenta pelo Serial ou MAC (Segurança para máquinas antigas)
+    if not ativo_existente:
+        for a in db.query(Ativo).all():
+            if a.dados_dinamicos:
+                mac_no_banco = a.dados_dinamicos.get("Endereço MAC")
+                serial_no_banco = a.dados_dinamicos.get("Número de Série", "")
+                
+                if (mac_recebido != "Desconhecido" and mac_no_banco == mac_recebido) or \
+                   (serial_recebido != "Desconhecido" and serial_recebido in serial_no_banco):
+                    ativo_existente = a
+                    # Se achou pelo hardware, já "vacina" gravando o UUID nela
+                    if dados.uuid_persistente:
+                        ativo_existente.uuid_persistente = dados.uuid_persistente
+                    break
 
-    hardwares_dict = {
-        "Processador": dados.get("cpu", ""),
-        "Memória": dados.get("ram", ""),
-        "S.O": dados.get("os", ""),
-        "Nome": dados.get("nome_pc", ""),
-        "Usuário": dados.get("usuario_pc", ""),
-        "Número de Série": dados.get("serial", "Não identificado"), # <- NOVO!
-        "Endereço MAC": dados.get("mac", "Não identificado")        # <- NOVO!
+    # Montagem do hardware para comparação
+    hardwares = {
+        "Processador": dados.cpu, "Memória": dados.ram,
+        "S.O": dados.os, "Nome": dados.nome_pc,
+        "Usuário": dados.usuario_pc, "Número de Série": serial_recebido,
+        "Endereço MAC": mac_recebido, "Endereço IP": dados.ip or "Desconhecido",
+        f"Disco Rígido [{dados.tipo_disco or 'HD'}]": dados.disco
     }
-    # Injetando o disco na chave correta
-    hardwares_dict[chave_disco] = dados.get("disco", "Não identificado")
 
-    # 🧠 LENDO A LOCALIZAÇÃO DINÂMICA ENVIADA PELO AGENTE
-    sec_enviada = dados.get("secretaria", "Agente")
-    setor_enviado = dados.get("setor", "Coletas")
+    if ativo_existente:
+        # Lógica de conflito de patrimônio manual
+        if patrimonio_manual and patrimonio_manual != ativo_existente.patrimonio and dados.secretaria != "Ping Automático":
+            if not override:
+                return {"status": "conflict", "message": f"Esta máquina já existe como '{ativo_existente.patrimonio}'.\nDeseja alterar o patrimônio dela para '{patrimonio_manual}'?"}
+            else:
+                conflito_terceiro = db.query(Ativo).filter(Ativo.patrimonio == patrimonio_manual).first()
+                if conflito_terceiro and conflito_terceiro.id != ativo_existente.id:
+                    return {"status": "error", "message": f"O patrimônio '{patrimonio_manual}' já está em uso!"}
+                
+                db.add(LogAuditoria(usuario="Nexus Agente", acao="ALTERACAO_PATRIMONIO", entidade="Ativo", identificador=patrimonio_manual, detalhes=f"Patrimônio alterado de {ativo_existente.patrimonio} para {patrimonio_manual}"))
+                ativo_existente.patrimonio = patrimonio_manual
 
-    novo_ativo = Ativo(
-        patrimonio=novo_patrimonio,
-        categoria_id=categoria.id,
-        marca=dados.get("marca", "Desconhecida"),
-        modelo=dados.get("modelo", "Desconhecido"),
-        secretaria=sec_enviada, # <- Agora usa o que você escolheu na tela preta!
-        setor=setor_enviado,    # <- Agora usa o que você escolheu na tela preta!
-        status="ATIVO",
-        dados_dinamicos=hardwares_dict
-    )
+        # Inteligência de Logs (Evita Spam)
+        dados_antigos = ativo_existente.dados_dinamicos or {}
+        mudou_hardware = dados_antigos != hardwares
+        mudou_local = False
+        
+        if dados.secretaria and dados.secretaria != "Ping Automático" and dados.secretaria != ativo_existente.secretaria:
+            ativo_existente.secretaria = dados.secretaria
+            mudou_local = True
+        if dados.setor and dados.setor != "Background" and dados.setor != ativo_existente.setor:
+            ativo_existente.setor = dados.setor
+            mudou_local = True
+
+        ativo_existente.ultima_comunicacao = datetime.utcnow()
+        
+        if mudou_hardware or mudou_local:
+            ativo_existente.dados_dinamicos = hardwares
+            ativo_existente.marca = dados.marca or ativo_existente.marca
+            ativo_existente.modelo = dados.modelo or ativo_existente.modelo
+            
+            db.add(LogAuditoria(
+                usuario="Nexus Agente (Auto)", acao="TELEMETRIA", entidade="Ativo", 
+                identificador=ativo_existente.patrimonio, detalhes="Dados atualizados automaticamente."
+            ))
+        
+        db.commit()
+        return {"status": "success", "patrimonio": ativo_existente.patrimonio}
     
-    db.add(novo_ativo)
-    db.add(LogAuditoria(
-        usuario="Agente.Nexus", 
-        acao="COLETA AUTOMÁTICA", 
-        entidade="Ativo", 
-        identificador=novo_patrimonio, 
-        detalhes=f"Máquina {dados.get('nome_pc')} enviada direto para {sec_enviada} / {setor_enviado}."
-    ))
-    db.commit()
-    
-    return {"message": "Coleta registrada com sucesso", "patrimonio": novo_patrimonio}
+    else:
+        # SE A MÁQUINA É NOVA DE VERDADE
+        if patrimonio_manual:
+            if db.query(Ativo).filter(Ativo.patrimonio == patrimonio_manual).first():
+                return {"status": "error", "message": f"O patrimônio '{patrimonio_manual}' já existe no sistema!"}
+            novo_patrimonio = patrimonio_manual
+        else:
+            ativos_sp = db.query(Ativo).filter(Ativo.patrimonio.like("S/P_%")).all()
+            numeros = [int(a.patrimonio.split("_")[1]) for a in ativos_sp if "_" in a.patrimonio and a.patrimonio.split("_")[1].isdigit()]
+            novo_patrimonio = f"S/P_{max(numeros) + 1 if numeros else 1}"
+            
+        cat_desktop = db.query(Categoria).filter(Categoria.nome == "Desktop").first()
+        if not cat_desktop:
+            cat_desktop = Categoria(nome="Desktop", campos_config=[]); db.add(cat_desktop); db.commit(); db.refresh(cat_desktop)
+
+        novo_ativo = Ativo(
+            patrimonio=novo_patrimonio, 
+            categoria_id=cat_desktop.id,
+            uuid_persistente=dados.uuid_persistente, # <--- GRAVA O DNA NA PRIMEIRA VEZ
+            marca=dados.marca or "", 
+            modelo=dados.modelo or "",
+            secretaria=dados.secretaria or "A Definir", 
+            setor=dados.setor or "A Definir",
+            tecnico="Nexus Agente (Auto)", 
+            status="ATIVO",
+            dados_dinamicos=hardwares, 
+            ultima_comunicacao=datetime.utcnow()
+        )
+        db.add(novo_ativo)
+        db.commit()
+        return {"status": "success", "patrimonio": novo_patrimonio}

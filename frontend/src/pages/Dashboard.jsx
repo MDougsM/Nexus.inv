@@ -2,18 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/api';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import DashboardDiretoria from '../components/Cadastro/DashboardDiretoria'; // INJETANDO O PAINEL AQUI!
+import DashboardDiretoria from '../components/Cadastro/DashboardDiretoria'; 
 
 export default function Dashboard() {
-  // Controle de Abas
   const [abaAtiva, setAbaAtiva] = useState('geral');
-  
-  // Guardando os dados brutos para enviar para a Diretoria
   const [ativosTotais, setAtivosTotais] = useState([]);
   const [categoriasTotais, setCategoriasTotais] = useState([]);
 
-  // Seus estados originais
-  const [stats, setStats] = useState({ total: 0, ativos: 0, manutencao: 0, sucata: 0 });
+  // Adicionado o 'online: 0' no estado inicial
+  const [stats, setStats] = useState({ total: 0, ativos: 0, manutencao: 0, sucata: 0, online: 0 });
   const [dadosStatus, setDadosStatus] = useState([]);
   const [dadosCategoria, setDadosCategoria] = useState([]);
   const [logsRecentes, setLogsRecentes] = useState([]); 
@@ -33,14 +30,15 @@ export default function Dashboard() {
       const ativos = resAtivos.data;
       const categorias = resCat.data;
       
-      // Alimentando a inteligência da Diretoria
       setAtivosTotais(ativos);
       setCategoriasTotais(categorias);
-      
       setLogsRecentes(resAuditoria.data.reverse().slice(0, 8));
 
-      let a = 0, m = 0, s = 0;
+      let a = 0, m = 0, s = 0, online = 0, desaparecidos = 0; // Adicionado desaparecidos
       let contagemCat = {};
+      const agora = new Date();
+      const limiteOnline = 3; // 3 minutos para radar real-time
+      const limiteOfflineDias = 3; // 3 dias para bolinha cinza/card de alerta
 
       ativos.forEach(item => {
         const st = (item.status || 'ATIVO').toUpperCase();
@@ -48,11 +46,26 @@ export default function Dashboard() {
         else if (st === 'MANUTENÇÃO') m++;
         else if (st === 'SUCATA') s++;
 
+        if (item.ultima_comunicacao) {
+          const dataCom = new Date(item.ultima_comunicacao + 'Z');
+          const diffMinutos = (agora - dataCom) / (1000 * 60);
+          const diffDias = diffMinutos / (60 * 24);
+
+          // Radar de Agentes Online (Verde pulsante)
+          if (diffMinutos < limiteOnline) online++;
+          
+          // Card de Desaparecidos (Mais de 3 dias sem sinal)
+          if (diffDias > limiteOfflineDias) desaparecidos++;
+        } else {
+          desaparecidos++; // Se nunca comunicou, está desaparecido
+        }
+
         const catName = categorias.find(c => c.id === item.categoria_id)?.nome || 'Sem Categoria';
         contagemCat[catName] = (contagemCat[catName] || 0) + 1;
       });
 
-      setStats({ total: ativos.length, ativos: a, manutencao: m, sucata: s });
+      // Atualize o setStats incluindo o novo contador
+      setStats({ total: ativos.length, ativos: a, manutencao: m, sucata: s, online: online, desaparecidos: desaparecidos });
 
       setDadosStatus([
         { name: 'Ativos', value: a, color: '#10b981' }, 
@@ -99,39 +112,46 @@ export default function Dashboard() {
   return (
     <div className="max-w-[1400px] mx-auto space-y-8 animate-fade-in pb-10">
       
-      {/* CABEÇALHO COM NAVEGAÇÃO DE ABAS */}
+      {/* CABEÇALHO */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b" style={{ borderColor: 'var(--border-light)' }}>
         <div className="w-full sm:w-auto">
           <h2 className="text-3xl font-black tracking-tight mb-4" style={{ color: 'var(--text-main)' }}>Centro de Inteligência</h2>
           
           <div className="flex gap-6 overflow-x-auto custom-scrollbar">
-            <button 
-              onClick={() => setAbaAtiva('geral')} 
-              className={`flex items-center gap-2 pb-3 px-2 border-b-2 font-bold text-sm transition-all ${abaAtiva === 'geral' ? 'border-blue-500' : 'border-transparent opacity-50 hover:opacity-100'}`}
-              style={{ color: abaAtiva === 'geral' ? 'var(--color-blue)' : 'var(--text-main)', marginBottom: '-1px' }}
-            >
+            <button onClick={() => setAbaAtiva('geral')} className={`flex items-center gap-2 pb-3 px-2 border-b-2 font-bold text-sm transition-all ${abaAtiva === 'geral' ? 'border-blue-500' : 'border-transparent opacity-50 hover:opacity-100'}`} style={{ color: abaAtiva === 'geral' ? 'var(--color-blue)' : 'var(--text-main)', marginBottom: '-1px' }}>
               <span className="text-lg">🌍</span> Visão Geral
             </button>
-            <button 
-              onClick={() => setAbaAtiva('diretoria')} 
-              className={`flex items-center gap-2 pb-3 px-2 border-b-2 font-bold text-sm transition-all ${abaAtiva === 'diretoria' ? 'border-blue-500' : 'border-transparent opacity-50 hover:opacity-100'}`}
-              style={{ color: abaAtiva === 'diretoria' ? 'var(--color-blue)' : 'var(--text-main)', marginBottom: '-1px' }}
-            >
+            <button onClick={() => setAbaAtiva('diretoria')} className={`flex items-center gap-2 pb-3 px-2 border-b-2 font-bold text-sm transition-all ${abaAtiva === 'diretoria' ? 'border-blue-500' : 'border-transparent opacity-50 hover:opacity-100'}`} style={{ color: abaAtiva === 'diretoria' ? 'var(--color-blue)' : 'var(--text-main)', marginBottom: '-1px' }}>
               <span className="text-lg">📊</span> Painel da Diretoria
             </button>
           </div>
         </div>
-
         <button onClick={() => navigate('/cadastro')} className="hidden sm:flex items-center gap-2 px-6 py-3 mb-3 bg-blue-600 text-white rounded-xl font-black hover:bg-blue-700 hover:-translate-y-1 transition-all shadow-lg shadow-blue-500/30 active:scale-95">
           Aceder ao Inventário Completo ➔
         </button>
       </div>
 
-
-      {/* CONTEÚDO 1: A SUA VISÃO GERAL (TELEMETRIA E FEED) */}
       {abaAtiva === 'geral' && (
         <div className="space-y-8 animate-fade-in">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          
+          {/* AQUI ESTÁ A MÁGICA: Alterado para 5 colunas no Desktop (lg:grid-cols-5) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
+            
+            {/* NOVO CARD: AGENTES ONLINE */}
+            <div className="p-5 rounded-3xl transition-all hover:-translate-y-1 hover:shadow-2xl cursor-pointer" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-emerald-400 text-2xl shadow-inner border relative" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
+                  {/* Efeito de radar pulsando atrás do ícone */}
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-2xl bg-emerald-400 opacity-20"></span>
+                  📡
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-muted)' }}>Agentes Online</p>
+                  <h3 className="text-3xl font-black tracking-tighter text-emerald-400">{stats.online}</h3>
+                </div>
+              </div>
+            </div>
+
             <div className="p-5 rounded-3xl transition-all hover:-translate-y-1 hover:shadow-2xl" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-blue-500 text-2xl shadow-inner border" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>💻</div>
@@ -169,7 +189,22 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+          <div className="p-5 rounded-3xl transition-all hover:-translate-y-1 hover:shadow-2xl cursor-pointer group" 
+              onClick={() => navigate('/cadastro?filtroStatus=OFFLINE')} 
+              style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-gray-400 text-2xl shadow-inner border group-hover:bg-gray-500/10 transition-all" 
+                  style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
+                <span className="group-hover:animate-bounce">👻</span>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-muted)' }}>Desaparecidos</p>
+                <h3 className="text-3xl font-black tracking-tighter text-gray-400">{stats.desaparecidos}</h3>
+              </div>
+            </div>
+          </div>
 
+          {/* O RESTANTE DOS GRÁFICOS CONTINUA INTACTO */}
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <div className="xl:col-span-2 space-y-6">
               <div className="p-8 rounded-3xl transition-all" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
@@ -264,12 +299,10 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
-
           </div>
         </div>
       )}
 
-      {/* CONTEÚDO 2: O SEU NOVO PAINEL DA DIRETORIA MÓVEL/FILTRÁVEL */}
       {abaAtiva === 'diretoria' && (
         <DashboardDiretoria ativos={ativosTotais} categorias={categoriasTotais} />
       )}

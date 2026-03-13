@@ -60,21 +60,59 @@ export default function ModaisOperacao({
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in print:bg-white print:p-0 print:block" onClick={() => setModalFicha({ aberto: false, dados: null })}>
             <div className="w-full max-w-5xl max-h-[95vh] rounded-3xl shadow-2xl border overflow-hidden flex flex-col print:border-none print:shadow-none print:max-h-none print:h-auto" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }} onClick={e => e.stopPropagation()}>
               
-              {/* CABEÇALHO DO RG */}
-              <div className="p-8 border-b flex justify-between items-start bg-gradient-to-r from-blue-600 to-blue-800 text-white print:bg-none print:text-black print:border-b-2 print:border-black">
+              {/* CABEÇALHO DO RG - FUNDO AZUL GARANTIDO */}
+              <div className="p-8 border-b flex justify-between items-center bg-gradient-to-r from-blue-600 to-blue-800 text-white print:bg-none print:text-black print:border-b-2 print:border-black">
                 <div className="flex gap-6 items-center">
-                  <div className="w-20 h-20 rounded-2xl bg-white p-2 shadow-inner hidden md:block print:block">
-                    <QRCodeSVG value={`${window.location.origin}/consulta/${ativo.patrimonio}`} size={64} level="H" includeMargin={false} />
+                  
+                  {/* 👇 CAIXA DO QR CODE (Efeito Vidro Super Premium) 👇 */}
+                  <div className="hidden md:flex flex-col items-center bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20 shadow-lg print:flex print:bg-gray-100 print:border-gray-300">
+                    
+                    <div className="text-center mb-3">
+                      <span className="block text-[8px] text-blue-100 uppercase tracking-[0.2em] font-black leading-none mb-1">
+                        Última Sinc.
+                      </span>
+                      <span className="block text-[11px] text-white font-bold opacity-100 leading-none print:text-gray-800">
+                        {ativo.ultima_comunicacao 
+                          ? new Date(ativo.ultima_comunicacao + 'Z').toLocaleString('pt-BR', {
+                              day: '2-digit', month: '2-digit', year: '2-digit', 
+                              hour: '2-digit', minute: '2-digit'
+                            }) 
+                          : 'Nunca'}
+                      </span>
+                    </div>
+
+                    {/* Caixinha branca protetora só pro QR Code */}
+                    <div className="bg-white p-2 rounded-xl shadow-inner">
+                      <QRCodeSVG 
+                        value={`${window.location.origin}/consulta/${ativo.patrimonio}`} 
+                        size={64} 
+                        level="H" 
+                        includeMargin={false} 
+                      />
+                    </div>
+
                   </div>
+                  {/* 👆 FIM DA CAIXA DO QR CODE 👆 */}
+
+                  {/* DADOS DA MÁQUINA */}
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-80 mb-1 print:text-gray-500">Registro Geral de Ativo</p>
-                    <h3 className="text-3xl font-black tracking-tight mb-1">{ativo.patrimonio}</h3>
-                    <p className="text-sm font-bold uppercase tracking-widest opacity-90 print:text-gray-700">{getNomeTipoEquipamento(ativo, categorias)} • {ativo.marca} {ativo.modelo}</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-200 mb-1 print:text-gray-500">
+                        Registro Geral de Ativo
+                    </p>
+                    <h3 className="text-4xl font-black tracking-tight mb-2 text-white print:text-black">
+                        {ativo.patrimonio}
+                    </h3>
+                    <p className="text-sm font-bold uppercase tracking-widest text-blue-100 print:text-gray-700">
+                        {getNomeTipoEquipamento(ativo, categorias)} • {ativo.marca} {ativo.modelo}
+                    </p>
                   </div>
+
                 </div>
+                
+                {/* BOTÕES DE AÇÃO */}
                 <div className="flex gap-2 print:hidden">
-                  <button onClick={imprimirFicha} className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all backdrop-blur-sm" title="Imprimir PDF">🖨️</button>
-                  <button onClick={() => setModalFicha({ aberto: false, dados: null })} className="w-10 h-10 rounded-xl bg-white/10 hover:bg-red-500/80 flex items-center justify-center transition-all backdrop-blur-sm">&times;</button>
+                  <button onClick={imprimirFicha} className="w-12 h-12 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-xl transition-all backdrop-blur-sm border border-white/10" title="Imprimir PDF">🖨️</button>
+                  <button onClick={() => setModalFicha({ aberto: false, dados: null })} className="w-12 h-12 rounded-xl bg-white/10 hover:bg-red-500 flex items-center justify-center text-2xl transition-all backdrop-blur-sm border border-white/10">&times;</button>
                 </div>
               </div>
 
@@ -112,7 +150,7 @@ export default function ModaisOperacao({
                         {camposPermitidos.map((campoNome) => ( ativo.dados_dinamicos[campoNome] ? (
                             <div key={campoNome}>
                               <p className="text-[9px] font-black opacity-50 uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>{campoNome}</p>
-                              <p className="font-black text-sm" style={{ color: 'var(--text-main)' }}>{ativo.dados_dinamicos[campoNome]}</p>
+                              <p className="font-black text-sm break-words" style={{ color: 'var(--text-main)' }}>{ativo.dados_dinamicos[campoNome]}</p>
                             </div>
                         ) : null ))}
                       </div>
@@ -151,15 +189,22 @@ export default function ModaisOperacao({
         );
       })()}
 
-      {/* MODAL QR INDIVIDUAL (TEMA DARK CORRIGIDO) */}
+      {/* MODAL QR INDIVIDUAL */}
       {modalQR.aberto && ( 
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in print:bg-white print:p-0 print:block" onClick={() => setModalQR({ aberto: false, ativo: null })}>
           <div className="w-full max-w-sm rounded-3xl shadow-2xl border p-8 flex flex-col items-center text-center print:border-none print:shadow-none" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }} onClick={e => e.stopPropagation()}>
             <h3 className="font-black text-2xl mb-1 tracking-tight" style={{ color: 'var(--text-main)' }}>NEXUS.INV</h3>
             <p className="text-[10px] font-black uppercase mb-8 border-b pb-4 w-full tracking-widest opacity-50" style={{ color: 'var(--text-muted)', borderColor: 'var(--border-light)' }}>Patrimônio Oficial</p>
             
-            {/* O SEGREDO DO QR CODE NO DARK MODE: FUNDO BRANCO FORÇADO AQUI */}
             <div className="p-4 border rounded-2xl shadow-lg mb-8 bg-white" style={{ borderColor: 'var(--border-light)' }}>
+              <div className="flex flex-col items-center justify-center mb-2">
+                <span className="text-[8px] text-gray-400 uppercase tracking-[0.2em] font-bold">Última Sincronização</span>
+                <span className="text-[10px] text-gray-600 font-bold">
+                  {modalQR.ativo?.ultima_comunicacao 
+                    ? new Date(modalQR.ativo.ultima_comunicacao + 'Z').toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) 
+                    : 'Nunca Sincronizado'}
+                </span>
+              </div>
               <QRCodeSVG value={`${window.location.origin}/consulta/${modalQR.ativo?.patrimonio}`} size={200} level="H" includeMargin={false} />
             </div>
             
@@ -172,7 +217,7 @@ export default function ModaisOperacao({
         </div> 
       )}
 
-      {/* (O resto do código dos modais de Lote, Excluir e Transferir continua igual...) */}
+      {/* MODAL LOTE */}
       {modalQRLote.aberto && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm print:p-0 print:bg-white print:block" onClick={() => setModalQRLote({ aberto: false, ativos: [] })}>
           <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl p-8 print:p-0 print:shadow-none print:border-none print:max-h-none print:w-full" style={{ backgroundColor: 'var(--bg-card)' }} onClick={e => e.stopPropagation()}>
@@ -194,6 +239,7 @@ export default function ModaisOperacao({
         </div>
       )}
 
+      {/* MODAL STATUS */}
       {modalStatus.aberto && ( 
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setModalStatus({ aberto: false, ativos: [] })}>
           <div className="w-full max-w-lg rounded-xl shadow-2xl border p-6" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }} onClick={e => e.stopPropagation()}>
@@ -215,6 +261,7 @@ export default function ModaisOperacao({
         </div> 
       )}
 
+      {/* MODAL TRANSFERÊNCIA */}
       {modalTransferencia.aberto && ( 
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setModalTransferencia({ aberto: false, ativos: [] })}>
           <div className="w-full max-w-lg rounded-xl shadow-2xl border p-6" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }} onClick={e => e.stopPropagation()}>
@@ -233,6 +280,7 @@ export default function ModaisOperacao({
         </div> 
       )}
 
+      {/* MODAL EXCLUSÃO */}
       {modalExcluir.aberto && ( 
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setModalExcluir({ aberto: false, ativos: [] })}>
           <div className="w-full max-w-md rounded-xl shadow-2xl border p-6 text-center" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--color-red)' }} onClick={e => e.stopPropagation()}>

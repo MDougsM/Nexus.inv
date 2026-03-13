@@ -1,13 +1,12 @@
 from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON, Boolean
 from sqlalchemy.orm import relationship
-import datetime
+from datetime import datetime
 from app.db.database import Base
 
 class Categoria(Base):
     __tablename__ = "categorias"
     id = Column(Integer, primary_key=True, index=True)
     nome = Column(String, unique=True, index=True) # Ex: "Desktop", "Nobreak"
-    # Aqui guardamos as regras. Ex: [{"nome": "Voltagem", "tipo": "texto"}, {"nome": "Potência", "tipo": "texto"}]
     campos_config = Column(JSON, default=list) 
 
 class Ativo(Base):
@@ -16,26 +15,27 @@ class Ativo(Base):
     patrimonio = Column(String, unique=True, index=True)
     categoria_id = Column(Integer, ForeignKey("categorias.id"))
     
-    # Campos Universais (Todo equipamento tem)
+    # Campos Universais
     marca = Column(String, nullable=True)
     modelo = Column(String, nullable=True)
     secretaria = Column(String, nullable=True)
     setor = Column(String, nullable=True)
     tecnico = Column(String, nullable=True)
-
     status = Column(String, default="Ativo")
     
-    # O Segredo: Campos Dinâmicos! (Guarda JSON com os dados específicos)
-    # Ex: {"Processador": "i7", "Voltagem": "220V", "Memória": "8GB"}
+    # O Segredo: Campos Dinâmicos!
     dados_dinamicos = Column(JSON, default=dict) 
-    data_registro = Column(DateTime, default=datetime.datetime.utcnow)
+    data_registro = Column(DateTime, default=datetime.utcnow)
     
     categoria = relationship("Categoria")
+
+    uuid_persistente = Column(String, index=True, nullable=True)
+    ultima_comunicacao = Column(DateTime, default=datetime.utcnow)
 
 class LogAuditoria(Base):
     __tablename__ = "logs_auditoria"
     id = Column(Integer, primary_key=True, index=True)
-    data_hora = Column(DateTime, default=datetime.datetime.utcnow)
+    data_hora = Column(DateTime, default=datetime.utcnow)
     usuario = Column(String, index=True)
     acao = Column(String) 
     entidade = Column(String, nullable=True) 
@@ -69,16 +69,13 @@ class Transferencia(Base):
     __tablename__ = "transferencias"
     id = Column(Integer, primary_key=True, index=True)
     patrimonio = Column(String, index=True)
-    
     origem_secretaria = Column(String)
     origem_setor = Column(String)
-    
     destino_secretaria = Column(String)
     destino_setor = Column(String)
-    
     motivo = Column(Text)
     tecnico_responsavel = Column(String)
-    data_transferencia = Column(DateTime, default=datetime.datetime.utcnow)
+    data_transferencia = Column(DateTime, default=datetime.utcnow)
 
 class RegistroManutencao(Base):
     __tablename__ = "registros_manutencao"
@@ -86,8 +83,8 @@ class RegistroManutencao(Base):
     patrimonio = Column(String, index=True)
     status_anterior = Column(String)
     status_novo = Column(String)
-    os_referencia = Column(String, nullable=True) # Ex: OS do Milvus
+    os_referencia = Column(String, nullable=True) 
     motivo = Column(String)
-    destino = Column(String, nullable=True) # Para onde foi descartado
+    destino = Column(String, nullable=True) 
     usuario = Column(String)
-    data_registro = Column(DateTime, default=datetime.datetime.utcnow)
+    data_registro = Column(DateTime, default=datetime.utcnow)
