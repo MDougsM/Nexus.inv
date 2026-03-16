@@ -14,7 +14,7 @@ from tkinter import messagebox
 ctk.set_appearance_mode("dark")  # Modo escuro
 ctk.set_default_color_theme("blue")  # Tema azul (estilo Nexus)
 
-API_URL = "http://localhost:8001/api/inventario/agente/coleta/massa"
+API_URL = "https://wan-involves-elements-std.trycloudflare.com/api/inventario/agente/coleta/massa"
 
 class NexusDiscoveryApp(ctk.CTk):
     def __init__(self):

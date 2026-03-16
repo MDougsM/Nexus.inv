@@ -15,7 +15,7 @@ services:
     container_name: nexus_frontend
     working_dir: /app
     environment:
-      - PROXY_TARGET=http://backend:8001 # ⚡ NOVO: Avisa o Vite qual é o endereço no Docker
+      - PROXY_TARGET=http://backend:8001
     ports:
       - "5174:5174"
     volumes:
