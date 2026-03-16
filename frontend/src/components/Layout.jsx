@@ -96,7 +96,8 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
 
   const menuItems = [
     { path: '/', label: 'Dashboard', icon: '📊' },
-    { path: '/cadastro', label: 'Gestão de Ativos', icon: '💻' }, 
+    { path: '/cadastro', label: 'Gestão de Ativos', icon: '💻' },
+    { path: '/nexus-print', label: 'Nexus Print', icon: '🖨️' }, 
     { path: '/cadastros-base', label: 'Cadastros Base', icon: '📁' },
     { path: '/auditoria', label: 'Auditoria', icon: '🛡️' },
     { path: '/config', label: 'Configurações', icon: '⚙️' },

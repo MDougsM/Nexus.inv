@@ -39,3 +39,5 @@ package-lock.json
 .idea/
 .DS_Store
 Thumbs.db
+
+Nexus_Print_Sentinel/

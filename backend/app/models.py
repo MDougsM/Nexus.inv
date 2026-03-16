@@ -19,6 +19,8 @@ class Ativo(Base):
     marca = Column(String, nullable=True)
     modelo = Column(String, nullable=True)
     secretaria = Column(String, nullable=True)
+    local = Column(String, nullable=True)
+    nome_personalizado = Column(String, nullable=True)
     setor = Column(String, nullable=True)
     tecnico = Column(String, nullable=True)
     status = Column(String, default="Ativo")
@@ -88,3 +90,12 @@ class RegistroManutencao(Base):
     destino = Column(String, nullable=True) 
     usuario = Column(String)
     data_registro = Column(DateTime, default=datetime.utcnow)
+
+class HistoricoLeitura(Base):
+    __tablename__ = "historico_leituras"
+    id = Column(Integer, primary_key=True, index=True)
+    patrimonio = Column(String, index=True) # Liga a leitura à impressora
+    data_leitura = Column(DateTime, default=datetime.utcnow)
+    paginas_totais = Column(Integer, default=0)
+    toner_nivel = Column(String, nullable=True)
+    cilindro_nivel = Column(String, nullable=True)

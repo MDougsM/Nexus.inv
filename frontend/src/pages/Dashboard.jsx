@@ -9,10 +9,11 @@ export default function Dashboard() {
   const [ativosTotais, setAtivosTotais] = useState([]);
   const [categoriasTotais, setCategoriasTotais] = useState([]);
 
-  // Adicionado o 'online: 0' no estado inicial
-  const [stats, setStats] = useState({ total: 0, ativos: 0, manutencao: 0, sucata: 0, online: 0 });
+  const [stats, setStats] = useState({ total: 0, ativos: 0, manutencao: 0, sucata: 0, online: 0, desaparecidos: 0 });
+  const [printStats, setPrintStats] = useState({ total: 0, critico: 0, paginas: 0, online: 0 }); 
   const [dadosStatus, setDadosStatus] = useState([]);
   const [dadosCategoria, setDadosCategoria] = useState([]);
+  const [dadosSecretariaPrint, setDadosSecretariaPrint] = useState([]); // NOVO ESTADO: Impressoras por Secretaria
   const [logsRecentes, setLogsRecentes] = useState([]); 
   const [loading, setLoading] = useState(true);
   
@@ -34,38 +35,61 @@ export default function Dashboard() {
       setCategoriasTotais(categorias);
       setLogsRecentes(resAuditoria.data.reverse().slice(0, 8));
 
-      let a = 0, m = 0, s = 0, online = 0, desaparecidos = 0; // Adicionado desaparecidos
+      let a = 0, m = 0, s = 0, online = 0, desaparecidos = 0; 
+      let pTotal = 0, pCritico = 0, pPaginas = 0, pOnline = 0; 
       let contagemCat = {};
+      let contagemSecPrint = {}; // Contador de Impressoras por Secretaria
+      
       const agora = new Date();
-      const limiteOnline = 3; // 3 minutos para radar real-time
-      const limiteOfflineDias = 3; // 3 dias para bolinha cinza/card de alerta
+      const limiteOnlineDias = 3; 
+      const limiteOfflineDias = 3; 
 
       ativos.forEach(item => {
         const st = (item.status || 'ATIVO').toUpperCase();
-        if (st === 'ATIVO') a++;
+        if (st === 'ATIVO' || st === 'ONLINE') a++;
         else if (st === 'MANUTENÇÃO') m++;
         else if (st === 'SUCATA') s++;
 
+        let isOnline = false;
         if (item.ultima_comunicacao) {
           const dataCom = new Date(item.ultima_comunicacao + 'Z');
           const diffMinutos = (agora - dataCom) / (1000 * 60);
           const diffDias = diffMinutos / (60 * 24);
 
-          // Radar de Agentes Online (Verde pulsante)
-          if (diffMinutos < limiteOnline) online++;
-          
-          // Card de Desaparecidos (Mais de 3 dias sem sinal)
+          if (diffDias < limiteOnlineDias) {
+            online++;
+            isOnline = true;
+          }
           if (diffDias > limiteOfflineDias) desaparecidos++;
         } else {
-          desaparecidos++; // Se nunca comunicou, está desaparecido
+          desaparecidos++; 
         }
 
         const catName = categorias.find(c => c.id === item.categoria_id)?.nome || 'Sem Categoria';
         contagemCat[catName] = (contagemCat[catName] || 0) + 1;
+
+        // 🖨️ LÓGICA DE IMPRESSORAS E SECRETARIAS
+        if (catName.toUpperCase() === 'IMPRESSORA' || item.tipo?.toUpperCase() === 'IMPRESSORA') {
+          pTotal++;
+          if (isOnline) pOnline++;
+
+          // Conta as impressoras por secretaria
+          const secName = item.secretaria || 'Não Informada';
+          contagemSecPrint[secName] = (contagemSecPrint[secName] || 0) + 1;
+          
+          let specs = {};
+          try { specs = typeof item.especificacoes === 'string' ? JSON.parse(item.especificacoes) : (item.especificacoes || {}); } catch(e) {}
+          
+          if (specs.paginas_totais) pPaginas += parseInt(specs.paginas_totais) || 0;
+          if (specs.toner && specs.toner !== 'N/A' && specs.toner.includes('%')) {
+            const tonerVal = parseFloat(specs.toner.replace('%', ''));
+            if (tonerVal <= 15) pCritico++; 
+          }
+        }
       });
 
-      // Atualize o setStats incluindo o novo contador
       setStats({ total: ativos.length, ativos: a, manutencao: m, sucata: s, online: online, desaparecidos: desaparecidos });
+      setPrintStats({ total: pTotal, critico: pCritico, paginas: pPaginas, online: pOnline });
 
       setDadosStatus([
         { name: 'Ativos', value: a, color: '#10b981' }, 
@@ -77,8 +101,14 @@ export default function Dashboard() {
         .map(k => ({ name: k, Quantidade: contagemCat[k] }))
         .sort((x, y) => y.Quantidade - x.Quantidade)
         .slice(0, 5);
-        
       setDadosCategoria(topCategorias);
+
+      // Prepara os dados para o novo gráfico de Secretarias
+      const topSecretariasPrint = Object.keys(contagemSecPrint)
+        .map(k => ({ name: k, Quantidade: contagemSecPrint[k] }))
+        .sort((x, y) => y.Quantidade - x.Quantidade);
+      setDadosSecretariaPrint(topSecretariasPrint);
+
     } catch (e) {
       console.error(e);
     } finally {
@@ -99,6 +129,7 @@ export default function Dashboard() {
     if (a.includes('RESTAUR')) return { i: '♻️', c: 'text-green-500 bg-green-500/10 border-green-500/20' };
     if (a.includes('EXCLU') || a.includes('DELET')) return { i: '🗑️', c: 'text-red-500 bg-red-500/10 border-red-500/20' };
     if (a.includes('CRIAR') || a.includes('NOVO')) return { i: '✨', c: 'text-purple-500 bg-purple-500/10 border-purple-500/20' };
+    if (a.includes('ALERTA')) return { i: '🚨', c: 'text-red-500 bg-red-500/10 border-red-500/20 animate-pulse' };
     return { i: '📌', c: 'text-gray-500 bg-gray-500/10 border-gray-500/20' };
   };
 
@@ -124,6 +155,9 @@ export default function Dashboard() {
             <button onClick={() => setAbaAtiva('diretoria')} className={`flex items-center gap-2 pb-3 px-2 border-b-2 font-bold text-sm transition-all ${abaAtiva === 'diretoria' ? 'border-blue-500' : 'border-transparent opacity-50 hover:opacity-100'}`} style={{ color: abaAtiva === 'diretoria' ? 'var(--color-blue)' : 'var(--text-main)', marginBottom: '-1px' }}>
               <span className="text-lg">📊</span> Painel da Diretoria
             </button>
+            <button onClick={() => setAbaAtiva('impressao')} className={`flex items-center gap-2 pb-3 px-2 border-b-2 font-bold text-sm transition-all ${abaAtiva === 'impressao' ? 'border-blue-500' : 'border-transparent opacity-50 hover:opacity-100'}`} style={{ color: abaAtiva === 'impressao' ? 'var(--color-blue)' : 'var(--text-main)', marginBottom: '-1px' }}>
+              <span className="text-lg">🖨️</span> Nexus Print
+            </button>
           </div>
         </div>
         <button onClick={() => navigate('/cadastro')} className="hidden sm:flex items-center gap-2 px-6 py-3 mb-3 bg-blue-600 text-white rounded-xl font-black hover:bg-blue-700 hover:-translate-y-1 transition-all shadow-lg shadow-blue-500/30 active:scale-95">
@@ -133,15 +167,10 @@ export default function Dashboard() {
 
       {abaAtiva === 'geral' && (
         <div className="space-y-8 animate-fade-in">
-          
-          {/* AQUI ESTÁ A MÁGICA: Alterado para 5 colunas no Desktop (lg:grid-cols-5) */}
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
-            
-            {/* NOVO CARD: AGENTES ONLINE */}
             <div className="p-5 rounded-3xl transition-all hover:-translate-y-1 hover:shadow-2xl cursor-pointer" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-emerald-400 text-2xl shadow-inner border relative" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-                  {/* Efeito de radar pulsando atrás do ícone */}
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-2xl bg-emerald-400 opacity-20"></span>
                   📡
                 </div>
@@ -151,7 +180,6 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
-
             <div className="p-5 rounded-3xl transition-all hover:-translate-y-1 hover:shadow-2xl" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-blue-500 text-2xl shadow-inner border" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>💻</div>
@@ -188,23 +216,19 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
-          </div>
-          <div className="p-5 rounded-3xl transition-all hover:-translate-y-1 hover:shadow-2xl cursor-pointer group" 
-              onClick={() => navigate('/cadastro?filtroStatus=OFFLINE')} 
-              style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-gray-400 text-2xl shadow-inner border group-hover:bg-gray-500/10 transition-all" 
-                  style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-                <span className="group-hover:animate-bounce">👻</span>
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-muted)' }}>Desaparecidos</p>
-                <h3 className="text-3xl font-black tracking-tighter text-gray-400">{stats.desaparecidos}</h3>
+            <div className="p-5 rounded-3xl transition-all hover:-translate-y-1 hover:shadow-2xl cursor-pointer group" onClick={() => navigate('/cadastro?filtroStatus=OFFLINE')} style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-gray-400 text-2xl shadow-inner border group-hover:bg-gray-500/10 transition-all" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
+                  <span className="group-hover:animate-bounce">👻</span>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-muted)' }}>Desaparecidos</p>
+                  <h3 className="text-3xl font-black tracking-tighter text-gray-400">{stats.desaparecidos}</h3>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* O RESTANTE DOS GRÁFICOS CONTINUA INTACTO */}
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <div className="xl:col-span-2 space-y-6">
               <div className="p-8 rounded-3xl transition-all" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
@@ -228,7 +252,6 @@ export default function Dashboard() {
               <div className="p-8 rounded-3xl flex flex-col md:flex-row items-center gap-8" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
                 <div className="w-full md:w-1/2">
                   <h4 className="text-[11px] font-black uppercase tracking-widest mb-2 opacity-60" style={{ color: 'var(--text-muted)' }}>Distribuição de Status</h4>
-                  <p className="text-xs font-bold mb-6 opacity-80" style={{ color: 'var(--text-muted)' }}>Taxa de operabilidade do parque tecnológico.</p>
                   <div className="space-y-3">
                     {dadosStatus.map(s => (
                       <div key={s.name} className="flex items-center justify-between p-3 rounded-xl border shadow-sm" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
@@ -247,7 +270,7 @@ export default function Dashboard() {
                       <Pie data={dadosStatus} cx="50%" cy="50%" innerRadius={60} outerRadius={85} paddingAngle={5} dataKey="value" stroke="none">
                         {dadosStatus.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} /> )}
                       </Pie>
-                      <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid var(--border-light)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }} />
+                      <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid var(--border-light)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -287,9 +310,6 @@ export default function Dashboard() {
                               <p className="text-[11px] font-medium truncate leading-tight opacity-80" style={{ color: 'var(--text-muted)' }}>
                                 {log.detalhes || `Ação executada por ${log.usuario}`}
                               </p>
-                              <p className="text-[9px] font-black text-blue-500 uppercase mt-1.5 flex items-center gap-1.5">
-                                <span className="opacity-50">👤</span> {log.usuario}
-                              </p>
                             </div>
                           </div>
                         </div>
@@ -299,6 +319,94 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* A NOVA ABA DE IMPRESSÃO */}
+      {abaAtiva === 'impressao' && (
+        <div className="space-y-8 animate-fade-in">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            
+            <div className="p-6 rounded-3xl transition-all" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-blue-500 text-2xl shadow-inner border" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>🖨️</div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-muted)' }}>Impressoras Monitoradas</p>
+                  <h3 className="text-3xl font-black tracking-tighter" style={{ color: 'var(--text-main)' }}>{printStats.total}</h3>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 rounded-3xl transition-all" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-emerald-500 text-2xl shadow-inner border" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>📡</div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-muted)' }}>Status Online (Ativas)</p>
+                  <h3 className="text-3xl font-black tracking-tighter text-emerald-500">{printStats.online}</h3>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 rounded-3xl transition-all cursor-pointer group" onClick={() => navigate('/nexus-print')} style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-red-500 text-2xl shadow-inner border group-hover:bg-red-500/10 transition-all" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
+                  <span className="group-hover:animate-pulse">🩸</span>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-muted)' }}>Toner Crítico (&lt; 15%)</p>
+                  <h3 className="text-3xl font-black tracking-tighter text-red-500">{printStats.critico}</h3>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 rounded-3xl transition-all" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-amber-500 text-2xl shadow-inner border" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>📄</div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-muted)' }}>Total Páginas Impressas</p>
+                  <h3 className="text-3xl font-black tracking-tighter text-amber-500">{printStats.paginas.toLocaleString('pt-BR')}</h3>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            
+            {/* GRÁFICO: DISTRIBUIÇÃO DE IMPRESSORAS POR SECRETARIA */}
+            <div className="p-8 rounded-3xl" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
+              <div className="flex justify-between items-center mb-6">
+                <h4 className="text-[11px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-muted)' }}>Volume por Secretaria</h4>
+              </div>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dadosSecretariaPrint} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fontSize: 11, fill: '#94a3b8', fontWeight: '900'}} width={130} />
+                    <Tooltip cursor={{fill: 'rgba(150,150,150,0.1)'}} contentStyle={{ borderRadius: '16px', border: '1px solid var(--border-light)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }} />
+                    <Bar dataKey="Quantidade" radius={[0, 8, 8, 0]} barSize={20}>
+                      {dadosSecretariaPrint.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={['#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899'][index % 5]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* CALL TO ACTION: ABRIR A CENTRAL */}
+            <div className="p-8 rounded-3xl flex flex-col justify-center items-start" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
+               <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-blue-500 text-3xl shadow-inner border mb-6" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>🖨️</div>
+               <h4 className="text-xl font-black mb-2" style={{ color: 'var(--text-main)' }}>Central de Impressão</h4>
+               <p className="text-sm opacity-80 mb-6 leading-relaxed" style={{ color: 'var(--text-main)' }}>
+                 Acesse o painel dedicado para visualizar os níveis de toner, status de rede em tempo real, peças de desgaste (cilindro) e gerenciar a movimentação do seu parque de impressão.
+               </p>
+               <button onClick={() => navigate('/nexus-print')} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-black hover:bg-blue-700 hover:-translate-y-1 transition-all shadow-lg shadow-blue-500/30 active:scale-95">
+                 Acessar Nexus Print Completo ➔
+               </button>
+            </div>
+
           </div>
         </div>
       )}

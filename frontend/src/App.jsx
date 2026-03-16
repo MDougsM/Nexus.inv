@@ -13,6 +13,7 @@ import Auditoria from './pages/Auditoria';
 import CadastrosBase from './pages/CadastrosBase';
 import Ajuda from './pages/Ajuda';
 import MeuPerfil from './pages/MeuPerfil';
+import NexusPrint from './pages/NexusPrint';
 
 // ==========================================
 // GUARDA DE SEGURANÇA (ROTA PROTEGIDA)
@@ -55,6 +56,7 @@ export default function App() {
                 <Route path="/config" element={<Configuracoes />} />
                 <Route path="/ajuda" element={<Ajuda />} />
                 <Route path="/perfil" element={<MeuPerfil usuarioAtual={localStorage.getItem('usuario')} />} />
+                <Route path="/nexus-print" element={<NexusPrint />} />
                 
                 {/* Rota de fallback: Digitou algo errado? Volta pro Dashboard */}
                 <Route path="*" element={<Navigate to="/" />} />

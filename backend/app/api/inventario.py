@@ -4,7 +4,7 @@ from app.db.database import SessionLocal
 from app.models import Ativo, Categoria, LogAuditoria, RegistroManutencao
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from datetime import datetime
 from app.schemas import AgenteColeta # Adicione esta linha se não houver
 
@@ -49,7 +49,7 @@ def get_db():
 @router.get("/agente/versao")
 def versao_agente():
     return {
-        "versao_atual": "4.4", # <--- MUDE A VERÇÃO AQUI PARA ATUALIZAR O AGENTE (E NÃO ESQUEÇA DE MUDAR TAMBÉM NO CÓDIGO DO AGENTE EM PYTHON)
+        "versao_atual": "4.4", # <--- MUDE A VERÇÃO AQUI PARA ATUALIZAR O AGENTE
         "url_download": "/api/inventario/download/agente"
     }
 
@@ -64,6 +64,7 @@ class AtivoRequest(BaseModel):
     marca: Optional[str] = None
     modelo: Optional[str] = None
     secretaria: Optional[str] = None
+    local: Optional[str] = None
     setor: Optional[str] = None
     dados_dinamicos: Dict[str, Any]
     usuario_acao: str
@@ -103,10 +104,11 @@ def criar_ativo(req: AtivoRequest, db: Session = Depends(get_db)):
         marca=req.marca,
         modelo=req.modelo,
         secretaria=req.secretaria,
+        local=req.local, # <--- ADICIONADO AQUI
         setor=req.setor,
         tecnico=req.usuario_acao,
         dados_dinamicos=req.dados_dinamicos,
-        ultima_comunicacao=datetime.utcnow() # <--- ADICIONE ESTA LINHA
+        ultima_comunicacao=datetime.utcnow() 
     )
 
     db.add(novo_ativo)
@@ -139,24 +141,21 @@ async def importar_csv(
         texto = conteudo.decode('latin-1')
 
     # Lê o CSV considerando a primeira linha como cabeçalho
-    leitor = csv.DictReader(io.StringIO(texto), delimiter=';') # Pode mudar para ',' se seu Excel usar vírgula
+    leitor = csv.DictReader(io.StringIO(texto), delimiter=';') 
     
     sucesso = 0
     erros = 0
 
     for linha in leitor:
         try:
-            # O get() busca pelo nome da coluna no CSV. 
             patrimonio = linha.get("Patrimonio", "").strip()
             if not patrimonio:
                 continue
 
-            # Pula se o patrimônio já existir
             if db.query(Ativo).filter(Ativo.patrimonio == patrimonio).first():
                 erros += 1
                 continue
 
-            # Busca ou cria a Categoria automaticamente
             nome_cat = linha.get("Categoria", "Diversos").strip() or "Diversos"
             cat = db.query(Categoria).filter(Categoria.nome == nome_cat).first()
             if not cat:
@@ -165,13 +164,13 @@ async def importar_csv(
                 db.commit()
                 db.refresh(cat)
 
-            # Insere o equipamento
             novo_ativo = Ativo(
                 patrimonio=patrimonio,
                 categoria_id=cat.id,
                 marca=linha.get("Marca", "").strip(),
                 modelo=linha.get("Modelo", "").strip(),
                 secretaria=linha.get("Secretaria", "").strip(),
+                local=linha.get("Local", "").strip(), # <--- ADICIONADO AQUI
                 setor=linha.get("Setor", "").strip(),
                 status=linha.get("Status", "Ativo").strip()
             )
@@ -181,7 +180,6 @@ async def importar_csv(
         except Exception as e:
             erros += 1
 
-    # Carimba a Caixa-Preta
     db.add(LogAuditoria(
         usuario=usuario_acao, acao="IMPORTACAO", entidade="Sistema", identificador="Planilha CSV", 
         detalhes=f"Migração em lote: {sucesso} importados. {erros} ignorados/duplicados."
@@ -191,7 +189,7 @@ async def importar_csv(
     return {"message": f"Migração concluída! Sucesso: {sucesso} | Ignorados: {erros}"}
 
 # ==========================================
-# BUSCAR FICHA COMPLETA (OLHO) - ROTA CORRIGIDA
+# BUSCAR FICHA COMPLETA (OLHO)
 # ==========================================
 @router.get("/ficha/detalhes/{patrimonio:path}")
 def obter_detalhes_ativo(patrimonio: str, db: Session = Depends(get_db)):
@@ -212,7 +210,6 @@ def obter_detalhes_ativo(patrimonio: str, db: Session = Depends(get_db)):
 # ==========================================
 @router.put("/ficha/editar/{identificador:path}")
 def editar_ficha_ativo(identificador: str, dados: dict, db: Session = Depends(get_db)):
-    # Tenta achar pelo ID (se for um número) ou pelo Patrimônio
     if identificador.isdigit():
         ativo = db.query(Ativo).filter(Ativo.id == int(identificador)).first()
     else:
@@ -224,13 +221,19 @@ def editar_ficha_ativo(identificador: str, dados: dict, db: Session = Depends(ge
     usuario_acao = dados.get("usuario_acao", "Sistema")
     motivo = dados.get("motivo", "Edição de dados via painel")
 
-    # Atualiza os dados básicos
+    # Atualiza os dados básicos (agora incluindo o Local)
     if "patrimonio" in dados and dados["patrimonio"].strip():
         ativo.patrimonio = dados["patrimonio"].strip()
     
     ativo.categoria_id = dados.get("categoria_id", ativo.categoria_id)
     ativo.marca = dados.get("marca", ativo.marca)
     ativo.modelo = dados.get("modelo", ativo.modelo)
+    
+    # 🧠 GARANTINDO QUE A EDIÇÃO SALVE A LOCALIZAÇÃO
+    if "secretaria" in dados: ativo.secretaria = dados["secretaria"]
+    if "local" in dados: ativo.local = dados["local"]
+    if "setor" in dados: ativo.setor = dados["setor"]
+    if "nome_personalizado" in dados: ativo.nome_personalizado = dados["nome_personalizado"]
 
     # Lida com os campos dinâmicos corretamente
     novos_dinamicos = dados.get("dados_dinamicos", {})
@@ -241,7 +244,10 @@ def editar_ficha_ativo(identificador: str, dados: dict, db: Session = Depends(ge
         except:
             novos_dinamicos = {}
             
-    ativo.dados_dinamicos = novos_dinamicos
+    # Mescla para não perder dados antigos
+    dict_atual = ativo.dados_dinamicos if ativo.dados_dinamicos else {}
+    dict_atual.update(novos_dinamicos)
+    ativo.dados_dinamicos = dict_atual
 
     db.add(LogAuditoria(
         usuario=usuario_acao, 
@@ -321,16 +327,11 @@ def receber_coleta_agente(dados: AgenteColeta, db: Session = Depends(get_db)):
     patrimonio_manual = (dados.patrimonio_manual or "").strip()
     override = dados.override_patrimonio or False 
     
-    # ---------------------------------------------------------
-    # 🧠 LÓGICA DE RECONHECIMENTO (A VACINA ANTI-DUPLICIDADE)
-    # ---------------------------------------------------------
     ativo_existente = None
 
-    # 1º Passo: Tenta achar pelo UUID (DNA da máquina)
     if dados.uuid_persistente:
         ativo_existente = db.query(Ativo).filter(Ativo.uuid_persistente == dados.uuid_persistente).first()
 
-    # 2º Passo: Se não achou, tenta pelo Serial ou MAC (Segurança para máquinas antigas)
     if not ativo_existente:
         for a in db.query(Ativo).all():
             if a.dados_dinamicos:
@@ -340,12 +341,10 @@ def receber_coleta_agente(dados: AgenteColeta, db: Session = Depends(get_db)):
                 if (mac_recebido != "Desconhecido" and mac_no_banco == mac_recebido) or \
                    (serial_recebido != "Desconhecido" and serial_recebido in serial_no_banco):
                     ativo_existente = a
-                    # Se achou pelo hardware, já "vacina" gravando o UUID nela
                     if dados.uuid_persistente:
                         ativo_existente.uuid_persistente = dados.uuid_persistente
                     break
 
-    # Montagem do hardware para comparação
     hardwares = {
         "Processador": dados.cpu, "Memória": dados.ram,
         "S.O": dados.os, "Nome": dados.nome_pc,
@@ -355,7 +354,6 @@ def receber_coleta_agente(dados: AgenteColeta, db: Session = Depends(get_db)):
     }
 
     if ativo_existente:
-        # Lógica de conflito de patrimônio manual
         if patrimonio_manual and patrimonio_manual != ativo_existente.patrimonio and dados.secretaria != "Ping Automático":
             if not override:
                 return {"status": "conflict", "message": f"Esta máquina já existe como '{ativo_existente.patrimonio}'.\nDeseja alterar o patrimônio dela para '{patrimonio_manual}'?"}
@@ -367,7 +365,6 @@ def receber_coleta_agente(dados: AgenteColeta, db: Session = Depends(get_db)):
                 db.add(LogAuditoria(usuario="Nexus Agente", acao="ALTERACAO_PATRIMONIO", entidade="Ativo", identificador=patrimonio_manual, detalhes=f"Patrimônio alterado de {ativo_existente.patrimonio} para {patrimonio_manual}"))
                 ativo_existente.patrimonio = patrimonio_manual
 
-        # Inteligência de Logs (Evita Spam)
         dados_antigos = ativo_existente.dados_dinamicos or {}
         mudou_hardware = dados_antigos != hardwares
         mudou_local = False
@@ -395,7 +392,6 @@ def receber_coleta_agente(dados: AgenteColeta, db: Session = Depends(get_db)):
         return {"status": "success", "patrimonio": ativo_existente.patrimonio}
     
     else:
-        # SE A MÁQUINA É NOVA DE VERDADE
         if patrimonio_manual:
             if db.query(Ativo).filter(Ativo.patrimonio == patrimonio_manual).first():
                 return {"status": "error", "message": f"O patrimônio '{patrimonio_manual}' já existe no sistema!"}
@@ -412,7 +408,7 @@ def receber_coleta_agente(dados: AgenteColeta, db: Session = Depends(get_db)):
         novo_ativo = Ativo(
             patrimonio=novo_patrimonio, 
             categoria_id=cat_desktop.id,
-            uuid_persistente=dados.uuid_persistente, # <--- GRAVA O DNA NA PRIMEIRA VEZ
+            uuid_persistente=dados.uuid_persistente,
             marca=dados.marca or "", 
             modelo=dados.modelo or "",
             secretaria=dados.secretaria or "A Definir", 
@@ -425,3 +421,57 @@ def receber_coleta_agente(dados: AgenteColeta, db: Session = Depends(get_db)):
         db.add(novo_ativo)
         db.commit()
         return {"status": "success", "patrimonio": novo_patrimonio}
+    
+# ==========================================
+# 📊 GRÁFICO E EXPORTAÇÃO MPS (O BOLSO)
+# ==========================================
+@router.get("/leituras/{patrimonio}")
+def obter_historico_leituras(patrimonio: str, db: Session = Depends(get_db)):
+    from app.models import HistoricoLeitura
+    # Busca o histórico dos últimos 30 dias dessa máquina
+    leituras = db.query(HistoricoLeitura).filter(
+        HistoricoLeitura.patrimonio == patrimonio
+    ).order_by(HistoricoLeitura.data_leitura.asc()).limit(30).all()
+    
+    # Formata a data para o Front-End desenhar o gráfico bonitinho
+    resultado = [
+        {
+            "data": l.data_leitura.strftime("%d/%m"), 
+            "paginas": l.paginas_totais
+        } for l in leituras
+    ]
+    return resultado
+
+@router.get("/relatorio/mps/exportar")
+def exportar_relatorio_mps(secretaria: str = "", local: str = "", db: Session = Depends(get_db)):
+    # Pega os IDs das categorias de impressão
+    cats = db.query(Categoria).filter(Categoria.nome.in_(["Multifuncional", "Impressora"])).all()
+    cat_ids = [c.id for c in cats]
+    
+    # Filtra os equipamentos
+    query = db.query(Ativo).filter(Ativo.categoria_id.in_(cat_ids))
+    if secretaria: query = query.filter(Ativo.secretaria == secretaria)
+    if local: query = query.filter(Ativo.local == local)
+    
+    ativos = query.all()
+    
+    # Monta o CSV em memória
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=';')
+    writer.writerow(['Patrimonio', 'Modelo', 'IP', 'Serial', 'Secretaria', 'Local', 'Setor', 'Toner (%)', 'Cilindro (%)', 'Odometro Total', 'Status'])
+    
+    for a in ativos:
+        specs = a.dados_dinamicos or {}
+        writer.writerow([
+            a.patrimonio, a.modelo, specs.get('ip', ''), specs.get('serial', ''),
+            a.secretaria, a.local, a.setor, 
+            specs.get('toner', ''), specs.get('cilindro', ''), specs.get('paginas_totais', ''), a.status
+        ])
+    
+    # Converte para UTF-8 com BOM para o Excel abrir com os acentos perfeitos
+    encoded_output = output.getvalue().encode('utf-8-sig')
+    return StreamingResponse(
+        io.BytesIO(encoded_output), 
+        media_type="text/csv", 
+        headers={"Content-Disposition": f"attachment; filename=Faturamento_MPS_{secretaria or 'Geral'}.csv"}
+    )
