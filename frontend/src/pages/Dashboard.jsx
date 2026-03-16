@@ -37,7 +37,7 @@ export default function Dashboard() {
       let a = 0, m = 0, s = 0, online = 0, desaparecidos = 0; // Adicionado desaparecidos
       let contagemCat = {};
       const agora = new Date();
-      const limiteOnline = 3; // 3 minutos para radar real-time
+      const limiteOnlineDias = 3; // 🟢 NOVO: Agora são 3 DIAS para o Radar
       const limiteOfflineDias = 3; // 3 dias para bolinha cinza/card de alerta
 
       ativos.forEach(item => {
@@ -52,7 +52,7 @@ export default function Dashboard() {
           const diffDias = diffMinutos / (60 * 24);
 
           // Radar de Agentes Online (Verde pulsante)
-          if (diffMinutos < limiteOnline) online++;
+          if (diffDias < limiteOnlineDias) online++;
           
           // Card de Desaparecidos (Mais de 3 dias sem sinal)
           if (diffDias > limiteOfflineDias) desaparecidos++;
@@ -138,7 +138,9 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
             
             {/* NOVO CARD: AGENTES ONLINE */}
-            <div className="p-5 rounded-3xl transition-all hover:-translate-y-1 hover:shadow-2xl cursor-pointer" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
+            <div className="p-5 rounded-3xl transition-all hover:-translate-y-1 hover:shadow-2xl cursor-pointer" 
+                onClick={() => navigate('/cadastro?filtroStatus=ONLINE')} 
+                style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-emerald-400 text-2xl shadow-inner border relative" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
                   {/* Efeito de radar pulsando atrás do ícone */}

@@ -78,11 +78,24 @@ export default function Cadastro() {
       (a.marca && a.marca.toLowerCase().includes(termo)) || 
       (a.modelo && a.modelo.toLowerCase().includes(termo)) || 
       tipoNome.includes(termo) ||
-      (a.secretaria && a.secretaria.toLowerCase().includes(termo)) || // 🧠 Busca por Secretaria adicionada!
-      (a.setor && a.setor.toLowerCase().includes(termo))              // 🧠 Busca por Setor adicionada!
+      (a.secretaria && a.secretaria.toLowerCase().includes(termo)) || 
+      (a.setor && a.setor.toLowerCase().includes(termo))              
     );
     
-    const matchStatus = filtroStatus ? (a.status?.toUpperCase() === filtroStatus.toUpperCase()) : true;
+    // 🧠 NOVA LÓGICA DE FILTRO (Aceita ONLINE, OFFLINE e Status Normais)
+    let matchStatus = true;
+    if (filtroStatus === 'ONLINE' || filtroStatus === 'OFFLINE') {
+      let isOnline = false;
+      if (a.ultima_comunicacao) {
+        const dataCom = new Date(a.ultima_comunicacao + 'Z');
+        const diffDias = (new Date() - dataCom) / (1000 * 60 * 60 * 24);
+        isOnline = diffDias < 3; // Regra dos 3 dias
+      }
+      matchStatus = (filtroStatus === 'ONLINE') ? isOnline : !isOnline;
+    } else if (filtroStatus) {
+      matchStatus = a.status?.toUpperCase() === filtroStatus.toUpperCase();
+    }
+
     return matchBusca && matchStatus;
   });
 

@@ -25,15 +25,16 @@ export default function TabelaInventario({
   const isOnline = (ultimaComunicacao) => {
     if (!ultimaComunicacao) return false;
     
-    // Converte a data do banco (UTC) para a data do navegador
+    // Converte a data do banco (UTC) para o fuso do navegador
     const dataComunicacao = new Date(ultimaComunicacao + 'Z'); 
     const agora = new Date();
     
-    // Diferença convertida para DIAS (1000ms * 60s * 60m * 24h)
-    const diferencaDias = (agora - dataComunicacao) / (1000 * 60 * 60 * 24);
+    // A diferença em milissegundos convertida para MINUTOS (para mais precisão)
+    const diferencaMinutos = (agora - dataComunicacao) / (1000 * 60);
     
-    // Se a diferença for menor que 3 dias, a bolinha fica verde!
-    return diferencaDias < 3; 
+    // 3 dias = 4320 minutos. Se a última comunicação for MENOR que 4320 min, é online!
+    // E também garante que a diferença não é absurdamente negativa por erro de fuso horário.
+    return diferencaMinutos >= 0 && diferencaMinutos < 4320; 
   };
   
   return (
