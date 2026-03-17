@@ -65,6 +65,9 @@ origens_permitidas = [
     "http://localhost",
     "http://localhost:5174", 
     "http://localhost:8001",
+    "https://wan-involves-elements-std.trycloudflare.com/nexus-print",
+    "https://wan-involves-elements-std.trycloudflare.com/nexus-print:8001"
+    "https://wan-involves-elements-std.trycloudflare.com/nexus-print:5174"
 ]
 
 if NGROK_DOMAIN:
