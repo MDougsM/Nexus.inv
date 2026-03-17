@@ -99,3 +99,13 @@ class HistoricoLeitura(Base):
     paginas_totais = Column(Integer, default=0)
     toner_nivel = Column(String, nullable=True)
     cilindro_nivel = Column(String, nullable=True)
+
+class ComandoAgente(Base):
+    __tablename__ = "comandos_agente"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    cliente = Column(String, index=True)
+    comando = Column(String) # Ex: "FORCAR_COLETA"
+    status = Column(String, default="PENDENTE") # PENDENTE, CONCLUIDO, ERRO
+    data_criacao = Column(DateTime, default=datetime.utcnow)
+    data_conclusao = Column(DateTime, nullable=True)

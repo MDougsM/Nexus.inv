@@ -2,6 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import api from '../api/api';
 import { LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
+// A mesma lista de clientes que você tem no Agente
+const CLIENTES_OPCOES = ["PMSGO", "FUNSAUDE", "CÂMARA MUNICIPAL", "NEXUS INTERNO"];
+
 export default function NexusPrint() {
   // --- Estados de Dados ---
   const [impressorasOriginais, setImpressorasOriginais] = useState([]);
@@ -9,7 +12,7 @@ export default function NexusPrint() {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null); 
   
-  // --- Estados do Gráfico de Faturamento (Missão A) ---
+  // --- Estados do Gráfico ---
   const [dadosGrafico, setDadosGrafico] = useState([]);
   const [loadingGrafico, setLoadingGrafico] = useState(false);
 
@@ -18,18 +21,71 @@ export default function NexusPrint() {
   const [filtroSecretaria, setFiltroSecretaria] = useState('');
   const [filtroLocal, setFiltroLocal] = useState('');
   
-  // --- Estados do Modal de Edição ---
+  // --- Estados do Modal ---
   const [modalEditOpen, setModalEditOpen] = useState(false);
   const [impEditando, setImpEditando] = useState(null);
   const [formEdit, setFormEdit] = useState({ nome_personalizado: '', local: '', setor: '' });
 
-  // 📥 FUNÇÃO: Exportar Relatório MPS para Excel/CSV
+  // --- Estados de Sincronização Remota ---
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [clienteAlvo, setClienteAlvo] = useState('TODOS');
+
   const exportarRelatorio = () => {
     const url = `${api.defaults.baseURL || 'http://localhost:8001'}/api/inventario/relatorio/mps/exportar?secretaria=${filtroSecretaria}&local=${filtroLocal}`;
     window.open(url, '_blank');
   };
 
-  // 🔄 FUNÇÃO: Carregar Todas as Multifuncionais
+  // 🔄 FUNÇÃO MESTRE APRIMORADA: Solicitar Coleta Remota
+  const solicitarColetaRemota = async () => {
+    setIsSyncing(true);
+    try {
+      const clientesParaColetar = clienteAlvo === 'TODOS' ? CLIENTES_OPCOES : [clienteAlvo];
+      const comandosIds = [];
+
+      for (const cli of clientesParaColetar) {
+        const res = await api.post(`/api/inventario/solicitar_coleta?cliente=${cli}`);
+        comandosIds.push(res.data.id_comando);
+      }
+      
+      let tentativas = 0;
+      const MAX_TENTATIVAS = 20; // 20 tentativas de 3s = 60 segundos no total
+
+      const interval = setInterval(async () => {
+        tentativas++;
+        let concluidoAlgum = false;
+        let todosConcluidos = true;
+
+        // Verifica o status de todos os comandos
+        for (const idCmd of comandosIds) {
+          const statusRes = await api.get(`/api/inventario/status_coleta?id_comando=${idCmd}`);
+          if (statusRes.data.status === 'CONCLUIDO') {
+            concluidoAlgum = true; // Achamos pelo menos um que fez o trabalho!
+          } else {
+            todosConcluidos = false;
+          }
+        }
+
+        // Se era só um cliente, esperamos ele terminar. 
+        // Se eram "TODOS", e pelo menos um terminou (ou se já gastamos 10 tentativas / 30s), a gente libera a tela!
+        if (todosConcluidos || (clienteAlvo === 'TODOS' && (concluidoAlgum || tentativas >= 10))) {
+          clearInterval(interval);
+          setIsSyncing(false);
+          carregarImpressoras(); 
+        } else if (tentativas >= MAX_TENTATIVAS) {
+          // Timeout final (60s)
+          clearInterval(interval);
+          setIsSyncing(false);
+          carregarImpressoras(); // Puxa o que tiver atualizado e avisa o erro
+          alert("⏳ Leitura finalizada parcialmente. Alguns Agentes podem estar offline.");
+        }
+      }, 3000); 
+
+    } catch (error) {
+      setIsSyncing(false);
+      alert("❌ Erro de comunicação com a API ao solicitar leitura.");
+    }
+  };
+
   const carregarImpressoras = async () => {
     try {
       const [resAtivos, resCat] = await Promise.all([
@@ -48,7 +104,6 @@ export default function NexusPrint() {
         try { specs = typeof item.especificacoes === 'string' ? JSON.parse(item.especificacoes) : (item.especificacoes || {}); } catch(e) {}
         try { dinamicos = typeof item.dados_dinamicos === 'string' ? JSON.parse(item.dados_dinamicos) : (item.dados_dinamicos || {}); } catch(e) {}
         
-        // Unifica os dados dinâmicos para a leitura do componente
         return { ...item, categoriaNome: catName, specs: { ...specs, ...dinamicos } };
       }).filter(item => 
         ['IMPRESSORA', 'MULTIFUNCIONAL'].includes(item.categoriaNome.toUpperCase()) || 
@@ -66,25 +121,18 @@ export default function NexusPrint() {
 
   useEffect(() => { carregarImpressoras(); }, []);
 
-  // 🧠 LÓGICA: Filtros Dinâmicos Encadeados
   const { secretariasDisponiveis, locaisDisponiveis } = useMemo(() => {
     const secs = [...new Set(impressorasOriginais.map(i => i.secretaria).filter(Boolean))].sort();
-    
     let locaisFiltrados = impressorasOriginais;
-    if (filtroSecretaria) {
-      locaisFiltrados = impressorasOriginais.filter(i => i.secretaria === filtroSecretaria);
-    }
+    if (filtroSecretaria) locaisFiltrados = impressorasOriginais.filter(i => i.secretaria === filtroSecretaria);
     const locs = [...new Set(locaisFiltrados.map(i => i.local).filter(Boolean))].sort();
-    
     return { secretariasDisponiveis: secs, locaisDisponiveis: locs };
   }, [impressorasOriginais, filtroSecretaria]);
 
   useEffect(() => {
     let result = impressorasOriginais;
-
     if (filtroSecretaria) result = result.filter(i => i.secretaria === filtroSecretaria);
     if (filtroLocal) result = result.filter(i => i.local === filtroLocal);
-
     if (termoBusca) {
       const t = termoBusca.toLowerCase();
       result = result.filter(i => 
@@ -95,12 +143,9 @@ export default function NexusPrint() {
         (i.specs.serial || i.serial || '').toLowerCase().includes(t)
       );
     }
-
     setImpressorasFiltradas(result);
   }, [termoBusca, filtroSecretaria, filtroLocal, impressorasOriginais]);
 
-
-  // 📐 LÓGICA: Expandir Linha e Buscar Telemetria Histórica
   const toggleExpand = async (imp) => {
     if (expandedId === imp.id) {
       setExpandedId(null);
@@ -119,7 +164,6 @@ export default function NexusPrint() {
     }
   };
 
-  // ✏️ FUNÇÕES: Edição de Identidade e Localização
   const abrirModalEdicao = (imp, e) => {
     e.stopPropagation();
     setImpEditando(imp);
@@ -138,9 +182,7 @@ export default function NexusPrint() {
         usuario_acao: localStorage.getItem('usuario') || 'Admin',
         motivo: "Atualização de localização MPS"
       };
-
       await api.put(`/api/api/inventario/ficha/editar/${impEditando.id}`, payload);
-      
       await carregarImpressoras();
       setModalEditOpen(false);
       alert("✅ Multifuncional atualizada com sucesso!");
@@ -150,7 +192,6 @@ export default function NexusPrint() {
     }
   };
 
-  // --- RENDERIZADORES AUXILIARES ---
   const renderMiniBar = (label, valueStr) => {
     let percentage = 0;
     if (valueStr && valueStr.includes('%')) {
@@ -214,7 +255,7 @@ export default function NexusPrint() {
             style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}
           />
         </div>
-        <div className="md:w-60">
+        <div className="md:w-48">
           <label className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1.5 block">Filtrar Secretaria</label>
           <select 
             value={filtroSecretaria}
@@ -226,7 +267,7 @@ export default function NexusPrint() {
             {secretariasDisponiveis.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
-        <div className="md:w-60">
+        <div className="md:w-48">
           <label className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1.5 block">Filtrar Local</label>
           <select 
             value={filtroLocal}
@@ -239,14 +280,44 @@ export default function NexusPrint() {
             {locaisDisponiveis.map(l => <option key={l} value={l}>{l}</option>)}
           </select>
         </div>
-        <div className="md:w-48 flex items-end">
+        
+        {/* ÁREA DOS BOTÕES DE AÇÃO */}
+        <div className="md:w-auto flex items-end gap-3">
+          
+          {/* SELETOR DE CLIENTE ALVO */}
+          <div className="flex flex-col">
+             <select 
+                value={clienteAlvo}
+                onChange={(e) => setClienteAlvo(e.target.value)}
+                disabled={isSyncing}
+                className="h-[42px] px-3 rounded-xl border text-xs font-bold outline-none disabled:opacity-50 cursor-pointer"
+                style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}
+              >
+                <option value="TODOS">Todos os Agentes</option>
+                {CLIENTES_OPCOES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+          </div>
+
+          <button 
+            onClick={solicitarColetaRemota} 
+            disabled={isSyncing}
+            className={`h-[42px] px-5 rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2 ${
+              isSyncing 
+                ? 'bg-blue-400 text-white cursor-not-allowed animate-pulse shadow-none' 
+                : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-500/20 active:scale-95'
+            }`}
+          >
+            {isSyncing ? '⏳ Lendo...' : '🔄 Forçar Leitura'}
+          </button>
+
           <button 
             onClick={exportarRelatorio} 
-            className="w-full h-[42px] bg-emerald-600 text-white rounded-xl text-sm font-black hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+            className="w-full md:w-auto px-5 h-[42px] bg-emerald-600 text-white rounded-xl text-sm font-black hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
           >
-            📊 Exportar CSV
+            📊 Exportar
           </button>
         </div>
+
       </div>
 
       {/* CABEÇALHO DA TABELA */}
@@ -275,7 +346,6 @@ export default function NexusPrint() {
               <div key={imp.id} className="rounded-2xl transition-all overflow-hidden border shadow-sm" 
                    style={{ backgroundColor: 'var(--bg-card)', borderColor: alertaToner ? '#ef4444' : 'var(--border-light)' }}>
                 
-                {/* LINHA DE RESUMO */}
                 <div onClick={() => toggleExpand(imp)} className="grid grid-cols-1 md:grid-cols-12 gap-4 px-8 py-5 items-center cursor-pointer hover:bg-gray-500/5 transition-colors">
                   
                   <div className="col-span-1">
@@ -315,11 +385,9 @@ export default function NexusPrint() {
                   </div>
                 </div>
 
-                {/* PAINEL EXPANDIDO (Gráfico e Detalhes) */}
                 {isExpanded && (
                   <div className="p-8 border-t bg-gray-500/[0.02] flex flex-col xl:flex-row gap-10 animate-fade-in" style={{ borderColor: 'var(--border-light)' }}>
                     
-                    {/* Coluna de Dados Técnicos */}
                     <div className="w-full xl:w-[40%] space-y-6">
                       <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40">Especificações Técnicas</h4>
                       <div className="grid grid-cols-2 gap-6">
@@ -359,7 +427,6 @@ export default function NexusPrint() {
 
                     <div className="hidden xl:block w-px bg-gray-500/10"></div>
 
-                    {/* Coluna de Gráfico de Faturamento */}
                     <div className="w-full xl:flex-1 space-y-4">
                       <div className="flex items-center justify-between">
                          <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40">Evolução de Faturamento (Páginas)</h4>

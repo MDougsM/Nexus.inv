@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 import os, json
 
+BACKEND_PORT = int(os.getenv("BACKEND_PORT", 8001))
+
 # Cria as tabelas no banco de dados se não existirem
 Base.metadata.create_all(bind=engine)
 
@@ -138,9 +140,12 @@ async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session =
         ativo.status = 'Online'
         ativo.ultima_comunicacao = datetime.utcnow()
         
-        dict_atual = ativo.dados_dinamicos if ativo.dados_dinamicos else {}
+        # 🛡️ FIX DO SQLALCHEMY: Usar dict() cria uma cópia nova na memória.
+        # Assim o banco percebe a mudança e força o salvamento (UPDATE) do odômetro!
+        dict_atual = dict(ativo.dados_dinamicos) if ativo.dados_dinamicos else {}
         dict_atual.update(novos_dados_dinamicos)
         ativo.dados_dinamicos = dict_atual
+        
         maquina_atual = ativo
     else:
         novo_ativo = Ativo(
@@ -211,6 +216,60 @@ async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session =
     db.commit()
     
     return {"patrimonio": maquina_atual.patrimonio, "nome": maquina_atual.modelo}
+
+    # ========================================================
+# 🚀 FILA DE COMANDOS (Banco de Dados)
+# ========================================================
+from app.models import ComandoAgente
+
+# 1. Rota que o botão do REACT chama
+@app.post("/api/inventario/solicitar_coleta")
+def solicitar_coleta(cliente: str = "PMSGO", db: Session = Depends(get_db)):
+    novo_comando = ComandoAgente(
+        cliente=cliente, 
+        comando="FORCAR_COLETA", 
+        status="PENDENTE"
+    )
+    db.add(novo_comando)
+    db.commit()
+    db.refresh(novo_comando)
+    
+    return {"message": "Comando salvo na fila", "id_comando": novo_comando.id}
+
+# 2. Rota que o REACT fica checando
+@app.get("/api/inventario/status_coleta")
+def status_coleta(id_comando: int, db: Session = Depends(get_db)):
+    comando = db.query(ComandoAgente).filter(ComandoAgente.id == id_comando).first()
+    if comando:
+        return {"status": comando.status}
+    return {"status": "DESCONHECIDO"}
+
+# 3. Rota que o AGENTE SENTINEL (Python Local) fica perguntando a cada 30s
+@app.get("/api/agente/comando")
+def checar_comando(cliente: str, db: Session = Depends(get_db)):
+    # Pega a ordem PENDENTE mais antiga na fila para este cliente
+    comando = db.query(ComandoAgente).filter(
+        ComandoAgente.cliente == cliente,
+        ComandoAgente.status == "PENDENTE"
+    ).order_by(ComandoAgente.id.asc()).first()
+
+    if comando:
+        return {"comando": comando.comando, "id_comando": comando.id}
+    return {"comando": "NENHUM"}
+
+class ConcluirComandoReq(BaseModel):
+    id_comando: int
+    status: str
+
+# 4. Rota que o AGENTE SENTINEL avisa que terminou o serviço
+@app.post("/api/agente/comando/concluir")
+def concluir_comando(req: ConcluirComandoReq, db: Session = Depends(get_db)):
+    comando = db.query(ComandoAgente).filter(ComandoAgente.id == req.id_comando).first()
+    if comando:
+        comando.status = req.status
+        comando.data_conclusao = datetime.utcnow()
+        db.commit()
+    return {"message": "Comando baixado com sucesso"}
 
 # Registrando as rotas 
 app.include_router(auth.router, prefix="/api")

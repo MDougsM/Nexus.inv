@@ -23,6 +23,8 @@ wheels/
 # Banco de Dados Local
 *.db
 *.sqlite3
+sentinel.log
+nexus.db
 
 # Node (Frontend)
 node_modules/
@@ -33,6 +35,7 @@ dist-ssr/
 .stylelintcache
 node_modules.bak/
 package-lock.json
+build/
 
 # IDEs e Sistema
 .vscode/

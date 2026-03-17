@@ -1,10 +1,8 @@
 import axios from 'axios';
 
-// ⚡ O TRUQUE: Deixamos a baseURL vazia (ou como '/')
-// Assim, o celular vai fazer os pedidos para o próprio link do Ngrok, 
-// e o Vite vai interceptar e mandar para o Python.
 const api = axios.create({
-  baseURL: '/', 
+  // O Vite exige o prefixo VITE_ para reconhecer variáveis de ambiente
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8001',
 });
 
 api.interceptors.request.use((config) => {
