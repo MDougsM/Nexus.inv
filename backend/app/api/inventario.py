@@ -1,23 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body
 from sqlalchemy.orm import Session
-from sqlalchemy import text # Import necessário para exclusão manual
+from sqlalchemy import text 
 from app.db.database import SessionLocal
 from app.models import Ativo, Categoria, LogAuditoria, RegistroManutencao, HistoricoLeitura
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from fastapi.responses import FileResponse, StreamingResponse
 from datetime import datetime
-from app.schemas import AgenteColeta 
 
 import csv
 import io
 import os
 import uuid
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
 
-
-# ==========================================
-# CONFIGURAÇÕES DO AGENTE
-# ==========================================
 VERSAO_DESTE_AGENTE = "4.4" 
 BASE_URL = "http://localhost:8001" 
 COLETA_URL = f"{BASE_URL}/api/inventario/agente/coleta"
@@ -51,7 +50,6 @@ def versao_agente():
         "url_download": "/api/inventario/download/agente"
     }
 
-# --- SCHEMAS ---
 class CategoriaRequest(BaseModel):
     nome: str
     campos_config: List[Dict[str, str]]
@@ -67,7 +65,6 @@ class AtivoRequest(BaseModel):
     dados_dinamicos: Dict[str, Any]
     usuario_acao: str
 
-# --- ROTAS DE CATEGORIAS ---
 @router.get("/categorias")
 def listar_categorias(db: Session = Depends(get_db)):
     return db.query(Categoria).all()
@@ -82,7 +79,6 @@ def criar_categoria(req: CategoriaRequest, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Categoria criada com sucesso"}
 
-# --- ROTAS DE ATIVOS ---
 @router.get("/")
 def listar_ativos(db: Session = Depends(get_db)):
     ativos = db.query(Ativo).all()
@@ -111,9 +107,6 @@ def criar_ativo(req: AtivoRequest, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Ativo criado com sucesso"}
 
-# ==========================================
-# IMPORTAÇÃO EM LOTE (MIGRAÇÃO CSV)
-# ==========================================
 @router.post("/upload-csv")
 async def importar_csv(file: UploadFile = File(...), usuario_acao: str = Form(...), db: Session = Depends(get_db)):
     if not file.filename.endswith('.csv'):
@@ -156,9 +149,6 @@ async def importar_csv(file: UploadFile = File(...), usuario_acao: str = Form(..
     db.commit()
     return {"message": f"Migração concluída! Sucesso: {sucesso} | Ignorados: {erros}"}
 
-# ==========================================
-# BUSCAR FICHA COMPLETA E EDIÇÃO
-# ==========================================
 @router.get("/ficha/detalhes/{patrimonio:path}")
 def obter_detalhes_ativo(patrimonio: str, db: Session = Depends(get_db)):
     try:
@@ -220,14 +210,9 @@ def deletar_ativos_lote(req: LoteDeleteRequest, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-# ==========================================
-# EXCLUIR EQUIPAMENTO ÚNICO (LIXEIRA TOTAL)
-# ==========================================
 @router.delete("/{patrimonio_ou_id:path}")
 def deletar_ativo(patrimonio_ou_id: str, usuario_acao: str = "Admin", motivo: str = "Sem motivo", db: Session = Depends(get_db)):
     from sqlalchemy import or_
-    
-    # 🚀 O TRUQUE: Busca a máquina tanto pelo Patrimônio quanto pelo ID Interno!
     ativo = db.query(Ativo).filter(
         or_(
             Ativo.patrimonio == patrimonio_ou_id,
@@ -239,17 +224,12 @@ def deletar_ativo(patrimonio_ou_id: str, usuario_acao: str = "Admin", motivo: st
         raise HTTPException(status_code=404, detail="Ativo não encontrado")
     
     try:
-        # Pega a string segura para os DELETES manuais
         pat_seguro = str(ativo.patrimonio).replace("'", "''") 
-
-        # 🚀 LIMPA OS RASTROS NO BANCO ANTES DE APAGAR A MÁQUINA
         db.execute(text(f"DELETE FROM historicoleitura WHERE patrimonio = '{pat_seguro}'"))
         db.execute(text(f"DELETE FROM logauditoria WHERE identificador = '{pat_seguro}'"))
         db.execute(text(f"DELETE FROM registromanutencao WHERE patrimonio = '{pat_seguro}'"))
-        
         db.delete(ativo)
         
-        # 🚀 GRAVA A AUDITORIA COM O MOTIVO DO DROPDOWN
         db.add(LogAuditoria(
             usuario=usuario_acao, 
             acao="EXCLUSAO", 
@@ -288,9 +268,6 @@ def deletar_categoria(categoria_id: int, usuario_acao: str = "Admin", db: Sessio
     db.commit()
     return {"message": "Categoria excluída com sucesso!"}
 
-# ==========================================
-# ROTA DO AGENTE (COMPUTADORES E IMPRESSORAS)
-# ==========================================
 @router.post("/agente/coleta")
 def receber_coleta_agente(dados: dict = Body(...), db: Session = Depends(get_db)):
     mac_recebido = dados.get("mac", "Desconhecido")
@@ -303,7 +280,6 @@ def receber_coleta_agente(dados: dict = Body(...), db: Session = Depends(get_db)
     if uuid_persistente: 
         ativo_existente = db.query(Ativo).filter(Ativo.uuid_persistente == uuid_persistente).first()
 
-    # Busca a máquina pelo MAC ou Serial se não achar pelo UUID
     if not ativo_existente:
         for a in db.query(Ativo).all():
             d_din = a.dados_dinamicos or {}
@@ -320,11 +296,8 @@ def receber_coleta_agente(dados: dict = Body(...), db: Session = Depends(get_db)
                 if uuid_persistente: ativo_existente.uuid_persistente = uuid_persistente
                 break
 
-    # 🚀 A CORREÇÃO DE OURO: Puxa os dados da impressora (Toner, Cilindro, SNMP) 
-    # Independente do formato que o Agente mandou!
     hardwares = dados.get("dados_dinamicos") or dados.get("snmp") or dados.get("especificacoes")
     
-    # Se for um Computador, ele monta o layout clássico
     if not hardwares:
         hardwares = {
             "Processador": dados.get("cpu"), "Memória": dados.get("ram"), "S.O": dados.get("os"), "Nome": dados.get("nome_pc"),
@@ -332,7 +305,6 @@ def receber_coleta_agente(dados: dict = Body(...), db: Session = Depends(get_db)
             "Endereço IP": dados.get("ip", "Desconhecido"), f"Disco Rígido [{dados.get('tipo_disco', 'HD')}]": dados.get("disco")
         }
 
-    # 🚀 O GRÁFICO PRECISA DISSO: Extrai as páginas totais
     paginas = hardwares.get("Páginas Impressas") or hardwares.get("paginas_totais") or hardwares.get("Paginas")
 
     if ativo_existente:
@@ -350,7 +322,6 @@ def receber_coleta_agente(dados: dict = Body(...), db: Session = Depends(get_db)
         if dados.get("setor") and dados.get("setor") != "Background": 
             ativo_existente.setor = dados.get("setor")
         
-        # 🚀 CRUCIAL: SALVA O PONTO NO GRÁFICO!
         if paginas:
             try:
                 pag_int = int(str(paginas).replace(".", "").strip())
@@ -361,7 +332,6 @@ def receber_coleta_agente(dados: dict = Body(...), db: Session = Depends(get_db)
         return {"status": "success", "patrimonio": ativo_existente.patrimonio}
         
     else:
-        # CRIA MÁQUINA NOVA CASO NÃO EXISTA
         novo_patrimonio = patrimonio_manual or f"S/P_{int(datetime.utcnow().timestamp())}"
         cat_nome = "Multifuncional" if paginas else "Desktop"
         cat = db.query(Categoria).filter(Categoria.nome == cat_nome).first()
@@ -377,7 +347,6 @@ def receber_coleta_agente(dados: dict = Body(...), db: Session = Depends(get_db)
         db.add(novo_ativo)
         db.flush() 
         
-        # 🚀 SALVA O PONTO NO GRÁFICO DA MÁQUINA NOVA!
         if paginas:
             try:
                 pag_int = int(str(paginas).replace(".", "").strip())
@@ -387,10 +356,6 @@ def receber_coleta_agente(dados: dict = Body(...), db: Session = Depends(get_db)
         db.commit()
         return {"status": "success", "patrimonio": novo_patrimonio}
 
-# ==========================================
-# GRÁFICOS E RELATÓRIOS MPS
-# ==========================================
-# 🚀 ADICIONADO O ':path' para ele aceitar a barra (/) do S/P_
 @router.get("/leituras/{patrimonio_ou_id:path}")
 def obter_historico_leituras(patrimonio_ou_id: str, db: Session = Depends(get_db)):
     from app.models import HistoricoLeitura
@@ -400,14 +365,12 @@ def obter_historico_leituras(patrimonio_ou_id: str, db: Session = Depends(get_db
     ativo = db.query(Ativo).filter(or_(Ativo.patrimonio == patrimonio_ou_id, Ativo.id == (int(patrimonio_ou_id) if patrimonio_ou_id.isdigit() else -1))).first()
     if not ativo: return []
 
-    # 🚀 LIMIT: 1000 para o React ter um balde cheio pra agrupar por mês/dia
     leituras = db.query(HistoricoLeitura).filter(
         HistoricoLeitura.patrimonio == ativo.patrimonio
     ).order_by(HistoricoLeitura.data_leitura.desc()).limit(1000).all()
     
     leituras.reverse() 
 
-    # 🚀 DEVOLVENDO O FUSO (MENOS 3 HORAS) E PASSANDO A DATA PURA PRO REACT LER
     resultado = [
         {
             "id": l.id,
@@ -439,6 +402,15 @@ def exportar_relatorio_mps(secretaria: str = "", local: str = "", db: Session = 
 
 COMANDO_GLOBAL = {"id": None, "status": "OCIOSO", "timestamp": None, "agentes_concluidos": 0}
 
+@router.post("/solicitar_coleta")
+def solicitar_coleta(db: Session = Depends(get_db)):
+    # Simula o pedido inserindo comando
+    COMANDO_GLOBAL["id"] = str(uuid.uuid4())
+    COMANDO_GLOBAL["status"] = "BROADCASTING"
+    COMANDO_GLOBAL["timestamp"] = datetime.utcnow()
+    COMANDO_GLOBAL["agentes_concluidos"] = 0
+    return {"message": "Sinal enviado", "id_comando": COMANDO_GLOBAL["id"]}
+
 @router.post("/agente/comando/enviar")
 def enviar_comando_global():
     COMANDO_GLOBAL["id"] = str(uuid.uuid4())
@@ -449,9 +421,7 @@ def enviar_comando_global():
 
 @router.get("/agente/comando")
 def ler_comando_agente(cliente: str = None):
-    # O Agente Sentinel bate nesta rota a cada 20/30 segundos
     if COMANDO_GLOBAL["status"] == "BROADCASTING" and COMANDO_GLOBAL["timestamp"]:
-        # Mantém o sinal ativo por 60 segundos para dar tempo de TODOS os agentes lerem a ordem!
         if (datetime.utcnow() - COMANDO_GLOBAL["timestamp"]).total_seconds() < 60:
             return {"comando": "FORCAR_COLETA", "id_comando": COMANDO_GLOBAL["id"]}
         else:
@@ -460,7 +430,6 @@ def ler_comando_agente(cliente: str = None):
 
 @router.post("/agente/comando/concluir")
 def concluir_comando_agente(req: dict):
-    # Quando um agente de qualquer lugar termina, ele avisa aqui e nós somamos!
     if req.get("id_comando") == COMANDO_GLOBAL["id"]:
         COMANDO_GLOBAL["agentes_concluidos"] += 1
     return {"message": "OK"}
@@ -469,10 +438,8 @@ def concluir_comando_agente(req: dict):
 def status_comando_global():
     if COMANDO_GLOBAL["timestamp"]:
         segundos = (datetime.utcnow() - COMANDO_GLOBAL["timestamp"]).total_seconds()
-        # Se passou de 60s, o tempo de transmissão acabou e as coletas chegam
         if COMANDO_GLOBAL["status"] == "BROADCASTING" and segundos >= 60:
             COMANDO_GLOBAL["status"] = "CONCLUIDO"
-        # Limpa a memória para o próximo uso
         elif segundos > 120:
             COMANDO_GLOBAL["status"] = "OCIOSO"
             
@@ -481,7 +448,6 @@ def status_comando_global():
         "agentes_concluidos": COMANDO_GLOBAL.get("agentes_concluidos", 0)
     }
 
-# 🚀 ROTA CORRIGIDA: Usando o nome correto do model 'Historico'
 @router.get("/id/{ativo_id}")
 def obter_ativo_por_id(ativo_id: int, db: Session = Depends(get_db)):
     from app.models import Ativo, LogAuditoria
@@ -491,7 +457,6 @@ def obter_ativo_por_id(ativo_id: int, db: Session = Depends(get_db)):
     if not ativo:
         raise HTTPException(status_code=404, detail="Ativo não encontrado")
     
-    # Garante que dados_dinamicos seja um dicionário (Objeto JSON)
     dados_din = ativo.dados_dinamicos if ativo.dados_dinamicos else {}
     if isinstance(dados_din, str):
         try:
@@ -499,7 +464,6 @@ def obter_ativo_por_id(ativo_id: int, db: Session = Depends(get_db)):
         except:
             dados_din = {}
 
-    # Monta o objeto exatamente como a tela de Gestão de Equipamentos espera
     ativo_formatado = {
         "id": ativo.id,
         "patrimonio": ativo.patrimonio,
@@ -513,7 +477,6 @@ def obter_ativo_por_id(ativo_id: int, db: Session = Depends(get_db)):
         "dados_dinamicos": dados_din
     }
 
-    # Busca o histórico na tabela correta (LogAuditoria)
     historico = db.query(LogAuditoria).filter(
         LogAuditoria.identificador == ativo.patrimonio
     ).order_by(LogAuditoria.data_hora.desc()).limit(20).all()
@@ -531,20 +494,18 @@ def editar_ativo_por_id(ativo_id: int, dados: dict, db: Session = Depends(get_db
     if not ativo:
         raise HTTPException(status_code=404, detail="Ativo não encontrado")
     
-    # Atualiza os campos básicos
     ativo.marca = dados.get("marca", ativo.marca)
     ativo.modelo = dados.get("modelo", ativo.modelo)
     ativo.patrimonio = dados.get("patrimonio", ativo.patrimonio)
     ativo.nome_personalizado = dados.get("nome_personalizado", ativo.nome_personalizado)
     
-    # Atualiza os dados SNMP/Dinamicos
     if "dados_dinamicos" in dados:
         ativo.dados_dinamicos = dados["dados_dinamicos"]
         
     db.commit()
     return {"status": "success"}
 
-# 🚀 NOVA ROTA EXCLUSIVA PARA RELATÓRIOS DO NEXUS PRINT
+
 class FiltroRelatorio(BaseModel):
     dataInicio: str
     dataFim: str
@@ -555,15 +516,11 @@ class FiltroRelatorio(BaseModel):
 @router.post("/relatorios/faturamento")
 def relatorio_faturamento_avancado(filtro: FiltroRelatorio, db: Session = Depends(get_db)):
     from app.models import Ativo, HistoricoLeitura
-    
     query_ativos = db.query(Ativo)
-    
-    # Filtra pelas Secretarias e Setores selecionados
     if filtro.secretarias and len(filtro.secretarias) > 0:
         query_ativos = query_ativos.filter(Ativo.secretaria.in_(filtro.secretarias))
     if filtro.setores and len(filtro.setores) > 0:
         query_ativos = query_ativos.filter(Ativo.setor.in_(filtro.setores))
-        
     if filtro.patrimonio:
         query_ativos = query_ativos.filter(Ativo.patrimonio.ilike(f"%{filtro.patrimonio}%"))
     
@@ -595,3 +552,76 @@ def relatorio_faturamento_avancado(filtro: FiltroRelatorio, db: Session = Depend
             })
 
     return relatorio
+
+@router.post("/relatorios/faturamento/pdf")
+def relatorio_faturamento_pdf(filtros: FiltroRelatorio, db: Session = Depends(get_db)):
+    query_ativos = db.query(Ativo)
+    if filtros.patrimonio:
+        query_ativos = query_ativos.filter(Ativo.patrimonio.ilike(f"%{filtros.patrimonio}%"))
+    if filtros.secretarias and len(filtros.secretarias) > 0:
+        query_ativos = query_ativos.filter(Ativo.secretaria.in_(filtros.secretarias))
+    if filtros.setores and len(filtros.setores) > 0:
+        query_ativos = query_ativos.filter(Ativo.setor.in_(filtros.setores))
+        
+    lista_ativos = query_ativos.all()
+
+    dados_tabela = [["Patrimônio", "Modelo", "Secretaria", "Setor", "Inicial", "Final", "Consumo"]]
+    total_consumo = 0
+
+    for a in lista_ativos:
+        leitura_inicial = db.query(HistoricoLeitura).filter(
+            HistoricoLeitura.patrimonio == a.patrimonio,
+            HistoricoLeitura.data_leitura >= f"{filtros.dataInicio} 00:00:00"
+        ).order_by(HistoricoLeitura.data_leitura.asc()).first()
+
+        leitura_final = db.query(HistoricoLeitura).filter(
+            HistoricoLeitura.patrimonio == a.patrimonio,
+            HistoricoLeitura.data_leitura <= f"{filtros.dataFim} 23:59:59"
+        ).order_by(HistoricoLeitura.data_leitura.desc()).first()
+
+        if leitura_inicial and leitura_final and leitura_final.paginas_totais >= leitura_inicial.paginas_totais:
+            consumo = leitura_final.paginas_totais - leitura_inicial.paginas_totais
+            dados_tabela.append([
+                a.patrimonio, 
+                a.modelo[:20] if a.modelo else 'Desconhecido', 
+                a.secretaria[:15] if a.secretaria else 'S/N', 
+                a.setor[:15] if a.setor else 'S/N', 
+                str(leitura_inicial.paginas_totais), 
+                str(leitura_final.paginas_totais), 
+                str(consumo)
+            ])
+            total_consumo += consumo
+
+    dados_tabela.append(["", "", "", "", "", "TOTAL GERAL:", f"{total_consumo} pág."])
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4))
+    elementos = []
+    estilos = getSampleStyleSheet()
+    
+    elementos.append(Paragraph(f"Relatório de Faturamento Manual", estilos['Title']))
+    elementos.append(Paragraph(f"<b>Período:</b> {filtros.dataInicio} até {filtros.dataFim}", estilos['Normal']))
+    elementos.append(Spacer(1, 20))
+    
+    tabela = Table(dados_tabela)
+    estilo_tabela = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2563EB")),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+        ('GRID', (0,0), (-1,-1), 1, colors.black),
+        ('FONTNAME', (-2, -1), (-1, -1), 'Helvetica-Bold'),
+        ('TEXTCOLOR', (-1, -1), (-1, -1), colors.HexColor("#dc2626"))
+    ])
+    tabela.setStyle(estilo_tabela)
+    elementos.append(tabela)
+    
+    doc.build(elementos)
+    buffer.seek(0)
+
+    return StreamingResponse(buffer, media_type="application/pdf", headers={
+        "Content-Disposition": f"attachment; filename=Faturamento_{filtros.dataInicio}.pdf"
+    })

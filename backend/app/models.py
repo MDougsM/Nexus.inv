@@ -116,8 +116,13 @@ class AgendamentoRelatorio(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     nome = Column(String, index=True) 
-    secretarias = Column(JSON, default=list) # 🚀 Agora aceita várias!
-    setores = Column(JSON, default=list)     # 🚀 Agora aceita vários!
+    secretarias = Column(JSON, default=list) 
+    setores = Column(JSON, default=list)     
+    
+    # 🚀 NOVOS CAMPOS: Ciclo de Faturamento
+    dia_inicio_ciclo = Column(Integer, default=1)
+    dia_fim_ciclo = Column(Integer, default=30)
+    
     dia_do_mes = Column(Integer)      
     horario = Column(String)          
     emails_destino = Column(Text)     

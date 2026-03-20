@@ -113,7 +113,11 @@ export default function NexusPrint() {
   };
 
   const dispararColeta = async () => {
-    try { await api.post('/api/inventario/agente/comando/enviar'); setRadar({ aberto: true, status: 'BROADCASTING', concluidos: 0 }); } 
+    try { 
+        await api.post('/api/inventario/solicitar_coleta'); 
+        toast.success("📡 Sinal de coleta enviado para os Agentes!"); // <-- ADICIONE ESTA LINHA
+        setRadar({ aberto: true, status: 'BROADCASTING', concluidos: 0 }); 
+    } 
     catch (e) { toast.error("Erro ao enviar comando."); }
   };
 

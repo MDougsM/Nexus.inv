@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/api';
 import { toast } from 'react-toastify';
-import { FaTrash, FaClock, FaPlus, FaCheckSquare, FaSquare, FaFileDownload, FaFileCsv } from 'react-icons/fa';
+import { FaTrash, FaClock, FaPlus, FaCheckSquare, FaSquare, FaFileDownload, FaFileCsv, FaPlay } from 'react-icons/fa';
 
 export default function AbaAgendamentos({ secretarias }) {
   const [agendamentos, setAgendamentos] = useState([]);
@@ -13,9 +13,11 @@ export default function AbaAgendamentos({ secretarias }) {
   
   const [novo, setNovo] = useState({
     nome: '',
+    dia_inicio_ciclo: 1, // NOVO
+    dia_fim_ciclo: 30,   // NOVO
     dia_do_mes: 1,
     horario: '08:00',
-    emails_destino: 'sistema@local' // Valor padrão pois não estamos a enviar e-mail agora
+    emails_destino: 'sistema@local'
   });
 
   const carregarDados = async () => {
@@ -78,13 +80,28 @@ export default function AbaAgendamentos({ secretarias }) {
     } catch (e) { toast.error("Erro ao remover."); }
   };
 
+  const forcarGeracao = async (id) => {
+    try {
+      toast.info("⏳ Gerando relatório...");
+      await api.post(`/api/agendamentos/${id}/gerar-agora`);
+      toast.success("✅ Relatório gerado e salvo no cofre!");
+      carregarDados(); // Recarrega o cofre automaticamente para mostrar o arquivo
+    } catch (e) {
+      toast.error("❌ Erro ao gerar relatório manualmente.");
+    }
+  };
+
   const baixarRelatorioGerado = async (id, nome_relatorio) => {
     try {
       const response = await api.get(`/api/agendamentos/gerados/download/${id}`, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `Faturamento_${nome_relatorio.replace(/ /g, '_')}.csv`);
+      
+      // 🚀 Descobre qual é a extensão pelo nome que salvamos no banco
+      const extensao = nome_relatorio.includes('(PDF)') ? '.pdf' : '.csv';
+      link.setAttribute('download', `Faturamento_${nome_relatorio.replace(/ /g, '_')}${extensao}`);
+      
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -178,7 +195,14 @@ export default function AbaAgendamentos({ secretarias }) {
                       <div className="font-black text-sm text-blue-500">{ag.nome}</div>
                       <div className="text-[10px] font-bold uppercase opacity-60 mt-1" style={{ color: 'var(--text-main)' }}>Dia {ag.dia_do_mes} às {ag.horario}</div>
                     </div>
-                    <button onClick={() => deletarAgendamento(ag.id)} className="p-2 rounded-lg text-red-500 hover:bg-red-500/10 transition-all active:scale-95" title="Cancelar Robô"><FaTrash /></button>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => forcarGeracao(ag.id)} className="p-2 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-all active:scale-95" title="Forçar Geração Agora">
+                        <FaPlay />
+                      </button>
+                      <button onClick={() => deletarAgendamento(ag.id)} className="p-2 rounded-lg text-red-500 hover:bg-red-500/10 transition-all active:scale-95" title="Cancelar Robô">
+                        <FaTrash />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

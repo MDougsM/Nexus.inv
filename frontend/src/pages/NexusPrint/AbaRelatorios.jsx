@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import api from '../../api/api';
 import { toast } from 'react-toastify';
-import { FaFileExcel, FaSearch, FaCheckSquare, FaSquare } from 'react-icons/fa';
+import { FaFileExcel, FaSearch, FaCheckSquare, FaSquare, FaFilePdf } from 'react-icons/fa';
 
 export default function AbaRelatoriosPrint({ secretarias }) {
   const [filtros, setFiltros] = useState({ dataInicio: '', dataFim: '', patrimonio: '' });
@@ -10,7 +10,6 @@ export default function AbaRelatoriosPrint({ secretarias }) {
   const [resultado, setResultado] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Quando escolhe uma secretaria, marca todos os setores dela automaticamente
   const toggleSecretaria = (secNome) => {
     const isSelecionada = secSelecionadas.includes(secNome);
     let novasSecs = isSelecionada ? secSelecionadas.filter(s => s !== secNome) : [...secSelecionadas, secNome];
@@ -55,22 +54,44 @@ export default function AbaRelatoriosPrint({ secretarias }) {
     link.click();
   };
 
+  const exportarPDF = async () => {
+    try {
+      toast.info("⏳ Gerando PDF...");
+      const payload = { ...filtros, secretarias: secSelecionadas, setores: setoresSelecionados };
+      const response = await api.post('/api/inventario/relatorios/faturamento/pdf', payload, { responseType: 'blob' });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Faturamento_Nexus_${filtros.dataInicio}_a_${filtros.dataFim}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success("✅ PDF baixado!");
+    } catch (e) { 
+      toast.error("Erro ao gerar PDF. Verifique se o servidor está online."); 
+    }
+  };
+
   return (
     <div className="animate-fade-in space-y-6">
       <div className="p-6 rounded-2xl border bg-[var(--bg-card)] flex flex-col gap-6" style={{ borderColor: 'var(--border-light)' }}>
         
-        {/* Filtros Básicos */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div><label className="block text-[10px] font-black uppercase opacity-50 mb-1" style={{ color: 'var(--text-main)' }}>Início</label><input type="date" className="w-full p-2.5 rounded-xl border bg-[var(--bg-input)] font-bold outline-none" style={{ color: 'var(--text-main)', borderColor: 'var(--border-light)' }} onChange={e => setFiltros({...filtros, dataInicio: e.target.value})} /></div>
           <div><label className="block text-[10px] font-black uppercase opacity-50 mb-1" style={{ color: 'var(--text-main)' }}>Fim</label><input type="date" className="w-full p-2.5 rounded-xl border bg-[var(--bg-input)] font-bold outline-none" style={{ color: 'var(--text-main)', borderColor: 'var(--border-light)' }} onChange={e => setFiltros({...filtros, dataFim: e.target.value})} /></div>
           <div><label className="block text-[10px] font-black uppercase opacity-50 mb-1" style={{ color: 'var(--text-main)' }}>Patrimônio (Opcional)</label><input type="text" placeholder="Ex: S/P_123" className="w-full p-2.5 rounded-xl border bg-[var(--bg-input)] font-bold outline-none" style={{ color: 'var(--text-main)', borderColor: 'var(--border-light)' }} onChange={e => setFiltros({...filtros, patrimonio: e.target.value})} /></div>
           <div className="flex items-end gap-2">
             <button onClick={buscarRelatorio} className="flex-1 bg-blue-600 text-white p-2.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition-all"><FaSearch /> {loading ? '...' : 'Gerar'}</button>
-            {resultado.length > 0 && <button onClick={exportarCSV} className="bg-emerald-600 text-white p-2.5 rounded-xl font-bold flex items-center justify-center hover:bg-emerald-700 transition-all"><FaFileExcel /></button>}
+            {resultado.length > 0 && (
+              <>
+                <button onClick={exportarCSV} title="Baixar em Excel (CSV)" className="bg-emerald-600 text-white p-2.5 rounded-xl font-bold flex items-center justify-center hover:bg-emerald-700 transition-all"><FaFileExcel /></button>
+                <button onClick={exportarPDF} title="Baixar em PDF" className="bg-red-600 text-white p-2.5 rounded-xl font-bold flex items-center justify-center hover:bg-red-700 transition-all"><FaFilePdf /></button>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Multi-Select de Secretarias e Setores */}
         <div className="border-t pt-4" style={{ borderColor: 'var(--border-light)' }}>
           <label className="block text-[10px] font-black uppercase opacity-50 mb-3" style={{ color: 'var(--text-main)' }}>Filtro de Localização (Selecione um ou mais)</label>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -98,7 +119,6 @@ export default function AbaRelatoriosPrint({ secretarias }) {
 
       </div>
 
-      {/* TABELA DE RESULTADOS... (MANTIDA IGUAL AO CÓDIGO ANTERIOR) */}
       {resultado.length > 0 && (
         <div className="rounded-2xl border overflow-hidden bg-[var(--bg-card)] shadow-sm" style={{ borderColor: 'var(--border-light)' }}>
           <table className="w-full text-left border-collapse">

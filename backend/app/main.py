@@ -1,6 +1,7 @@
 import os
 import json
 import uuid
+import pytz
 from datetime import datetime
 from typing import Optional
 from sqlalchemy import text
@@ -66,7 +67,8 @@ create_initial_data()
 app = FastAPI(title="NEXUS API")
 
 # Inicia o relógio do sistema
-scheduler = BackgroundScheduler()
+fuso_horario = pytz.timezone('America/Campo_Grande')
+scheduler = BackgroundScheduler(timezone=fuso_horario)
 scheduler.start()
 
 # Carrega os relatórios do banco para a memória quando o servidor liga
