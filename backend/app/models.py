@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON, Boolean, Float, DateTime
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.db.database import Base
@@ -66,6 +66,7 @@ class Usuario(Base):
     is_admin = Column(Boolean, default=False)
     nome_exibicao = Column(String, nullable=True)
     avatar = Column(String, default="letras")
+    permissoes = Column(JSON, default=list)
 
 class Transferencia(Base):
     __tablename__ = "transferencias"
@@ -109,3 +110,25 @@ class ComandoAgente(Base):
     status = Column(String, default="PENDENTE") # PENDENTE, CONCLUIDO, ERRO
     data_criacao = Column(DateTime, default=datetime.utcnow)
     data_conclusao = Column(DateTime, nullable=True)
+
+class AgendamentoRelatorio(Base):
+    __tablename__ = "agendamentos_relatorio"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String, index=True) 
+    secretarias = Column(JSON, default=list) # 🚀 Agora aceita várias!
+    setores = Column(JSON, default=list)     # 🚀 Agora aceita vários!
+    dia_do_mes = Column(Integer)      
+    horario = Column(String)          
+    emails_destino = Column(Text)     
+    status = Column(Boolean, default=True) 
+    data_criacao = Column(DateTime, default=datetime.utcnow)
+
+class RelatorioGerado(Base):
+    __tablename__ = "relatorios_gerados"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    nome_relatorio = Column(String, index=True)
+    data_emissao = Column(DateTime, default=datetime.utcnow)
+    caminho_arquivo = Column(String)
+    tamanho_kb = Column(Float)

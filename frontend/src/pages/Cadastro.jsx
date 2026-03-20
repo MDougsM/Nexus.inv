@@ -73,16 +73,31 @@ export default function Cadastro() {
     const termos = buscaGeral.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
     const tipoNome = getNomeTipoEquipamento(a, categorias)?.toLowerCase() || '';
     
+    // 🚀 EXTRAÇÃO SEGURA: Abre o pacote de dados do SNMP (IP, Hostname, SN)
+    let din = {};
+    try {
+      din = typeof a.dados_dinamicos === 'string' ? JSON.parse(a.dados_dinamicos) : (a.dados_dinamicos || {});
+    } catch(e){}
+
+    // Mapeia os campos ocultos, convertendo tudo para minúsculo para a busca não falhar
+    const ipBusca = (din.ip || din.IP || '').toLowerCase();
+    const snBusca = (a.uuid_persistente || din.serial || din.Serial || '').toLowerCase();
+    const hostBusca = (din.hostname || din.Hostname || din.Modelo || a.nome_personalizado || '').toLowerCase();
+
+    // 🚀 A NOVA BUSCA SUPER PODEROSA
     const matchBusca = termos.length === 0 || termos.some(termo => 
-      a.patrimonio.toLowerCase().includes(termo) || 
-      (a.marca && a.marca.toLowerCase().includes(termo)) || 
-      (a.modelo && a.modelo.toLowerCase().includes(termo)) || 
+      (a.patrimonio || '').toLowerCase().includes(termo) || 
+      (a.marca || '').toLowerCase().includes(termo) || 
+      (a.modelo || '').toLowerCase().includes(termo) || 
       tipoNome.includes(termo) ||
-      (a.secretaria && a.secretaria.toLowerCase().includes(termo)) || 
-      (a.setor && a.setor.toLowerCase().includes(termo))              
+      (a.secretaria || '').toLowerCase().includes(termo) || 
+      (a.setor || '').toLowerCase().includes(termo) ||
+      ipBusca.includes(termo) ||   // Busca por IP
+      snBusca.includes(termo) ||   // Busca por SN
+      hostBusca.includes(termo)    // Busca por Nome/Hostname
     );
     
-    // 🧠 NOVA LÓGICA DE FILTRO (Aceita ONLINE, OFFLINE e Status Normais)
+    // 🧠 LÓGICA DE FILTRO STATUS (Mantida intacta)
     let matchStatus = true;
     if (filtroStatus === 'ONLINE' || filtroStatus === 'OFFLINE') {
       let isOnline = false;
@@ -106,19 +121,70 @@ export default function Cadastro() {
   const handleSelectOne = (e, pat) => setSelecionados(prev => e.target.checked ? [...prev, pat] : prev.filter(p => p !== pat));
   const getAtivosSelecionadosObj = () => ativos.filter(a => selecionados.includes(a.patrimonio));
 
+  // 🚀 1. TRADUTOR: Limpa a sujeira de aspas do Python
+  const parseJSONSeguro = (dado) => {
+      if (!dado) return {};
+      if (typeof dado === 'object') return dado;
+      if (typeof dado === 'string') {
+          try { return JSON.parse(dado); } 
+          catch(e1) {
+              try {
+                  let limpo = dado.replace(/'/g, '"').replace(/None/g, 'null').replace(/False/g, 'false').replace(/True/g, 'true');
+                  return JSON.parse(limpo);
+              } catch(e2) { return {}; }
+          }
+      }
+      return {};
+  };
+
+  // 🚀 2. ADAPTADOR UNIVERSAL: Garante que os Modais antigos achem os dados
+  const normalizarDinamicosParaModais = (din, uuid_persistente, modelo) => {
+      const n = { ...din };
+      // Puxa o dado de onde quer que ele esteja
+      n.ip = n.ip || n.IP || n['Endereço IP'] || '';
+      n.hostname = n.hostname || n.Hostname || n.Modelo || modelo || '';
+      n.serial = n.serial || n.Serial || n['Número de Série'] || uuid_persistente || '';
+      n.paginas_totais = n.paginas_totais || n['Páginas Impressas'] || '';
+      n.toner = n.toner || n['% Toner'] || '';
+      n.cilindro = n.cilindro || n['% Drum'] || '';
+
+      // Duplica as chaves com nomes antigos para o Modal não quebrar
+      n.IP = n.ip;
+      n.Hostname = n.hostname;
+      n.Serial = n.serial;
+      n['Páginas Impressas'] = n.paginas_totais;
+      n['% Toner'] = n.toner;
+      n['% Drum'] = n.cilindro;
+
+      return n;
+  };
+
+  // 🚀 3. ABRIR FICHA CORRIGIDO
   const abrirFicha = async (patrimonio) => { 
     try { 
-      // Codifica a barra (/) de S/P_ para a web entender sem quebrar a URL
-      const patrimonioSeguro = encodeURIComponent(patrimonio);
-      const res = await api.get(`/api/inventario/ficha/detalhes/${patrimonioSeguro}`);
-      setModalFicha({ aberto: true, dados: res.data }); 
+      const res = await api.get(`/api/inventario/ficha/detalhes/${encodeURIComponent(patrimonio)}`);
+      let payload = res.data;
+      
+      if (payload.ativo) {
+          let din = parseJSONSeguro(payload.ativo.dados_dinamicos);
+          payload.ativo.dados_dinamicos = normalizarDinamicosParaModais(din, payload.ativo.uuid_persistente, payload.ativo.modelo);
+      }
+      
+      setModalFicha({ aberto: true, dados: payload }); 
     } catch (e) { 
-      toast.error("Erro ao carregar a ficha da máquina."); 
-      console.error(e);
+      toast.error("Erro ao carregar a ficha."); 
+      console.error(e); 
     } 
   };
   
-  const abrirEdicao = (ativo) => { let din = {}; if (typeof ativo.dados_dinamicos === 'string') { try { din = JSON.parse(ativo.dados_dinamicos); } catch(e){} } else if (ativo.dados_dinamicos) { din = ativo.dados_dinamicos; } setModalEdicao({ aberto: true, ativo, form: { ...ativo, dados_dinamicos: din }}); };
+  // 🚀 4. ABRIR EDIÇÃO CORRIGIDO
+  const abrirEdicao = (ativo, e) => { 
+    if(e) e.stopPropagation(); 
+    let din = parseJSONSeguro(ativo.dados_dinamicos);
+    let dinAdaptado = normalizarDinamicosParaModais(din, ativo.uuid_persistente, ativo.modelo);
+    
+    setModalEdicao({ aberto: true, ativo, form: { ...ativo, dados_dinamicos: dinAdaptado }}); 
+  };
 
   const exportarParaExcel = () => {
     if (ativosFiltrados.length === 0) return toast.warn("Nenhum dado para exportar.");

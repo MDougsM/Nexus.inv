@@ -1,6 +1,10 @@
+import os
+import json
+from datetime import datetime
+from typing import Optional, List
+from sqlalchemy import func
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from app.db.database import SessionLocal
 from app.models import Usuario, LogAuditoria
 from pydantic import BaseModel
@@ -28,18 +32,20 @@ def verify_password(plain_password, hashed_password):
         return plain_password == hashed_password
 
 # ==========================================
-# MODELOS DE DADOS (DEVEM FICAR ANTES DAS ROTAS)
+# MODELOS DE DADOS (Pydantic)
 # ==========================================
 class UsuarioCreate(BaseModel):
     username: str
     password: str
     is_admin: bool
+    permissoes: List[str] = [] # 🚀 NOVO CAMPO ADICIONADO AQUI
     usuario_acao: str
 
 class UsuarioUpdate(BaseModel):
     username: str
     password: str = None
     is_admin: bool
+    permissoes: List[str] = [] # 🚀 NOVO CAMPO ADICIONADO AQUI
     usuario_acao: str
     motivo: str
 
@@ -47,7 +53,6 @@ class JustificativaRequest(BaseModel):
     usuario: str
     motivo: str
 
-# 👇 AQUI ESTÃO OS MODELOS QUE ESTAVAM DANDO ERRO NO SEU PRINT
 class PerfilUpdate(BaseModel):
     username: str
     nome_exibicao: str
@@ -68,7 +73,8 @@ def listar_usuarios(db: Session = Depends(get_db)):
         "id": u.id, 
         "username": u.username, 
         "is_admin": u.is_admin,
-        # O getattr evita que o sistema quebre se a coluna ainda não existir no banco
+        # 🚀 O getattr evita que o sistema quebre enquanto o banco atualiza
+        "permissoes": getattr(u, 'permissoes', []) or [], 
         "nome_exibicao": getattr(u, 'nome_exibicao', u.username) or u.username,
         "avatar": getattr(u, 'avatar', 'letras') or 'letras'
     } for u in usuarios]
@@ -82,13 +88,14 @@ def criar_usuario(req: UsuarioCreate, db: Session = Depends(get_db)):
     novo_user = Usuario(
         username=req.username.strip(), 
         password=get_password_hash(req.password), 
-        is_admin=req.is_admin
+        is_admin=req.is_admin,
+        permissoes=req.permissoes # 🚀 SALVANDO AS PERMISSÕES
     )
     db.add(novo_user)
     db.flush()
 
-    nivel = "Administrador" if req.is_admin else "Técnico"
-    db.add(LogAuditoria(usuario=req.usuario_acao, acao="CRIACAO", entidade="Usuário", identificador=req.username, detalhes=f"Criou acesso nível {nivel}"))
+    nivel = "Administrador Mestre" if req.is_admin else "Acesso Restrito"
+    db.add(LogAuditoria(usuario=req.usuario_acao, acao="CRIACAO", entidade="Usuário", identificador=req.username, detalhes=f"Criou acesso nível: {nivel}"))
     db.commit()
     return {"message": "Criado com sucesso"}
 
@@ -127,10 +134,12 @@ def editar_usuario(user_id: int, req: UsuarioUpdate, db: Session = Depends(get_d
 
     user.username = novo_nome
     user.is_admin = req.is_admin
+    user.permissoes = req.permissoes # 🚀 ATUALIZANDO AS PERMISSÕES
+
     if req.password: 
         user.password = get_password_hash(req.password)
 
-    db.add(LogAuditoria(usuario=req.usuario_acao, acao="EDICAO", entidade="Usuário", identificador=novo_nome, detalhes=f"Alterou cadastro de '{nome_antigo}'. Motivo: {req.motivo}"))
+    db.add(LogAuditoria(usuario=req.usuario_acao, acao="EDICAO", entidade="Usuário", identificador=novo_nome, detalhes=f"Alterou permissões/cadastro de '{nome_antigo}'. Motivo: {req.motivo}"))
     db.commit()
     return {"message": "Atualizado"}
 
@@ -164,5 +173,6 @@ def fazer_login(dados: dict, db: Session = Depends(get_db)):
     return {
         "message": "Login efetuado com sucesso!",
         "username": usuario.username,
-        "is_admin": usuario.is_admin
+        "is_admin": usuario.is_admin,
+        "permissoes": getattr(usuario, 'permissoes', []) or [] # 🚀 ENVIANDO PERMISSÕES NO LOGIN
     }

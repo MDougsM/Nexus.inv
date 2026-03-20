@@ -20,7 +20,10 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
 
   const borderStrong = theme === 'light' ? '1.5px solid #b8c5d6' : '1.5px solid #475569';
 
-  // 🧠 A MÁGICA: Função que busca seu rosto e nome real no banco de dados
+  // 🚀 LENDO AS PERMISSÕES SALVAS NO LOGIN
+  const isAdmin = localStorage.getItem('isAdmin') === 'true';
+  const permissoesObj = JSON.parse(localStorage.getItem('permissoes') || '[]');
+
   const carregarPerfil = async () => {
     if (!usuarioAtual) return;
     try {
@@ -29,26 +32,22 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
       if (meuUser) {
         setNomeUsuario(meuUser.nome_exibicao || usuarioAtual);
         setAvatarUsuario(meuUser.avatar || 'letras');
+        // Uma dupla checagem caso o usuário logado perca o Admin no meio da sessão
+        localStorage.setItem('isAdmin', meuUser.is_admin);
+        localStorage.setItem('permissoes', JSON.stringify(meuUser.permissoes || []));
       }
     } catch (e) {
-      console.error("Erro ao buscar perfil para o Header", e);
+      console.error("Erro ao buscar perfil", e);
     }
   };
 
   useEffect(() => {
-    // Carrega assim que a tela abre
     carregarPerfil();
-
-    // Fica escutando o grito da tela de "MeuPerfil" para atualizar ao vivo
-    const atualizarDadosPerfil = () => {
-      carregarPerfil(); 
-    };
-    
+    const atualizarDadosPerfil = () => carregarPerfil(); 
     window.addEventListener('perfilAtualizado', atualizarDadosPerfil);
     return () => window.removeEventListener('perfilAtualizado', atualizarDadosPerfil);
   }, [usuarioAtual]);
 
-  
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
@@ -58,19 +57,13 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
     try {
       const res = await api.get('/api/inventario/');
       const ativos = res.data;
-      
       const mCount = ativos.filter(a => a.status?.toUpperCase() === 'MANUTENÇÃO').length;
       const sCount = ativos.filter(a => a.status?.toUpperCase() === 'SUCATA').length;
-
       setCounts({ manutencao: mCount, sucata: sCount });
 
       const lastSeenTotal = parseInt(localStorage.getItem('lastSeenTotal') || '0');
-      if ((mCount + sCount) > lastSeenTotal) {
-        setHasNewNotif(true);
-      } else {
-        setHasNewNotif(false);
-      }
-    } catch (e) { console.error("Erro ao atualizar notificações"); }
+      setHasNewNotif((mCount + sCount) > lastSeenTotal);
+    } catch (e) {}
   };
 
   useEffect(() => {
@@ -94,15 +87,21 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
 
   const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
 
-  const menuItems = [
-    { path: '/', label: 'Dashboard', icon: '📊' },
-    { path: '/cadastro', label: 'Gestão de Ativos', icon: '💻' },
-    { path: '/nexus-print', label: 'Nexus Print', icon: '🖨️' }, 
-    { path: '/cadastros-base', label: 'Cadastros Base', icon: '📁' },
-    { path: '/auditoria', label: 'Auditoria', icon: '🛡️' },
-    { path: '/config', label: 'Configurações', icon: '⚙️' },
-    { path: '/ajuda', label: 'Central de Ajuda', icon: '📚' },
+  // 🚀 O NOVO MENU FILTRADO POR PERMISSÃO
+  const menuItemsGerais = [
+    { id: 'dashboard', path: '/', label: 'Dashboard', icon: '📊' },
+    { id: 'gestao_ativos', path: '/cadastro', label: 'Gestão de Ativos', icon: '💻' },
+    { id: 'nexus_print', path: '/nexus-print', label: 'Nexus Print', icon: '🖨️' }, 
+    { id: 'cadastros', path: '/cadastros-base', label: 'Cadastros Base', icon: '📁' },
+    { id: 'auditoria', path: '/auditoria', label: 'Auditoria Logs', icon: '🛡️' },
+    { id: 'configuracoes', path: '/config', label: 'Configurações', icon: '⚙️' },
+    { id: 'ajuda', path: '/ajuda', label: 'Central de Ajuda', icon: '📚' },
   ];
+
+  // Regra: Se for admin OU for o menu de Ajuda (livre para todos) OU estiver na lista de permissões, exibe!
+  const menuFiltrado = menuItemsGerais.filter(item => 
+    isAdmin || item.id === 'ajuda' || permissoesObj.includes(item.id)
+  );
 
   return (
     <div className="flex h-screen overflow-hidden text-sm transition-colors duration-300" style={{ backgroundColor: 'var(--bg-page)', color: 'var(--text-main)' }}>
@@ -119,7 +118,8 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
         </div>
         
         <nav className="flex-1 px-3 py-6 space-y-1.5 overflow-y-auto custom-scrollbar">
-          {menuItems.map((item) => (
+          {/* 🚀 Renderizando apenas o Menu Filtrado */}
+          {menuFiltrado.map((item) => (
             <Link key={item.path} to={item.path}
               className={`flex items-center gap-3 py-2.5 rounded-xl transition-all font-bold ${isSidebarOpen ? 'px-4' : 'justify-center'} ${location.pathname === item.path ? 'shadow-md' : 'hover:bg-white/5'}`}
               style={{
@@ -138,7 +138,7 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
           {isSidebarOpen ? (
             <>
               <span className="text-[10px] font-black tracking-[0.2em] text-gray-500 uppercase">Nexus System</span>
-              <span className="text-[9px] font-mono font-bold text-blue-500 mt-1">v5.0.0.0</span>
+              <span className="text-[9px] font-mono font-bold text-blue-500 mt-1">v5.6.0.0</span>
             </>
           ) : (
             <span className="text-[9px] font-mono font-bold text-blue-500">v2.0</span>
@@ -166,36 +166,20 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
           </div>
           
           <div className="flex items-center gap-3">
-
-            {/* BOTÃO TEMA DARK/LIGHT */}
-            <button 
-              onClick={toggleTheme} 
-              className="w-10 h-10 rounded-xl flex items-center justify-center transition-all hover:bg-gray-500/10 shadow-sm text-lg" 
-              style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', borderStyle: 'solid', borderWidth: '1px' }}
-            >
+            <button onClick={toggleTheme} className="w-10 h-10 rounded-xl flex items-center justify-center transition-all hover:bg-gray-500/10 shadow-sm text-lg" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', borderStyle: 'solid', borderWidth: '1px' }}>
               <span style={{ textShadow: theme === 'light' ? '0px 0px 2px rgba(0,0,0,0.4), 0px 2px 5px rgba(0,0,0,0.2)' : 'none' }}>
                 {theme === 'light' ? '🌙' : '☀️'}
               </span>
             </button>
 
-            {/* NOTIFICAÇÃO */}
             <div className="relative">
-              <button onClick={handleOpenNotif} 
-                      className="w-10 h-10 rounded-xl flex items-center justify-center transition-all hover:bg-gray-500/10 relative group shadow-sm" 
-                      style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', borderStyle: 'solid', borderWidth: '1px' }}>
-                
-                <span className="text-xl group-hover:rotate-12 transition-transform" style={{ textShadow: theme === 'light' ? '0px 0px 2px rgba(0,0,0,0.4), 0px 2px 5px rgba(0,0,0,0.2)' : 'none' }}>
-                  🔔
-                </span>
-                
-                {hasNewNotif && (
-                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-red-500 border-2 shadow-sm animate-bounce" style={{ borderColor: 'var(--bg-card)' }}></span>
-                )}
+              <button onClick={handleOpenNotif} className="w-10 h-10 rounded-xl flex items-center justify-center transition-all hover:bg-gray-500/10 relative group shadow-sm" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', borderStyle: 'solid', borderWidth: '1px' }}>
+                <span className="text-xl group-hover:rotate-12 transition-transform" style={{ textShadow: theme === 'light' ? '0px 0px 2px rgba(0,0,0,0.4), 0px 2px 5px rgba(0,0,0,0.2)' : 'none' }}>🔔</span>
+                {hasNewNotif && <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-red-500 border-2 shadow-sm animate-bounce" style={{ borderColor: 'var(--bg-card)' }}></span>}
               </button>
 
               {notifOpen && (
-                <div className="absolute right-0 mt-4 w-80 rounded-2xl border shadow-2xl z-50 overflow-hidden animate-scale-up" 
-                     style={{ backgroundColor: 'var(--bg-card)', border: borderStrong }}>
+                <div className="absolute right-0 mt-4 w-80 rounded-2xl border shadow-2xl z-50 overflow-hidden animate-scale-up" style={{ backgroundColor: 'var(--bg-card)', border: borderStrong }}>
                   <div className="p-4 border-b flex justify-between items-center" style={{ backgroundColor: 'var(--bg-input)', borderBottom: borderStrong }}>
                     <h4 className="font-black text-[10px] uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Notificações</h4>
                     <button onClick={() => setNotifOpen(false)} className="opacity-50 hover:opacity-100">&times;</button>
@@ -234,40 +218,22 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
 
             {/* MENU DE USUÁRIO E PERFIL */}
             <div className="relative">
-              <button onClick={() => setDropdownOpen(!dropdownOpen)} 
-                      className="flex items-center gap-3 p-1.5 pr-4 rounded-2xl shadow-sm transition-all hover:border-blue-400" 
-                      style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', borderStyle: 'solid', borderWidth: '1px' }}>
-                
-                {/* 👽 A FOTO E NOME OFICIAIS AGORA APARECEM AQUI */}
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black shadow-md ${avatarUsuario === 'letras' ? 'bg-gray-900 text-white text-[10px] uppercase' : 'bg-transparent text-lg'}`}
-                     style={{ textShadow: avatarUsuario !== 'letras' && theme === 'light' ? '0px 0px 2px rgba(0,0,0,0.4), 0px 2px 5px rgba(0,0,0,0.2)' : 'none' }}>
-                  {avatarUsuario === 'letras' 
-                    ? (nomeUsuario || localStorage.getItem('usuario') || 'US').substring(0, 2).toUpperCase() 
-                    : avatarUsuario}
+              <button onClick={() => setDropdownOpen(!dropdownOpen)} className="flex items-center gap-3 p-1.5 pr-4 rounded-2xl shadow-sm transition-all hover:border-blue-400" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', borderStyle: 'solid', borderWidth: '1px' }}>
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black shadow-md ${avatarUsuario === 'letras' ? 'bg-gray-900 text-white text-[10px] uppercase' : 'bg-transparent text-lg'}`} style={{ textShadow: avatarUsuario !== 'letras' && theme === 'light' ? '0px 0px 2px rgba(0,0,0,0.4), 0px 2px 5px rgba(0,0,0,0.2)' : 'none' }}>
+                  {avatarUsuario === 'letras' ? (nomeUsuario || localStorage.getItem('usuario') || 'US').substring(0, 2).toUpperCase() : avatarUsuario}
                 </div>
-                
                 <div className="text-left hidden md:block">
                   <div className="text-[12px] font-black tracking-tight capitalize" style={{ color: 'var(--text-main)' }}>{nomeUsuario}</div>
                 </div>
               </button>
 
               {dropdownOpen && (
-                <div className="absolute right-0 top-14 w-52 rounded-2xl border shadow-2xl z-50 overflow-hidden animate-scale-up" 
-                     style={{ backgroundColor: 'var(--bg-card)', border: borderStrong }}>
-                  
-                  <Link to="/perfil" onClick={() => setDropdownOpen(false)} className="flex items-center gap-3 px-4 py-3.5 text-sm font-bold opacity-80 hover:opacity-100 transition-all hover:bg-gray-500/5" style={{ color: 'var(--text-main)' }}>
-                    👤 Meu Perfil
-                  </Link>
-                  
-                  {usuarioAtual === 'admin' && (
-                    <Link to="/config" onClick={() => setDropdownOpen(false)} className="flex items-center gap-3 px-4 py-3.5 text-sm font-bold opacity-80 hover:opacity-100 transition-all hover:bg-gray-500/5" style={{ color: 'var(--text-main)' }}>
-                      ⚙️ Configurações
-                    </Link>
+                <div className="absolute right-0 top-14 w-52 rounded-2xl border shadow-2xl z-50 overflow-hidden animate-scale-up" style={{ backgroundColor: 'var(--bg-card)', border: borderStrong }}>
+                  <Link to="/perfil" onClick={() => setDropdownOpen(false)} className="flex items-center gap-3 px-4 py-3.5 text-sm font-bold opacity-80 hover:opacity-100 transition-all hover:bg-gray-500/5" style={{ color: 'var(--text-main)' }}>👤 Meu Perfil</Link>
+                  {isAdmin && (
+                    <Link to="/config" onClick={() => setDropdownOpen(false)} className="flex items-center gap-3 px-4 py-3.5 text-sm font-bold opacity-80 hover:opacity-100 transition-all hover:bg-gray-500/5" style={{ color: 'var(--text-main)' }}>⚙️ Configurações</Link>
                   )}
-
-                  <button onClick={() => { setDropdownOpen(false); onLogout(); }} className="flex items-center gap-3 w-full text-left px-4 py-3.5 text-sm font-black text-red-500 hover:bg-red-500/10 transition-colors border-t" style={{ borderTop: borderStrong }}>
-                    🚪 Sair do Sistema
-                  </button>
+                  <button onClick={() => { setDropdownOpen(false); onLogout(); }} className="flex items-center gap-3 w-full text-left px-4 py-3.5 text-sm font-black text-red-500 hover:bg-red-500/10 transition-colors border-t" style={{ borderTop: borderStrong }}>🚪 Sair do Sistema</button>
                 </div>
               )}
             </div>

@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
+
 import ConsultaPublica from './pages/ConsultaPublica';
 import Layout from './components/Layout';
 import Login from './pages/Login';

@@ -21,3 +21,16 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 - Corrigido o `Erro 422` ao buscar setores em secretarias que possuíam nomes parcialmente duplicados.
 - Corrigido o erro de compilação da tela vermelha do Vite (`AbaNovoCadastro.jsx` import paths).
 - Corrigido erro de "no such column" ao tentar efetuar login com a base de dados desatualizada.
+
+## [5.6.0.0] - 2026-03-19
+### 🚀 Adicionado (Features)
+* **Controle de Acesso Granular (RBAC):** Novo sistema de permissões onde o administrador mestre pode definir exatamente quais abas cada técnico/usuário pode acessar.
+* **Automação de Relatórios (Robôs):** Implementação do `APScheduler` no backend para geração autônoma de relatórios de faturamento em dias e horários programados.
+* **Cofre de Relatórios:** Nova interface e tabela no banco de dados (`relatorios_gerados`) para armazenar fisicamente os CSVs gerados pelos robôs, permitindo download e exclusão.
+* **Filtros Múltiplos:** Geração de relatórios (manuais e automáticos) agora suporta a seleção de múltiplas Secretarias e Setores simultaneamente via checkboxes.
+* **Inteligência do Sentinel:** O backend agora detecta automaticamente mudanças de IP e trocas de suprimento (saltos maiores que 20% no toner) e gera logs de auditoria silenciosos.
+
+### 🔄 Modificado (Changes)
+* **Menu Lateral Dinâmico:** O `Layout.jsx` agora lê as permissões no `localStorage` e esconde módulos não autorizados em tempo real.
+* **Gestão de Equipe:** Tela de usuários totalmente reformulada com modais interativos para gestão de acessos e concessão de poderes de Admin.
+* Estrutura da `AbaAgendamentos` criada e integrada ao Nexus Print.

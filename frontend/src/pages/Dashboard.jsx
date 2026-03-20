@@ -10,12 +10,13 @@ export default function Dashboard() {
   const [categoriasTotais, setCategoriasTotais] = useState([]);
 
   const [stats, setStats] = useState({ total: 0, ativos: 0, manutencao: 0, sucata: 0, online: 0, desaparecidos: 0 });
-  const [printStats, setPrintStats] = useState({ total: 0, critico: 0, paginas: 0, online: 0 }); 
   const [dadosStatus, setDadosStatus] = useState([]);
   const [dadosCategoria, setDadosCategoria] = useState([]);
-  const [dadosSecretariaPrint, setDadosSecretariaPrint] = useState([]); // NOVO ESTADO: Impressoras por Secretaria
   const [logsRecentes, setLogsRecentes] = useState([]); 
   const [loading, setLoading] = useState(true);
+
+  // 🚀 NOVO ESTADO: Filtro para a aba Nexus Print
+  const [filtroSecretaria, setFiltroSecretaria] = useState('Todas');
   
   const navigate = useNavigate();
   const borderStrong = { border: '1.5px solid var(--border-light)', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' };
@@ -36,9 +37,7 @@ export default function Dashboard() {
       setLogsRecentes(resAuditoria.data.reverse().slice(0, 8));
 
       let a = 0, m = 0, s = 0, online = 0, desaparecidos = 0; 
-      let pTotal = 0, pCritico = 0, pPaginas = 0, pOnline = 0; 
       let contagemCat = {};
-      let contagemSecPrint = {}; // Contador de Impressoras por Secretaria
       
       const agora = new Date();
       const limiteOnlineDias = 3; 
@@ -50,16 +49,12 @@ export default function Dashboard() {
         else if (st === 'MANUTENÇÃO') m++;
         else if (st === 'SUCATA') s++;
 
-        let isOnline = false;
         if (item.ultima_comunicacao) {
           const dataCom = new Date(item.ultima_comunicacao + 'Z');
           const diffMinutos = (agora - dataCom) / (1000 * 60);
           const diffDias = diffMinutos / (60 * 24);
 
-          if (diffDias < limiteOnlineDias) {
-            online++;
-            isOnline = true;
-          }
+          if (diffDias < limiteOnlineDias) online++;
           if (diffDias > limiteOfflineDias) desaparecidos++;
         } else {
           desaparecidos++; 
@@ -67,29 +62,9 @@ export default function Dashboard() {
 
         const catName = categorias.find(c => c.id === item.categoria_id)?.nome || 'Sem Categoria';
         contagemCat[catName] = (contagemCat[catName] || 0) + 1;
-
-        // 🖨️ LÓGICA DE IMPRESSORAS E SECRETARIAS
-        if (catName.toUpperCase() === 'IMPRESSORA' || item.tipo?.toUpperCase() === 'IMPRESSORA') {
-          pTotal++;
-          if (isOnline) pOnline++;
-
-          // Conta as impressoras por secretaria
-          const secName = item.secretaria || 'Não Informada';
-          contagemSecPrint[secName] = (contagemSecPrint[secName] || 0) + 1;
-          
-          let specs = {};
-          try { specs = typeof item.especificacoes === 'string' ? JSON.parse(item.especificacoes) : (item.especificacoes || {}); } catch(e) {}
-          
-          if (specs.paginas_totais) pPaginas += parseInt(specs.paginas_totais) || 0;
-          if (specs.toner && specs.toner !== 'N/A' && specs.toner.includes('%')) {
-            const tonerVal = parseFloat(specs.toner.replace('%', ''));
-            if (tonerVal <= 15) pCritico++; 
-          }
-        }
       });
 
       setStats({ total: ativos.length, ativos: a, manutencao: m, sucata: s, online: online, desaparecidos: desaparecidos });
-      setPrintStats({ total: pTotal, critico: pCritico, paginas: pPaginas, online: pOnline });
 
       setDadosStatus([
         { name: 'Ativos', value: a, color: '#10b981' }, 
@@ -102,12 +77,6 @@ export default function Dashboard() {
         .sort((x, y) => y.Quantidade - x.Quantidade)
         .slice(0, 5);
       setDadosCategoria(topCategorias);
-
-      // Prepara os dados para o novo gráfico de Secretarias
-      const topSecretariasPrint = Object.keys(contagemSecPrint)
-        .map(k => ({ name: k, Quantidade: contagemSecPrint[k] }))
-        .sort((x, y) => y.Quantidade - x.Quantidade);
-      setDadosSecretariaPrint(topSecretariasPrint);
 
     } catch (e) {
       console.error(e);
@@ -132,6 +101,62 @@ export default function Dashboard() {
     if (a.includes('ALERTA')) return { i: '🚨', c: 'text-red-500 bg-red-500/10 border-red-500/20 animate-pulse' };
     return { i: '📌', c: 'text-gray-500 bg-gray-500/10 border-gray-500/20' };
   };
+
+  // 🚀 LÓGICA DINÂMICA: Calcula os dados da aba de Impressão baseada no Filtro
+  const impressorasRaw = ativosTotais.filter(item => {
+    const catName = (categoriasTotais.find(c => c.id === item.categoria_id)?.nome || '').toUpperCase();
+    
+    // 🚀 O TRUQUE: Lê a alma da máquina. Se tiver Toner ou Cilindro, é impressora e vai pro painel!
+    let din = {};
+    try { 
+        din = typeof item.dados_dinamicos === 'string' ? JSON.parse(item.dados_dinamicos.replace(/'/g, '"').replace(/None/g, 'null')) : (item.dados_dinamicos || {}); 
+    } catch(e) {}
+    
+    const temToner = din.toner || din['% Toner'] || din.cilindro || din['% Drum'];
+
+    return catName.includes('IMPRESSORA') || catName.includes('MULTIFUNCIONAL') || temToner;
+  });
+
+  const listaTodasSecretarias = [...new Set(impressorasRaw.map(i => i.secretaria || 'Não Informada'))].sort();
+  const impressorasFiltradas = filtroSecretaria === 'Todas' ? impressorasRaw : impressorasRaw.filter(i => (i.secretaria || 'Não Informada') === filtroSecretaria);
+
+  let pTotal = 0, pOnline = 0, pCritico = 0, pPaginas = 0;
+  let contagemSecPrint = {};
+  let detalheSec = {};
+
+  const agoraData = new Date();
+  impressorasFiltradas.forEach(item => {
+    pTotal++;
+    
+    // Status Online
+    if (item.ultima_comunicacao) {
+      if ((agoraData - new Date(item.ultima_comunicacao + 'Z')) / (1000 * 60 * 60 * 24) < 3) pOnline++;
+    }
+
+    // Secretarias
+    const secName = item.secretaria || 'Não Informada';
+    contagemSecPrint[secName] = (contagemSecPrint[secName] || 0) + 1;
+    if (!detalheSec[secName]) detalheSec[secName] = { secretaria: secName, impressoras: 0, paginas_totais: 0 };
+    detalheSec[secName].impressoras++;
+
+    // Lendo Specs JSON de forma segura
+    let specs = {};
+    try { specs = typeof item.especificacoes === 'string' ? JSON.parse(item.especificacoes) : (item.especificacoes || {}); } catch(e) {}
+    try { 
+      let din = typeof item.dados_dinamicos === 'string' ? JSON.parse(item.dados_dinamicos.replace(/'/g, '"').replace(/None/g, 'null')) : (item.dados_dinamicos || {}); 
+      specs = { ...specs, ...din };
+    } catch(e) {}
+
+    // Páginas e Toner
+    if (specs.paginas_totais || specs['Páginas Impressas']) pPaginas += parseInt(specs.paginas_totais || specs['Páginas Impressas']) || 0;
+    let toner = specs.toner || specs['% Toner'];
+    if (toner && toner !== 'N/A' && typeof toner === 'string' && toner.includes('%')) {
+      if (parseFloat(toner.replace('%', '')) <= 15) pCritico++;
+    }
+  });
+
+  const chartSecPrint = Object.keys(contagemSecPrint).map(k => ({ name: k, Quantidade: contagemSecPrint[k] })).sort((a,b) => b.Quantidade - a.Quantidade);
+  const tableSecPrint = Object.values(detalheSec).sort((a,b) => b.paginas_totais - a.paginas_totais);
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center h-full pt-20 animate-pulse">
@@ -165,6 +190,7 @@ export default function Dashboard() {
         </button>
       </div>
 
+      {/* ABA GERAL (INTACTA) */}
       {abaAtiva === 'geral' && (
         <div className="space-y-8 animate-fade-in">
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
@@ -323,17 +349,32 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* A NOVA ABA DE IMPRESSÃO */}
+      {/* 🚀 A NOVA ABA DE IMPRESSÃO (DINÂMICA) */}
       {abaAtiva === 'impressao' && (
         <div className="space-y-8 animate-fade-in">
+          
+          {/* SEÇÃO DE FILTROS */}
+          <div className="p-6 rounded-3xl border flex flex-col md:flex-row md:items-center justify-between gap-5" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
+              <h4 className="text-[11px] font-black uppercase text-blue-500 tracking-[2px] mb-0 flex items-center gap-2">🔍 FILTRAR PAINEL</h4>
+              <select 
+                  className="w-full md:max-w-xs px-5 py-3 rounded-2xl border text-sm font-bold focus:ring-2 outline-none transition-all cursor-pointer" 
+                  style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} 
+                  value={filtroSecretaria} 
+                  onChange={(e) => setFiltroSecretaria(e.target.value)}
+              >
+                  <option value="Todas">Todas as Secretarias</option>
+                  {listaTodasSecretarias.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+          </div>
+
+          {/* CAIXINHAS DINÂMICAS */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            
             <div className="p-6 rounded-3xl transition-all" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-blue-500 text-2xl shadow-inner border" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>🖨️</div>
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-muted)' }}>Impressoras Monitoradas</p>
-                  <h3 className="text-3xl font-black tracking-tighter" style={{ color: 'var(--text-main)' }}>{printStats.total}</h3>
+                  <h3 className="text-3xl font-black tracking-tighter" style={{ color: 'var(--text-main)' }}>{pTotal}</h3>
                 </div>
               </div>
             </div>
@@ -343,7 +384,7 @@ export default function Dashboard() {
                 <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-emerald-500 text-2xl shadow-inner border" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>📡</div>
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-muted)' }}>Status Online (Ativas)</p>
-                  <h3 className="text-3xl font-black tracking-tighter text-emerald-500">{printStats.online}</h3>
+                  <h3 className="text-3xl font-black tracking-tighter text-emerald-500">{pOnline}</h3>
                 </div>
               </div>
             </div>
@@ -355,7 +396,7 @@ export default function Dashboard() {
                 </div>
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-muted)' }}>Toner Crítico (&lt; 15%)</p>
-                  <h3 className="text-3xl font-black tracking-tighter text-red-500">{printStats.critico}</h3>
+                  <h3 className="text-3xl font-black tracking-tighter text-red-500">{pCritico}</h3>
                 </div>
               </div>
             </div>
@@ -365,46 +406,81 @@ export default function Dashboard() {
                 <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-amber-500 text-2xl shadow-inner border" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>📄</div>
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-muted)' }}>Total Páginas Impressas</p>
-                  <h3 className="text-3xl font-black tracking-tighter text-amber-500">{printStats.paginas.toLocaleString('pt-BR')}</h3>
+                  <h3 className="text-3xl font-black tracking-tighter text-amber-500">{pPaginas.toLocaleString('pt-BR')}</h3>
                 </div>
               </div>
             </div>
-
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             
-            {/* GRÁFICO: DISTRIBUIÇÃO DE IMPRESSORAS POR SECRETARIA */}
-            <div className="p-8 rounded-3xl" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
-              <div className="flex justify-between items-center mb-6">
-                <h4 className="text-[11px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-muted)' }}>Volume por Secretaria</h4>
-              </div>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={dadosSecretariaPrint} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
-                    <XAxis type="number" hide />
-                    <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fontSize: 11, fill: '#94a3b8', fontWeight: '900'}} width={130} />
-                    <Tooltip cursor={{fill: 'rgba(150,150,150,0.1)'}} contentStyle={{ borderRadius: '16px', border: '1px solid var(--border-light)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }} />
-                    <Bar dataKey="Quantidade" radius={[0, 8, 8, 0]} barSize={20}>
-                      {dadosSecretariaPrint.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={['#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899'][index % 5]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+            {/* TABELA DE VOLUME DE IMPRESSÕES */}
+            <div className="p-8 rounded-3xl space-y-6" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
+                <div className="flex items-center justify-between">
+                    <h4 className="text-[11px] font-black uppercase text-blue-500 tracking-[2px]">🏢 Volume de Impressões por Secretaria</h4>
+                </div>
+                <div className="overflow-x-auto max-h-[300px] custom-scrollbar">
+                    <table className="w-full text-sm">
+                        <thead className="border-b sticky top-0 bg-[var(--bg-card)] z-10 text-[var(--text-muted)] text-[11px] font-black uppercase tracking-widest" style={{ borderColor: 'var(--border-light)' }}>
+                            <tr>
+                                <th className="px-4 py-3 text-left">Secretaria</th>
+                                <th className="px-4 py-3 text-right">Qtd</th>
+                                <th className="px-4 py-3 text-right">Páginas</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {tableSecPrint.map((item) => (
+                                <tr key={item.secretaria} className="border-b last:border-0 hover:bg-black/5 transition-colors" style={{ borderColor: 'var(--border-light)' }}>
+                                    <td className="px-4 py-4 font-bold text-[var(--text-main)]">{item.secretaria}</td>
+                                    <td className="px-4 py-4 text-right font-black text-orange-500 text-base">{item.impressoras}</td>
+                                    <td className="px-4 py-4 text-right font-black text-[var(--text-main)] opacity-80 text-base">{item.paginas_totais.toLocaleString('pt-BR')}</td>
+                                </tr>
+                            ))}
+                            {tableSecPrint.length === 0 && (
+                                <tr>
+                                    <td colSpan="3" className="text-center py-6 text-[var(--text-muted)] italic opacity-70">Nenhuma secretaria encontrada.</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
-            {/* CALL TO ACTION: ABRIR A CENTRAL */}
-            <div className="p-8 rounded-3xl flex flex-col justify-center items-start" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
-               <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-blue-500 text-3xl shadow-inner border mb-6" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>🖨️</div>
-               <h4 className="text-xl font-black mb-2" style={{ color: 'var(--text-main)' }}>Central de Impressão</h4>
-               <p className="text-sm opacity-80 mb-6 leading-relaxed" style={{ color: 'var(--text-main)' }}>
-                 Acesse o painel dedicado para visualizar os níveis de toner, status de rede em tempo real, peças de desgaste (cilindro) e gerenciar a movimentação do seu parque de impressão.
-               </p>
-               <button onClick={() => navigate('/nexus-print')} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-black hover:bg-blue-700 hover:-translate-y-1 transition-all shadow-lg shadow-blue-500/30 active:scale-95">
-                 Acessar Nexus Print Completo ➔
-               </button>
+            <div className="space-y-6">
+              {/* GRÁFICO: DISTRIBUIÇÃO DE IMPRESSORAS POR SECRETARIA */}
+              <div className="p-8 rounded-3xl" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
+                <div className="flex justify-between items-center mb-6">
+                  <h4 className="text-[11px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-muted)' }}>Top Impressoras (Secretarias)</h4>
+                </div>
+                <div className="h-40">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartSecPrint.slice(0, 5)} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                      <XAxis type="number" hide />
+                      <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fontSize: 11, fill: '#94a3b8', fontWeight: '900'}} width={130} />
+                      <Tooltip cursor={{fill: 'rgba(150,150,150,0.1)'}} contentStyle={{ borderRadius: '16px', border: '1px solid var(--border-light)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }} />
+                      <Bar dataKey="Quantidade" radius={[0, 8, 8, 0]} barSize={15}>
+                        {chartSecPrint.slice(0, 5).map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={['#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899'][index % 5]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* CALL TO ACTION: ABRIR A CENTRAL */}
+              <div className="p-8 rounded-3xl flex flex-col justify-center items-start" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
+                  <div className="flex items-center gap-4 mb-2">
+                     <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-blue-500 text-2xl shadow-inner border" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>🖨️</div>
+                     <h4 className="text-xl font-black" style={{ color: 'var(--text-main)' }}>Central de Impressão</h4>
+                  </div>
+                  <p className="text-sm opacity-80 mb-4 leading-relaxed" style={{ color: 'var(--text-main)' }}>
+                    Visualize os níveis de toner, status de rede e gerencie a movimentação do seu parque.
+                  </p>
+                  <button onClick={() => navigate('/nexus-print')} className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-black hover:bg-blue-700 hover:-translate-y-1 transition-all shadow-lg shadow-blue-500/30 active:scale-95">
+                    Acessar Nexus Print ➔
+                  </button>
+              </div>
             </div>
 
           </div>

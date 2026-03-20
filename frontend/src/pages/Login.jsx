@@ -15,18 +15,18 @@ export default function Login() {
     
     setLoading(true);
     try {
-      // Faz o pedido à rota que acabámos de criar no backend
       const res = await api.post('/api/usuarios/login', { username, password });
       
       // Guarda os dados da sessão no navegador
       localStorage.setItem('usuario', res.data.username);
       localStorage.setItem('isAdmin', res.data.is_admin);
+      // 🚀 SALVA O ARRAY DE PERMISSÕES DO USUÁRIO
+      localStorage.setItem('permissoes', JSON.stringify(res.data.permissoes || [])); 
       
       toast.success(res.data.message);
       
-      // Redireciona para o Dashboard ou Cadastro
       setTimeout(() => {
-        navigate('/cadastro'); // ou '/' se tiver uma página inicial de dashboard
+        navigate('/cadastro'); // ou '/'
       }, 500);
 
     } catch (e) {
