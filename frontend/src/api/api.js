@@ -1,8 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  // O Vite exige o prefixo VITE_ para reconhecer variáveis de ambiente
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8001',
+  baseURL: import.meta.env.VITE_API_URL
 });
 
 api.interceptors.request.use((config) => {

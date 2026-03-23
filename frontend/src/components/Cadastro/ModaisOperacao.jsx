@@ -60,9 +60,30 @@ export default function ModaisOperacao({
   const confirmarTransferenciaMassa = async () => {
     if (!formTransfer.nova_secretaria || !formTransfer.novo_setor || !formTransfer.motivo) return toast.warn("Preencha todos os campos.");
     try {
-      const promises = modalTransferencia.ativos.map(ativo => api.post('/api/transferencias/', { patrimonio: ativo.patrimonio, nova_secretaria: formTransfer.nova_secretaria, novo_setor: formTransfer.novo_setor, motivo: formTransfer.motivo, usuario_acao: usuarioAtual }));
-      await Promise.all(promises); toast.success(`Transferido(s)!`); setModalTransferencia({ aberto: false, ativos: [] }); setFormTransfer({ nova_secretaria: '', novo_setor: '', motivo: '' }); setSecSelecionadaId(''); setSelecionados([]); carregarDados();
-    } catch (e) { toast.error("Erro ao transferir."); }
+      const promises = modalTransferencia.ativos.map(ativo => {
+        // 🚀 CORREÇÃO DO 422: Verifica se o modal recebeu o objeto inteiro ou só a string do patrimônio
+        const patrimonioTratado = typeof ativo === 'string' ? ativo : ativo.patrimonio;
+        
+        return api.post('/api/transferencias/', { 
+            patrimonio: patrimonioTratado, 
+            nova_secretaria: formTransfer.nova_secretaria, 
+            novo_setor: formTransfer.novo_setor, 
+            motivo: formTransfer.motivo, 
+            usuario_acao: usuarioAtual 
+        });
+      });
+      
+      await Promise.all(promises); 
+      toast.success(`Transferido(s)!`); 
+      setModalTransferencia({ aberto: false, ativos: [] }); 
+      setFormTransfer({ nova_secretaria: '', novo_setor: '', motivo: '' }); 
+      setSecSelecionadaId(''); 
+      setSelecionados([]); 
+      carregarDados();
+    } catch (e) { 
+      toast.error("Erro ao transferir."); 
+      console.error(e);
+    }
   };
 
   const imprimirFicha = () => {
@@ -274,11 +295,48 @@ export default function ModaisOperacao({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setModalTransferencia({ aberto: false, ativos: [] })}>
           <div className="w-full max-w-lg rounded-xl shadow-2xl border p-6" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }} onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold" style={{ color: 'var(--text-main)' }}>Transferir de Local</h3>
-            <p className="text-sm font-mono mt-1 mb-4 font-bold" style={{ color: 'var(--color-blue)' }}>{modalTransferencia.ativos.length === 1 ? `Patrimônio: ${modalTransferencia.ativos[0].patrimonio}` : `LOTE: ${modalTransferencia.ativos.length} itens selecionados`}</p>
+            <p className="text-sm font-mono mt-1 mb-4 font-bold" style={{ color: 'var(--color-blue)' }}>
+              {modalTransferencia.ativos.length === 1 
+                ? `Patrimônio: ${typeof modalTransferencia.ativos[0] === 'string' ? modalTransferencia.ativos[0] : modalTransferencia.ativos[0].patrimonio}` 
+                : `LOTE: ${modalTransferencia.ativos.length} itens selecionados`}
+            </p>
             <div className="space-y-4">
               <div><label className="block text-xs font-bold mb-1" style={{ color: 'var(--text-muted)' }}>NOVA SECRETARIA DESTINO</label><select className="w-full p-3 rounded-lg border outline-none" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} value={secSelecionadaId} onChange={handleSecretariaTransfer}><option value="">Selecione...</option>{secretarias.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></div>
               <div><label className="block text-xs font-bold mb-1" style={{ color: 'var(--text-muted)' }}>NOVO SETOR DESTINO</label><select className="w-full p-3 rounded-lg border outline-none disabled:opacity-50" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} value={formTransfer.novo_setor} onChange={e => setFormTransfer({...formTransfer, novo_setor: e.target.value})} disabled={setoresTransfer.length === 0}><option value="">Selecione...</option>{setoresTransfer.map(s => <option key={s.id} value={s.nome}>{s.nome}</option>)}</select></div>
-              <div><label className="block text-xs font-bold mb-1" style={{ color: 'var(--text-muted)' }}>MOTIVO DA TRANSFERÊNCIA *</label><textarea className="w-full p-3 rounded-lg border outline-none min-h-[80px]" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} value={formTransfer.motivo} onChange={e => setFormTransfer({...formTransfer, motivo: e.target.value})} /></div>
+              
+              {/* 🚀 CAIXA DE MOTIVO COM RESPOSTAS RÁPIDAS (Dropdown) */}
+              <div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1">
+                  <label className="block text-xs font-bold" style={{ color: 'var(--text-muted)' }}>MOTIVO DA TRANSFERÊNCIA *</label>
+                  <select 
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        const textoAtual = formTransfer.motivo.trim() ? `${formTransfer.motivo} - ` : '';
+                        setFormTransfer({...formTransfer, motivo: textoAtual + e.target.value});
+                        e.target.value = ""; 
+                      }
+                    }}
+                    className="text-[10px] p-1.5 rounded-lg border font-bold outline-none cursor-pointer hover:bg-black/5 transition-all shadow-sm"
+                    style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}
+                  >
+                    <option value="">⚡ Respostas Rápidas...</option>
+                    <option value="Remanejamento de Setor">Remanejamento de Setor</option>
+                    <option value="Substituição de Equipamento">Substituição de Equipamento</option>
+                    <option value="Atendimento a Chamado (O.S)">Atendimento a Chamado (O.S)</option>
+                    <option value="Reestruturação Física">Reestruturação Física</option>
+                    <option value="Correção de Cadastro">Correção de Cadastro</option>
+                    <option value="Devolução para Estoque">Devolução para Estoque</option>
+                  </select>
+                </div>
+                <textarea 
+                  placeholder="Selecione uma resposta rápida ou detalhe a transferência..."
+                  className="w-full p-3 rounded-lg border outline-none min-h-[80px]" 
+                  style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} 
+                  value={formTransfer.motivo} 
+                  onChange={e => setFormTransfer({...formTransfer, motivo: e.target.value})} 
+                />
+              </div>
+
             </div>
             <div className="flex gap-3 justify-end mt-6 border-t pt-4" style={{ borderColor: 'var(--border-light)' }}>
               <button onClick={() => setModalTransferencia({ aberto: false, ativos: [] })} className="px-4 py-2 font-bold" style={{ color: 'var(--text-muted)' }}>Cancelar</button>

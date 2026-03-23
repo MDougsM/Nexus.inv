@@ -4,13 +4,14 @@ import api from '../api/api';
 
 export default function AbaNovoCadastro({ 
   categorias, secretarias, usuarioAtual, carregarDados, setAbaAtiva, 
-  ativoClonado, setAtivoClonado, ativos // 🧠 <- Agora ele recebe os ativos para poder contar!
+  ativoClonado, setAtivoClonado, ativos 
 }) {
   const [formNovo, setFormNovo] = useState({
     patrimonio: '',
     categoria_id: '',
     marca: '',
     modelo: '',
+    nome_personalizado: '', 
     dados_dinamicos: {}
   });
   
@@ -34,6 +35,7 @@ export default function AbaNovoCadastro({
         categoria_id: ativoClonado.categoria_id,
         marca: ativoClonado.marca || '',
         modelo: ativoClonado.modelo || '',
+        nome_personalizado: ativoClonado.nome_personalizado || '', 
         dados_dinamicos: dinDinamicos
       });
 
@@ -49,7 +51,7 @@ export default function AbaNovoCadastro({
   }, [ativoClonado, secretarias]);
 
   const limparFormNovo = () => {
-    setFormNovo({ patrimonio: '', categoria_id: '', marca: '', modelo: '', dados_dinamicos: {} });
+    setFormNovo({ patrimonio: '', categoria_id: '', marca: '', modelo: '', nome_personalizado: '', dados_dinamicos: {} });
     setSecIdNovo(''); setSetorNovo(''); setSetoresNovo([]);
     if (setAtivoClonado) setAtivoClonado(null); 
   };
@@ -70,15 +72,11 @@ export default function AbaNovoCadastro({
     if (!formNovo.categoria_id) return toast.warn("Selecione o tipo de equipamento.");
     if (!secIdNovo || !setorNovo) return toast.warn("Selecione o local.");
 
-    // 🧠 GERAÇÃO AUTOMÁTICA DE PATRIMÔNIO (S/P_XX)
     let patrimonioFinal = formNovo.patrimonio.trim();
     
     if (!patrimonioFinal) {
       if (ativos && ativos.length > 0) {
-        // Encontra todos os patrimônios que começam com S/P_
         const spAtivos = ativos.filter(a => a.patrimonio && a.patrimonio.startsWith('S/P_'));
-        
-        // Pega só os números para descobrir qual é o maior
         const numeros = spAtivos.map(a => {
           const numPart = a.patrimonio.split('_')[1];
           return parseInt(numPart);
@@ -87,14 +85,14 @@ export default function AbaNovoCadastro({
         const maxNumero = numeros.length > 0 ? Math.max(...numeros) : 0;
         patrimonioFinal = `S/P_${maxNumero + 1}`;
       } else {
-        patrimonioFinal = `S/P_1`; // Caso seja a primeira máquina do sistema
+        patrimonioFinal = `S/P_1`; 
       }
       toast.info(`Patrimônio gerado automaticamente: ${patrimonioFinal}`);
     }
 
     const payload = {
       ...formNovo,
-      patrimonio: patrimonioFinal, // <- Envia o patrimônio finalizado
+      patrimonio: patrimonioFinal,
       secretaria: secretarias.find(s => s.id == secIdNovo)?.nome,
       setor: setorNovo,
       status: 'ATIVO',
@@ -103,7 +101,6 @@ export default function AbaNovoCadastro({
 
     try {
       await api.post('/api/inventario/', payload);
-      
       toast.success("✅ Ativo cadastrado com sucesso!");
       limparFormNovo();
       carregarDados();
@@ -132,10 +129,14 @@ export default function AbaNovoCadastro({
     }
   }
 
+  // 🚀 ORDENAÇÃO ALFABÉTICA DOS DROPDOWNS
+  const categoriasOrdenadas = [...categorias].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  const secretariasOrdenadas = [...secretarias].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  const setoresOrdenados = [...setoresNovo].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-fade-in pb-10 mt-4">
       
-      {/* CABEÇALHO PREMIUM */}
       <div className="flex items-center gap-4 border-b pb-6" style={{ borderColor: 'var(--border-light)' }}>
         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-lg border ${ativoClonado ? 'bg-blue-600 border-blue-500/50' : 'bg-green-600 border-green-500/50'}`} style={{ color: '#fff' }}>
           {ativoClonado ? '📋' : '✨'}
@@ -180,7 +181,8 @@ export default function AbaNovoCadastro({
               <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Tipo de Equipamento *</label>
               <select required value={formNovo.categoria_id} onChange={handleMudarCategoriaNovo} className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm cursor-pointer" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
                 <option value="">Selecione a Categoria...</option>
-                {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                {/* 🚀 AQUI ELE USA A LISTA ORDENADA */}
+                {categoriasOrdenadas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select>
             </div>
           </div>
@@ -197,7 +199,7 @@ export default function AbaNovoCadastro({
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div>
                 <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Marca do Equipamento</label>
                 <input value={formNovo.marca} onChange={e => setFormNovo({...formNovo, marca: e.target.value})} placeholder="Ex: Dell, HP, Mercusys..." className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}/>
@@ -206,6 +208,11 @@ export default function AbaNovoCadastro({
                 <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Modelo</label>
                 <input value={formNovo.modelo} onChange={e => setFormNovo({...formNovo, modelo: e.target.value})} placeholder="Ex: Optiplex 3020..." className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}/>
               </div>
+            </div>
+
+            <div className="mb-8">
+                <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Nome Personalizado / Apelido (Opcional)</label>
+                <input value={formNovo.nome_personalizado} onChange={e => setFormNovo({...formNovo, nome_personalizado: e.target.value})} placeholder="Ex: Impressora da Recepção, Servidor de Arquivos..." className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}/>
             </div>
 
             {camposFormulario.length > 0 && (
@@ -245,14 +252,16 @@ export default function AbaNovoCadastro({
               <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Secretaria / Prédio *</label>
               <select required value={secIdNovo} onChange={handleMudarSecretariaNovo} className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm cursor-pointer" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
                 <option value="">Selecione o Local...</option>
-                {secretarias.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+                {/* 🚀 AQUI ELE USA A LISTA ORDENADA */}
+                {secretariasOrdenadas.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Setor / Sala *</label>
               <select required value={setorNovo} onChange={e => setSetorNovo(e.target.value)} disabled={setoresNovo.length === 0} className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm disabled:opacity-50 cursor-pointer" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
                 <option value="">Selecione o Setor...</option>
-                {setoresNovo.map(s => <option key={s.id} value={s.nome}>{s.nome}</option>)}
+                {/* 🚀 AQUI ELE USA A LISTA ORDENADA */}
+                {setoresOrdenados.map(s => <option key={s.id} value={s.nome}>{s.nome}</option>)}
               </select>
             </div>
           </div>

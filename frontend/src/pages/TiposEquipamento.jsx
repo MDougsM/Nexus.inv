@@ -8,11 +8,9 @@ export default function TiposEquipamento() {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
 
-  // Estados do formulário em linha (Padrão da Imagem)
   const [novoNome, setNovoNome] = useState('');
   const [novosCampos, setNovosCampos] = useState('');
 
-  // Modal apenas para Edição
   const [modalEdit, setModalEdit] = useState({ aberto: false, id: null, nome: '', campos_texto: '' });
 
   const carregarDados = async () => {
@@ -31,9 +29,6 @@ export default function TiposEquipamento() {
     return texto.split(',').map(c => ({ nome: c.trim(), tipo: 'text' })).filter(c => c.nome !== '');
   };
 
-  // ==========================================
-  // ADICIONAR NOVO TIPO (Em linha)
-  // ==========================================
   const handleAdicionar = async () => {
     if (!novoNome) return toast.warn("Preencha o nome do tipo de equipamento.");
     try {
@@ -45,9 +40,6 @@ export default function TiposEquipamento() {
     } catch (e) { toast.error("Erro ao adicionar tipo."); }
   };
 
-  // ==========================================
-  // EDITAR TIPO
-  // ==========================================
   const abrirEdicao = (cat) => {
     let textoCampos = '';
     if (cat.campos_config) {
@@ -72,9 +64,6 @@ export default function TiposEquipamento() {
     } catch (e) { toast.error("Erro ao atualizar."); }
   };
 
-  // ==========================================
-  // EXCLUIR TIPO
-  // ==========================================
   const handleDeletar = async (id) => {
     if(!window.confirm("Deseja realmente excluir este tipo? Equipamentos associados a ele podem perder a referência.")) return;
     try {
@@ -86,16 +75,13 @@ export default function TiposEquipamento() {
     }
   };
 
-  // Filtro de Busca
   const categoriasFiltradas = categorias.filter(c => c.nome.toLowerCase().includes(busca.toLowerCase()));
 
   return (
     <div className="space-y-6 animate-fade-in">
       
-      {/* CONTAINER PRINCIPAL IDÊNTICO AO PRINT */}
       <div className="p-6 rounded-xl border shadow-sm" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
         
-        {/* BARRA DE PESQUISA SUPERIOR */}
         <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg border mb-8" style={{ backgroundColor: 'var(--bg-page)', borderColor: 'var(--border-light)' }}>
           <span className="text-lg opacity-50">🔍</span>
           <input 
@@ -108,7 +94,18 @@ export default function TiposEquipamento() {
           />
         </div>
 
-        {/* LINHA DE ADIÇÃO (INLINE FORM) */}
+        {/* 🚀 CAIXA DE AVISO ANTI-DUPLICIDADE ADICIONADA AQUI */}
+        <div className="mb-8 p-4 rounded-xl border flex flex-col md:flex-row md:items-center gap-4 animate-fade-in" style={{ backgroundColor: 'rgba(59, 130, 246, 0.05)', borderColor: 'rgba(59, 130, 246, 0.2)' }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-blue-600 bg-blue-100 flex-shrink-0 text-xl border border-blue-200">💡</div>
+          <div>
+            <h4 className="text-sm font-black text-blue-700 tracking-tight mb-1">Atenção: Não crie campos repetidos!</h4>
+            <p className="text-xs font-medium opacity-80 leading-relaxed text-blue-800">
+              Todo equipamento já possui campos nativos para <strong>Patrimônio, Marca, Modelo, Status, Apelido, Secretaria e Setor</strong>. 
+              Use este painel abaixo apenas para criar atributos técnicos extras (Ex: Voltagem, IP, MAC Address, % de Toner, Capacidade de Armazenamento).
+            </p>
+          </div>
+        </div>
+
         <div className="flex flex-col md:flex-row gap-4 items-end mb-8">
           <div className="flex-1 w-full">
             <label className="block text-[11px] font-bold mb-1 uppercase tracking-wider" style={{ color: 'var(--text-main)' }}>NOME DO TIPO</label>
@@ -136,7 +133,6 @@ export default function TiposEquipamento() {
           </button>
         </div>
 
-        {/* TABELA LIMPA (PADRÃO) */}
         <div className="overflow-x-auto border-t" style={{ borderColor: 'var(--border-light)' }}>
           <table className="w-full text-left text-sm mt-4">
             <thead style={{ color: 'var(--text-muted)' }}>
@@ -172,7 +168,6 @@ export default function TiposEquipamento() {
         </div>
       </div>
 
-      {/* MODAL DE EDIÇÃO (MANTIDO PARA CORREÇÕES COMPLEXAS) */}
       {modalEdit.aberto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setModalEdit({aberto: false, id: null, nome: '', campos_texto: ''})}>
           <div className="w-full max-w-md rounded-xl shadow-2xl border p-6" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }} onClick={e => e.stopPropagation()}>

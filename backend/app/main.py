@@ -93,17 +93,17 @@ def carregar_cron_jobs():
 # ==========================================
 # 🔒 CONFIGURAÇÃO DE SEGURANÇA (CORS)
 # ==========================================
-NGROK_DOMAIN = os.getenv("NGROK_DOMAIN", "")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "") # 🚀 Lê a URL do painel direto do .env
 
 origens_permitidas = [
     "http://localhost",
     "http://localhost:5174", 
-    "http://localhost:8001",
-    "https://wan-involves-elements-std.trycloudflare.com" # CORS base do Cloudflare (não precisa de portas ou caminhos)
+    "http://localhost:8001"
 ]
 
-if NGROK_DOMAIN:
-    origens_permitidas.append(f"https://unidealistic-colourably-hae.ngrok-free.dev")
+# Libera o acesso para o link do Cloudflare (ou qualquer outro) que estiver no .env
+if FRONTEND_URL:
+    origens_permitidas.append(FRONTEND_URL)
 
 app.add_middleware(
     CORSMiddleware,
@@ -165,30 +165,54 @@ class TelemetriaImpressora(BaseModel):
 async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session = Depends(get_db)):
     sn = dados.dados_da_maquina.get('serial', '').strip()
     ip = dados.dados_da_maquina.get('ip', '').strip()
+    hostname = dados.dados_da_maquina.get('hostname', '').strip()
     
     ativo = None
-    
-    # 1. TENTA ACHAR A MÁQUINA PELO SERIAL NUMBER
-    if sn and sn != "N/A" and sn != "Desconhecido":
-        ativo = db.query(Ativo).filter(Ativo.uuid_persistente == sn).first()
-        
-    # 2. 🚀 SE NÃO ACHAR, TENTA ACHAR PELO IP (Mágica para ligar com máquinas importadas do CSV)
+    todas_maquinas = db.query(Ativo).all()
+
+    # 1. 🚀 BUSCA INTELIGENTE: Varre o banco procurando por Serial ou Hostname
+    for a in todas_maquinas:
+        # Checa a coluna direta
+        if sn and sn != "N/A" and a.uuid_persistente == sn:
+            ativo = a
+            break
+            
+        # Abre o cofre dos dados dinâmicos para procurar lá dentro
+        dd = a.dados_dinamicos
+        if isinstance(dd, str):
+            try: dd = json.loads(dd.replace("'", '"').replace("None", "null"))
+            except: dd = {}
+        if not isinstance(dd, dict): dd = {}
+
+        sn_banco = str(dd.get('Serial') or dd.get('serial') or dd.get('Número de Série') or "").strip()
+        host_banco = str(dd.get('Hostname') or dd.get('hostname') or "").strip()
+
+        # Bateu o Serial? É ela!
+        if sn and sn != "N/A" and sn == sn_banco:
+            ativo = a
+            break
+            
+        # Bateu o Hostname? É ela!
+        if hostname and hostname != "N/A" and hostname == host_banco:
+            ativo = a
+            break
+
+    # 2. Se os nomes e seriais falharem, tenta pelo IP em último caso
     if not ativo and ip:
-        todas_maquinas = db.query(Ativo).all()
         for a in todas_maquinas:
             dd = a.dados_dinamicos
             if isinstance(dd, str):
                 try: dd = json.loads(dd.replace("'", '"').replace("None", "null"))
                 except: dd = {}
-            
             if isinstance(dd, dict):
-                ip_banco = dd.get('ip') or dd.get('IP') or ""
-                if ip_banco.strip() == ip:
+                ip_banco = str(dd.get('ip') or dd.get('IP') or "").strip()
+                if ip_banco == ip:
                     ativo = a
                     break
     
     novos_dados_dinamicos = {
         "ip": ip,
+        "hostname": hostname,
         "toner": dados.telemetria.get('nivel_toner_percentual'),
         "cilindro": dados.telemetria.get('nivel_cilindro_percentual'),
         "paginas_totais": dados.telemetria.get('paginas_impressas'),
@@ -202,7 +226,6 @@ async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session =
         ativo.status = 'Online'
         ativo.ultima_comunicacao = datetime.utcnow()
         
-        # Garante que o SQLAlchemy entenda a atualização convertendo em dicionário limpo
         dict_atual = {}
         if isinstance(ativo.dados_dinamicos, str):
             try: dict_atual = json.loads(ativo.dados_dinamicos.replace("'", '"'))
@@ -211,17 +234,16 @@ async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session =
             dict_atual = dict(ativo.dados_dinamicos)
             
         dict_atual.update(novos_dados_dinamicos)
-        ativo.dados_dinamicos = json.loads(json.dumps(dict_atual)) # Salva JSON perfeito sem aspas simples
+        ativo.dados_dinamicos = json.loads(json.dumps(dict_atual))
         
-        # Se a máquina não tinha Serial, agora ela tem!
+        # Grava o SN na coluna principal para as próximas leituras serem ultra-rápidas
         if not ativo.uuid_persistente and sn and sn != "N/A":
             ativo.uuid_persistente = sn
             
         maquina_atual = ativo
     else:
-        # Se não achou de jeito nenhum, cria uma nova
+        # Só cria uma máquina nova se realmente não achar nada
         novo_patrimonio = f"S/P_{str(uuid.uuid4().hex)[:6].upper()}"
-        
         cat = db.query(Categoria).filter(Categoria.nome == "Multifuncional").first()
         
         novo_ativo = Ativo(
@@ -240,16 +262,9 @@ async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session =
         db.flush() 
         maquina_atual = novo_ativo
 
-    hoje = datetime.utcnow().date()
-    
-    # HISTÓRICO E ALERTAS (O resto do código que já estava aí fica igual)
-    ultima_leitura = db.query(HistoricoLeitura).filter(
-        HistoricoLeitura.patrimonio == maquina_atual.patrimonio
-    ).order_by(HistoricoLeitura.data_leitura.desc()).first()
-
+    # Salva o Histórico de Leitura (Odômetro)
     paginas_str = str(dados.telemetria.get('paginas_impressas', '0')).strip()
-    if not paginas_str.isdigit():
-        paginas_str = '0'
+    if not paginas_str.isdigit(): paginas_str = '0'
 
     nova_leitura = HistoricoLeitura(
         patrimonio=maquina_atual.patrimonio,
@@ -258,77 +273,10 @@ async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session =
         cilindro_nivel=str(dados.telemetria.get('nivel_cilindro_percentual', 'N/A'))
     )
     db.add(nova_leitura)
-
-    if dados.alerta_critico:
-        alerta_hoje = db.query(LogAuditoria).filter(
-            LogAuditoria.identificador == maquina_atual.patrimonio,
-            LogAuditoria.acao == "ALERTA_TONER"
-        ).order_by(LogAuditoria.data_hora.desc()).first()
-        
-        if not alerta_hoje or alerta_hoje.data_hora.date() < hoje:
-            nome_maq = getattr(maquina_atual, 'nome_personalizado', None) or maquina_atual.modelo
-            local_maq = getattr(maquina_atual, 'local', 'Local não definido')
-            toner_atual = dados.telemetria.get('nivel_toner_percentual', '0%')
-            db.add(LogAuditoria(
-                usuario="Nexus Agente", acao="ALERTA_TONER", entidade="Multifuncional", 
-                identificador=maquina_atual.patrimonio, 
-                detalhes=f"🚨 O nível de suprimento da máquina '{nome_maq}' em '{local_maq}' atingiu nível crítico ({toner_atual})."
-            ))
-
     db.commit()
+    
     return {"patrimonio": maquina_atual.patrimonio, "nome": maquina_atual.modelo}
 
-
-# ========================================================
-# 🚀 FILA DE COMANDOS (Sincronização Remota)
-# ========================================================
-
-# 1. Rota que o botão do REACT chama
-@app.post("/api/inventario/solicitar_coleta")
-def solicitar_coleta(cliente: str = "PMSGO", db: Session = Depends(get_db)):
-    novo_comando = ComandoAgente(
-        cliente=cliente, 
-        comando="FORCAR_COLETA", 
-        status="PENDENTE"
-    )
-    db.add(novo_comando)
-    db.commit()
-    db.refresh(novo_comando)
-    return {"message": "Comando salvo na fila", "id_comando": novo_comando.id}
-
-# 2. Rota que o REACT fica checando
-@app.get("/api/inventario/status_coleta")
-def status_coleta(id_comando: int, db: Session = Depends(get_db)):
-    comando = db.query(ComandoAgente).filter(ComandoAgente.id == id_comando).first()
-    if comando:
-        return {"status": comando.status}
-    return {"status": "DESCONHECIDO"}
-
-# 3. Rota que o AGENTE SENTINEL (Python Local) fica perguntando
-@app.get("/api/agente/comando")
-def checar_comando(cliente: str, db: Session = Depends(get_db)):
-    comando = db.query(ComandoAgente).filter(
-        ComandoAgente.cliente == cliente,
-        ComandoAgente.status == "PENDENTE"
-    ).order_by(ComandoAgente.id.asc()).first()
-
-    if comando:
-        return {"comando": comando.comando, "id_comando": comando.id}
-    return {"comando": "NENHUM"}
-
-class ConcluirComandoReq(BaseModel):
-    id_comando: int
-    status: str
-
-# 4. Rota que o AGENTE SENTINEL avisa que terminou o serviço
-@app.post("/api/agente/comando/concluir")
-def concluir_comando(req: ConcluirComandoReq, db: Session = Depends(get_db)):
-    comando = db.query(ComandoAgente).filter(ComandoAgente.id == req.id_comando).first()
-    if comando:
-        comando.status = req.status
-        comando.data_conclusao = datetime.utcnow()
-        db.commit()
-    return {"message": "Comando baixado com sucesso"}
 
 
 # ========================================================

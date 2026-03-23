@@ -11,7 +11,6 @@ export default function CardNexus({ imp, expandedId, setExpandedId, selecionados
   const [loadingGrafico, setLoadingGrafico] = useState(false);
   const [menuAberto, setMenuAberto] = useState(false);
   
-  // 🚀 NOVO ESTADO: Filtro do Gráfico
   const [filtroTempo, setFiltroTempo] = useState('dia');
   const menuRef = useRef(null);
 
@@ -37,7 +36,6 @@ export default function CardNexus({ imp, expandedId, setExpandedId, selecionados
     }
   };
 
-  // 🚀 A MÁGICA DO AGRUPAMENTO (Dia, Hora, Mês limitados a 10)
   const dadosProcessados = React.useMemo(() => {
       if (!dadosGrafico || dadosGrafico.length === 0) return [];
 
@@ -62,13 +60,11 @@ export default function CardNexus({ imp, expandedId, setExpandedId, selecionados
               label = `${mes}/${ano}`;
           }
 
-          // Salva sempre o MAIOR número de páginas do período (última leitura daquele dia/hora)
           if (!agrupado[chave] || item.paginas > agrupado[chave].paginas) {
               agrupado[chave] = { data_simplificada: label, paginas: item.paginas, raw: item.data_raw };
           }
       });
 
-      // Ordena cronologicamente e Puxa apenas as 10 ÚLTIMAS AMOSTRAS
       return Object.values(agrupado)
           .sort((a, b) => a.raw.localeCompare(b.raw))
           .slice(-10); 
@@ -123,7 +119,7 @@ export default function CardNexus({ imp, expandedId, setExpandedId, selecionados
         {/* BOTÕES DE AÇÃO */}
         <div className="col-span-1 flex justify-end items-center gap-2 relative" ref={menuRef}>
           <button 
-            onClick={(e) => { e.stopPropagation(); abrirFicha(imp.id); }} // 🚀 MUDAR AQUI PARA ID
+            onClick={(e) => { e.stopPropagation(); abrirFicha(imp.id); }} 
             className="w-8 h-8 rounded border flex items-center justify-center hover:bg-gray-100 transition-all text-sm bg-white" 
             title="Ver Ficha"
           >
@@ -153,8 +149,12 @@ export default function CardNexus({ imp, expandedId, setExpandedId, selecionados
               <div><p className="text-[10px] uppercase font-bold mb-1" style={{ color: 'var(--text-muted)' }}>Modelo Original</p><p className="text-sm font-medium truncate" style={{ color: 'var(--text-main)' }}>{imp.modelo}</p></div>
               <div><p className="text-[10px] uppercase font-bold mb-1" style={{ color: 'var(--text-muted)' }}>Patrimônio</p><p className="text-sm font-black text-blue-500">{imp.patrimonio || 'S/P'}</p></div>
               <div><p className="text-[10px] uppercase font-bold mb-1" style={{ color: 'var(--text-muted)' }}>Endereço IP</p><p className="text-sm font-medium truncate" style={{ color: 'var(--text-main)' }}>{imp.specs?.ip || imp.specs?.IP || 'Desconhecido'}</p></div>
-              <div><p className="text-[10px] uppercase font-bold mb-1" style={{ color: 'var(--text-muted)' }}>Serial Number</p><p className="text-sm font-medium truncate" style={{ color: 'var(--text-main)' }}>{imp.serial || imp.specs?.serial || imp.specs?.Serial || 'Desconhecido'}</p></div>
+              
+              {/* 🚀 O HOSTNAME FOI ADICIONADO AQUI, NO LADO DIREITO */}
+              <div><p className="text-[10px] uppercase font-bold mb-1" style={{ color: 'var(--text-muted)' }}>Hostname</p><p className="text-sm font-medium truncate" style={{ color: 'var(--text-main)' }}>{imp.specs?.hostname || imp.specs?.Hostname || 'Desconhecido'}</p></div>
+              
               <div><p className="text-[10px] uppercase font-bold mb-1" style={{ color: 'var(--text-muted)' }}>Setor / Sala</p><p className="text-sm font-medium truncate" style={{ color: 'var(--text-main)' }}>{imp.setor || 'Não Definido'}</p></div>
+              <div><p className="text-[10px] uppercase font-bold mb-1" style={{ color: 'var(--text-muted)' }}>Serial Number</p><p className="text-sm font-medium truncate" style={{ color: 'var(--text-main)' }}>{imp.serial || imp.specs?.serial || imp.specs?.Serial || 'Desconhecido'}</p></div>
               <div><p className="text-[10px] uppercase font-bold mb-1" style={{ color: 'var(--text-muted)' }}>Última Leitura</p><p className="text-sm font-bold italic opacity-60" style={{ color: 'var(--text-muted)' }}>{imp.ultima_comunicacao ? new Date(imp.ultima_comunicacao + 'Z').toLocaleString('pt-BR') : 'Nunca'}</p></div>
             </div>
 
@@ -180,7 +180,6 @@ export default function CardNexus({ imp, expandedId, setExpandedId, selecionados
 
           <div className="w-full xl:flex-1 space-y-3 xl:pl-6 xl:border-l" style={{ borderColor: 'var(--border-light)' }}>
              <div className="flex justify-between items-center mb-2">
-                {/* 🚀 O NOVO DROPDOWN DE FILTRO DE TEMPO FICA AQUI */}
                 <div className="flex items-center gap-3">
                     <h4 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Faturamento (Páginas)</h4>
                     <select 

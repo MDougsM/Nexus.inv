@@ -63,11 +63,23 @@ export default function AbaAgendamentos({ secretarias }) {
       const payload = { ...novo, secretarias: secSelecionadas, setores: setoresSelecionados };
       await api.post('/api/agendamentos/', payload);
       toast.success("Rotina programada com sucesso! ⏱️");
-      setNovo({ nome: '', dia_do_mes: 1, horario: '08:00', emails_destino: 'sistema@local' });
+      
+      // 🚀 SOLUÇÃO: Restaurando o estado completo para não faltar dados no próximo envio
+      setNovo({ 
+        nome: '', 
+        dia_inicio_ciclo: 1, 
+        dia_fim_ciclo: 30, 
+        dia_do_mes: 1, 
+        horario: '08:00', 
+        emails_destino: 'sistema@local' 
+      });
+      
       setSecSelecionadas([]);
       setSetoresSelecionados([]);
       carregarDados();
-    } catch (e) { toast.error("Erro ao agendar rotina."); }
+    } catch (e) { 
+      toast.error("Erro ao agendar rotina."); 
+    }
     setLoading(false);
   };
 
@@ -135,7 +147,17 @@ export default function AbaAgendamentos({ secretarias }) {
             </div>
             <div className="md:col-span-2">
               <label className="block text-[10px] font-black uppercase opacity-60 mb-1" style={{ color: 'var(--text-main)' }}>Dia do Mês</label>
-              <input required type="number" min="1" max="31" value={novo.dia_do_mes} onChange={e => setNovo({...novo, dia_do_mes: parseInt(e.target.value)})} className="w-full p-3 rounded-xl border font-bold outline-none text-center" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} />
+              <input 
+                required 
+                type="number" 
+                min="1" 
+                max="31" 
+                value={novo.dia_do_mes} 
+                // 🚀 SOLUÇÃO: O "|| 1" garante que nunca seja enviado um valor vazio (NaN) pro servidor
+                onChange={e => setNovo({...novo, dia_do_mes: parseInt(e.target.value) || 1})} 
+                className="w-full p-3 rounded-xl border font-bold outline-none text-center" 
+                style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} 
+              />
             </div>
             <div className="md:col-span-2">
               <label className="block text-[10px] font-black uppercase opacity-60 mb-1" style={{ color: 'var(--text-main)' }}>Hora de Execução</label>
