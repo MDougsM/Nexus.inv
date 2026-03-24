@@ -70,8 +70,10 @@ export default function AbaCentralPrint({
       </div>
 
       {/* 🚀 TABELA COM OS CARDS */}
-      <div className="rounded-2xl border overflow-hidden shadow-sm" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-4 border-b text-[10px] font-black uppercase tracking-widest opacity-60" style={{ borderColor: 'var(--border-light)', backgroundColor: 'var(--bg-input)' }}>
+      <div className="rounded-2xl border overflow-visible shadow-sm pb-24" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
+        
+        {/* Adicionamos rounded-t-2xl aqui para não vazar a cor cinza nas pontas de cima */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-4 border-b rounded-t-2xl text-[10px] font-black uppercase tracking-widest opacity-60" style={{ borderColor: 'var(--border-light)', backgroundColor: 'var(--bg-input)' }}>
           <div className="col-span-1 flex items-center gap-3">
             <input type="checkbox" onChange={(e) => handleSelectAll(e, ativosFiltrados)} checked={selecionados.length === ativosFiltrados.length && ativosFiltrados.length > 0} className="w-4 h-4 rounded border-gray-300 cursor-pointer" />
             <span>STS</span>

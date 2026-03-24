@@ -226,18 +226,28 @@ async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session =
         ativo.status = 'Online'
         ativo.ultima_comunicacao = datetime.utcnow()
         
+        # Puxa os dados dinâmicos atuais (Onde ficam os seus campos misturados com os do Sentinel)
         dict_atual = {}
         if isinstance(ativo.dados_dinamicos, str):
-            try: dict_atual = json.loads(ativo.dados_dinamicos.replace("'", '"'))
+            try: dict_atual = json.loads(ativo.dados_dinamicos.replace("'", '"').replace("None", "null"))
             except: pass
         elif isinstance(ativo.dados_dinamicos, dict):
             dict_atual = dict(ativo.dados_dinamicos)
             
-        dict_atual.update(novos_dados_dinamicos)
+        # 🚀 A MÁGICA ACONTECE AQUI: A Trava de Sobrescrita
+        # O backend vai iterar sobre os dados que o Sentinel mandou.
+        # Ele SÓ vai atualizar a chave se o Sentinel realmente tiver um dado válido.
+        # Se o Sentinel mandar vazio ou "N/A", ele ignora e mantém a sua edição intacta!
+        for chave, valor in novos_dados_dinamicos.items():
+            valor_str = str(valor).strip()
+            if valor is not None and valor_str != "" and valor_str != "N/A" and valor_str != "None":
+                dict_atual[chave] = valor
+        
+        # Salva o dicionário fundido e protegido de volta no banco
         ativo.dados_dinamicos = json.loads(json.dumps(dict_atual))
         
         # Grava o SN na coluna principal para as próximas leituras serem ultra-rápidas
-        if not ativo.uuid_persistente and sn and sn != "N/A":
+        if getattr(ativo, 'uuid_persistente', None) is None and sn and sn != "N/A":
             ativo.uuid_persistente = sn
             
         maquina_atual = ativo
