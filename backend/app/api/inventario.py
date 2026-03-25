@@ -27,11 +27,11 @@ router = APIRouter(prefix="/inventario", tags=["Inventário"])
 @router.get("/download/agente")
 def baixar_agente():
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    caminho_arquivo = os.path.join(BASE_DIR, "static", "Nexus_Instalador.exe")
+    caminho_arquivo = os.path.join(BASE_DIR, "static", "Nexus_Instalador_v5.exe")
     if os.path.exists(caminho_arquivo):
         return FileResponse(
             path=caminho_arquivo, 
-            filename="Nexus_Instalador.exe", 
+            filename="Nexus_Instalador_v5.exe", 
             media_type='application/octet-stream'
         )
     raise HTTPException(status_code=404, detail=f"Arquivo não achado em: {caminho_arquivo}")
