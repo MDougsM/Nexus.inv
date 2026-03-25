@@ -1,269 +1,294 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
+import { FaLaptopCode, FaPrint, FaQrcode, FaShieldAlt, FaCogs, FaUserShield, FaChevronRight } from 'react-icons/fa';
 
 export default function Ajuda() {
-  const [busca, setBusca] = useState('');
-  const [topicoAtivo, setTopicoAtivo] = useState('intro');
+  const [moduloAtivo, setModuloAtivo] = useState('gestao_ativos');
+  const [abaExpandida, setAbaExpandida] = useState(null);
 
-  const borderStrong = { border: '1.5px solid var(--border-light)', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' };
+  const toggleAba = (abaNome) => {
+    setAbaExpandida(abaExpandida === abaNome ? null : abaNome);
+  };
 
-  const topicos = [
+  // 🗺️ O MAPA COMPLETO DO SISTEMA (Baseado 100% no seu código)
+  const mapaDoSistema = [
     {
-      id: 'intro',
-      icon: '👋',
-      title: 'Bem-vindo ao Nexus.inv',
-      subtitle: 'Conceitos básicos e atalhos do sistema.',
-      keywords: ['iniciar', 'começar', 'introdução', 'basico', 'menu', 'notificações', 'senha'],
-      content: (
-        <div className="space-y-4 text-sm opacity-90" style={{ color: 'var(--text-main)' }}>
-          <p className="text-base font-bold text-blue-500 mb-4">Olá! Bem-vindo(a) ao Nexus.inv.</p>
-          <p>Esqueça planilhas confusas. O Nexus é um sistema inteligente. Tudo o que você faz fica registrado para garantir a segurança da equipe.</p>
-          <ul className="list-disc pl-5 space-y-3 mt-4">
-            <li><strong>Menu Lateral (Esquerda):</strong> Sua navegação principal. Permite trocar entre as telas do sistema.</li>
-            <li><strong>Barra Superior (Topo):</strong> Contém o botão de Tema (☀️/🌙) para clarear ou escurecer a tela, o Sininho de Alertas (🔔), e o menu do seu Perfil (onde você pode trocar sua própria senha).</li>
-            <li><strong>Botões Flutuantes:</strong> Em todas as tabelas, passe o mouse sobre uma máquina para ver opções extras ou marque a caixinha (checkbox) à esquerda para abrir a barra de Ações em Lote.</li>
-          </ul>
-        </div>
-      )
+      id: 'gestao_ativos',
+      titulo: 'Gestão de Equipamentos',
+      icone: <FaQrcode />,
+      descricao: 'Módulo central onde ocorre o cadastro, movimentação em lote, edição e exclusão das máquinas.',
+      abas: [
+        {
+          nome: 'Aba: Busca e Gestão',
+          descricao: 'Tela principal que exibe a lista de todas as máquinas cadastradas e permite ações rápidas.',
+          elementos: [
+            { tipo: 'Filtro', nome: 'Pesquisa Livre', desc: 'Busca instantaneamente qualquer máquina digitando Patrimônio, Marca, IP, Serial ou Apelido.' },
+            { tipo: 'Filtro', nome: 'Filtrar Status', desc: 'Exibe apenas máquinas "Em Operação", "Manutenção" ou "Sucata".' },
+            { tipo: 'Botão', nome: 'Exportar Relatório', desc: 'Gera e baixa uma planilha Excel (.csv) contendo exatamente as máquinas que estão aparecendo na tela naquele momento.' },
+            { tipo: 'Ação', nome: 'Caixa de Seleção (Checkbox)', desc: 'Localizada na primeira coluna da tabela. Ao marcar uma ou mais máquinas, revela a "Barra de Ações em Lote" no topo da tela.' },
+            { tipo: 'Menu', nome: 'Barra de Ações em Lote', desc: 'Aparece ao selecionar máquinas. Contém os botões: 🖨️ QRs (Gera etiquetas de todas juntas), 🚚 Transferir (Move todas para um setor), ✏️ Editar Lote (Altera especificações em massa, desde que sejam do mesmo tipo), 🛠️ Status e 🗑️ Excluir.' },
+            { tipo: 'Ícone', nome: 'Bolinha Verde/Cinza', desc: 'Ao lado do patrimônio. Pisca em verde se o Agente Sentinel enviou dados da máquina nas últimas 72 horas (Online).' },
+            { tipo: 'Botão', nome: '👁️ (Ver Ficha)', desc: 'Abre o Registro Geral do Ativo (RG). Mostra o QR Code gigante, Localização Atual e a Linha do Tempo (Auditoria) detalhando quem transferiu ou editou a máquina desde a sua criação.' },
+            { tipo: 'Botão', nome: '🖨️ (Etiqueta QR)', desc: 'Abre um pop-up rápido apenas com o QR Code. Possui o botão "Imprimir Etiqueta" para envio direto à impressora.' },
+            { tipo: 'Botão', nome: 'Opções ▾', desc: 'Abre um menu suspenso para a máquina com: Clonar Máquina, Editar Cadastro, Transferir Local, Alterar Status ou Excluir Definitivo.' }
+          ]
+        },
+        {
+          nome: 'Aba: Novo Cadastro',
+          descricao: 'Interface para inserir novos equipamentos manualmente no inventário.',
+          elementos: [
+            { tipo: 'Campo', nome: 'Patrimônio', desc: 'Se deixado em branco, o sistema gerará um código "S/P_" sequencial automaticamente. Se preenchido, fará checagem anti-duplicidade.' },
+            { tipo: 'Campo', nome: 'Tipo de Equipamento', desc: 'Define a categoria. Ao ser selecionado, faz aparecer magicamente os "Campos Exclusivos" cadastrados para aquele tipo (ex: Voltagem, Memória).' },
+            { tipo: 'Campo', nome: 'Apelido (Nome Personalizado)', desc: 'Nome amigável da máquina. O Agente Sentinel é bloqueado e NUNCA apaga ou altera este campo.' },
+            { tipo: 'Botão', nome: 'Cadastrar Equipamento', desc: 'Salva o registro. Se você estiver usando a função "Clonar", este botão se chamará "Salvar Clone".' }
+          ]
+        },
+        {
+          nome: 'Aba: Histórico & Descartes',
+          descricao: 'Registra o histórico de máquinas enviadas para manutenção ou baixadas como sucata.',
+          elementos: [
+            { tipo: 'Tabela', nome: 'Histórico de O.S', desc: 'Mostra a Data, Patrimônio, de qual status veio para qual foi, e o Número da O.S informada no Milvus.' },
+            { tipo: 'Botão', nome: '♻️ Restaurar', desc: 'Aparece apenas nas linhas de "Sucata". Ao clicar, permite devolver o equipamento ao status "Ativo" (Em operação), exigindo uma justificativa para a auditoria.' }
+          ]
+        }
+      ]
     },
     {
-      id: 'dashboard',
-      icon: '📊',
-      title: 'Centro de Inteligência (Dashboard)',
-      subtitle: 'Como ler os gráficos e a telemetria.',
-      keywords: ['dashboard', 'graficos', 'feed', 'inicio', 'resumo', 'kpi', 'diretoria'],
-      content: (
-        <div className="space-y-4 text-sm opacity-90" style={{ color: 'var(--text-main)' }}>
-          <p>O <strong>Dashboard</strong> é dividido em duas abas no topo da tela:</p>
-          <div className="space-y-4 mt-4">
-            <div className="p-4 rounded-xl border shadow-sm transition-colors" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-              <h4 className="font-black mb-2 text-blue-500">🌍 Visão Geral</h4>
-              <p className="mb-2">Mostra os totais da empresa (Total, Em Operação, Em Manutenção, Descartados).</p>
-              <ul className="list-disc pl-5 space-y-1">
-                <li><strong>Feed do Sistema:</strong> Uma lista lateral que mostra ao vivo quem logou, quem editou uma máquina, etc.</li>
-                <li><strong>Atalhos:</strong> Clicar no quadro amarelo de "Manutenção" leva você direto para a lista de máquinas quebradas.</li>
-              </ul>
-            </div>
-            <div className="p-4 rounded-xl border shadow-sm transition-colors" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-              <h4 className="font-black mb-2 text-blue-500">📊 Painel da Diretoria</h4>
-              <p>Uma visão analítica avançada. No topo deste painel, existem botões de filtro (Ex: "Desktop", "Notebook"). Se você clicar neles, todos os gráficos da tela se recalculam instantaneamente para mostrar os dados específicos daquele tipo de equipamento!</p>
-            </div>
-          </div>
-        </div>
-      )
+      id: 'nexus_print',
+      titulo: 'Nexus Print (Telemetria)',
+      icone: <FaPrint />,
+      descricao: 'Central de faturamento, monitoramento de toners e robôs de fechamento mensal.',
+      abas: [
+        {
+          nome: 'Aba: Painel de Controle',
+          descricao: 'Monitoramento em tempo real das impressoras da rede.',
+          elementos: [
+            { tipo: 'Filtros', nome: 'Secretaria / Suprimento', desc: 'Permite filtrar a lista por Local ou por Nível de Toner/Cilindro (Normal, Atenção <30%, Crítico <15%).' },
+            { tipo: 'Botão', nome: '📡 Forçar Leitura', desc: 'Dispara um comando de broadcast na rede. Obriga todos os agentes Sentinel a lerem as impressoras imediatamente e enviarem os níveis atualizados ao painel.' },
+            { tipo: 'Botão', nome: 'Exportar Tudo', desc: 'Baixa a lista de impressoras e seus níveis atuais de toner em uma planilha Excel.' },
+            { tipo: 'Ação', nome: 'Expandir Linha da Impressora', desc: 'Clique em qualquer lugar da linha de uma impressora para expandi-la. Revela o "Hostname", o Status dos Suprimentos em texto e o Gráfico de Evolução de Páginas impressas.' },
+            { tipo: 'Gráfico', nome: 'Gráfico de Faturamento', desc: 'Dentro da linha expandida, permite filtrar o crescimento do contador por Hora, Dia ou Mês.' }
+          ]
+        },
+        {
+          nome: 'Aba: Relatórios & Faturamento',
+          descricao: 'Geração manual de faturamento de páginas de um período específico.',
+          elementos: [
+            { tipo: 'Campos', nome: 'Início / Fim / Locais', desc: 'Defina a janela de tempo e marque nos checkboxes quais Secretarias farão parte do faturamento.' },
+            { tipo: 'Botão', nome: '🔍 Gerar', desc: 'O sistema procura a leitura do primeiro dia e a leitura do último dia, e faz a subtração (Contador Final - Inicial = Consumo) para cada máquina.' },
+            { tipo: 'Botão', nome: 'Baixar Excel (Ícone Verde)', desc: 'Aparece após gerar o relatório. Faz o download dos dados crus em CSV.' },
+            { tipo: 'Botão', nome: 'Baixar PDF (Ícone Vermelho)', desc: 'Aparece após gerar o relatório. Gera um PDF formatado oficial, contendo o logotipo/CNPJ da empresa (se configurados) para assinatura do contrato.' }
+          ]
+        },
+        {
+          nome: 'Aba: Automações (Robôs)',
+          descricao: 'Programação de fechamentos automáticos mensais.',
+          elementos: [
+            { tipo: 'Formulário', nome: 'Programar Novo Fechamento', desc: 'Insira o Nome da Rotina, Dia do Mês, Hora e marque os locais. Clique em "Adicionar Robô" para deixar o servidor agendado para rodar o fechamento sozinho todo mês.' },
+            { tipo: 'Botão', nome: '▶️ Play (Forçar Geração Agora)', desc: 'Fica na lista de "Robôs Ativos". Se não quiser esperar o dia agendado chegar, clique neste botão para obrigar o robô a fazer o fechamento imediatamente.' },
+            { tipo: 'Menu', nome: 'Cofre de Relatórios Prontos', desc: 'Painel direito. Onde os robôs depositam os PDFs e CSVs gerados. Clique no botão azul de download para baixar os fechamentos dos meses anteriores.' }
+          ]
+        }
+      ]
     },
     {
-      id: 'cadastro',
-      icon: '✨',
-      title: 'Novo Cadastro e Clonagem',
-      subtitle: 'Como inserir máquinas corretamente.',
-      keywords: ['cadastrar', 'adicionar', 'nova maquina', 'clonar', 'copiar', 'duplicar'],
-      content: (
-        <div className="space-y-4 text-sm opacity-90" style={{ color: 'var(--text-main)' }}>
-          <p>Para adicionar equipamentos, acesse <strong>Gestão de Ativos</strong> e clique na aba superior <strong>➕ Novo Cadastro</strong>.</p>
-          
-          <h4 className="font-black mt-4 text-emerald-500">Método 1: Cadastro Manual</h4>
-          <ul className="list-disc pl-5 space-y-2 mb-4">
-            <li><strong>Patrimônio:</strong> Se a máquina não tiver etiqueta, deixe o campo em branco. O sistema gerará um código único automaticamente.</li>
-            <li><strong>Tipo de Equipamento:</strong> Atenção aqui! Quando você escolhe a categoria (Ex: "Lousa Digital"), o sistema abre campos específicos para ela (Ex: "S/N Lousa", "S/N OPS").</li>
-            <li><strong>Localização:</strong> Selecione a Secretaria/Prédio e depois a Sala exata.</li>
-          </ul>
-
-          <h4 className="font-black mt-4 text-blue-500">Método 2: A Mágica da Clonagem (Muito mais rápido!)</h4>
-          <p>Se você recebeu 10 computadores idênticos:</p>
-          <ol className="list-decimal pl-5 space-y-2">
-            <li>Cadastre o 1º normalmente.</li>
-            <li>Volte na tela de Busca, ache o computador recém-criado, clique em <strong>Opções ▾</strong> e selecione <strong>📋 Clonar Máquina</strong>.</li>
-            <li>O sistema abrirá a tela de Novo Cadastro com TODOS os dados pré-preenchidos. Você só precisa digitar o novo Patrimônio e clicar em Salvar!</li>
-          </ol>
-        </div>
-      )
+      id: 'cadastros_base',
+      titulo: 'Cadastros Base',
+      icone: <FaLaptopCode />,
+      descricao: 'Configuração estrutural de Tipos de Equipamentos e Locais.',
+      abas: [
+        {
+          nome: 'Aba: Tipos de Equipamentos',
+          descricao: 'Criação das categorias e especificações técnicas exigidas.',
+          elementos: [
+            { tipo: 'Aviso', nome: 'Prevenção de Duplicidade', desc: 'Patrimônio, Marca, Modelo e Setor são campos nativos. NUNCA crie eles aqui.' },
+            { tipo: 'Campos', nome: 'Nome / Especificações', desc: 'Crie o tipo (Ex: Switch) e digite os campos que ele precisa separados por vírgula (Ex: Quantidade de Portas, Gerenciável).' },
+            { tipo: 'Botão', nome: 'Adicionar', desc: 'Salva a categoria. Ao cadastrar uma máquina desse tipo depois, o sistema montará o formulário exigindo preencher as Portas e se é Gerenciável.' }
+          ]
+        },
+        {
+          nome: 'Aba: Secretarias e Setores',
+          descricao: 'Montagem da árvore organizacional de locais.',
+          elementos: [
+            { tipo: 'Botão', nome: 'Criar Secretaria', desc: 'Cria o "Prédio" ou unidade raiz superior.' },
+            { tipo: 'Ação', nome: 'Abrir Secretaria (Acordeão)', desc: 'Clique em cima do nome da secretaria criada. O painel se expandirá para baixo.' },
+            { tipo: 'Botão', nome: 'Adicionar Setor', desc: 'Dentro do painel expandido da secretaria, digite o nome das salas (Ex: Recepção, RH) e clique aqui para vinculá-las àquela secretaria.' }
+          ]
+        }
+      ]
     },
     {
-      id: 'busca_edicao',
-      icon: '🔍',
-      title: 'Busca, Filtros e Edição Individual',
-      subtitle: 'Como encontrar e modificar dados.',
-      keywords: ['buscar', 'pesquisar', 'editar', 'alterar', 'opções', 'detalhes', 'rg'],
-      content: (
-        <div className="space-y-4 text-sm opacity-90" style={{ color: 'var(--text-main)' }}>
-          <p>A aba <strong>Busca e Gestão</strong> é onde você passará a maior parte do tempo.</p>
-          
-          <ul className="list-disc pl-5 space-y-3 mt-4">
-            <li><strong>Busca Ultra-Rápida:</strong> Digite qualquer coisa na barra (marca, modelo, patrimônio, setor). A tabela filtra em tempo real.</li>
-            <li><strong>Filtro de Status:</strong> Use a caixa ao lado da busca para ver "Apenas Máquinas em Manutenção".</li>
-            <li><strong>O Botão de Olho (👁️):</strong> Fica na tabela. Ele abre o "RG" completo da máquina, mostrando todos os detalhes técnicos.</li>
-            <li><strong>O Botão Imprimir (🖨️):</strong> Gera o QR Code individual daquela máquina específica.</li>
-            <li><strong>Botão Opções ▾:</strong> Aqui você edita a máquina. Ao clicar em "Editar", lembre-se de usar as ⚡ <strong>Respostas Rápidas</strong> para preencher o motivo da edição rapidamente (Ex: "Atualização Cadastral").</li>
-          </ul>
-        </div>
-      )
+      id: 'configuracoes',
+      titulo: 'Configurações e Usuários',
+      icone: <FaCogs />,
+      descricao: 'Gerenciamento da empresa, instaladores, migração e acessos.',
+      abas: [
+        {
+          nome: 'Painel Superior: Instaladores',
+          descricao: 'Onde baixar os programas que rodam nas máquinas dos clientes.',
+          elementos: [
+            { tipo: 'Botão', nome: 'Baixar Sentinel', desc: 'Baixa o arquivo .exe responsável por varrer a rede atrás de impressoras e enviar telemetria.' },
+            { tipo: 'Botão', nome: 'Baixar Agente', desc: 'Baixa o instalador do agente para computadores normais.' }
+          ]
+        },
+        {
+          nome: 'Aba: Equipe & Usuários',
+          descricao: 'Criação e bloqueio de operadores do sistema.',
+          elementos: [
+            { tipo: 'Checkbox', nome: 'Acesso Total (Admin)', desc: 'Ao criar um usuário, se isto estiver marcado, ele não tem restrições. Se desmarcado, você deve selecionar módulo por módulo o que ele pode acessar.' },
+            { tipo: 'Botão', nome: 'Redefinir Senha', desc: 'Administradores podem forçar a troca de senha de outros usuários em caso de perda.' },
+            { tipo: 'Botão', nome: 'Revogar Acesso', desc: 'Exclui o operador do sistema (requer justificativa para a auditoria).' }
+          ]
+        },
+        {
+          nome: 'Aba: Dados da Organização',
+          descricao: 'Identidade da sua empresa.',
+          elementos: [
+            { tipo: 'Campos', nome: 'Nome / CNPJ', desc: 'Preencha aqui os dados da sua empresa. Eles serão injetados automaticamente no topo de todos os relatórios PDF de faturamento do Nexus Print.' }
+          ]
+        },
+        {
+          nome: 'Aba: Importação de Dados',
+          descricao: 'Para subir dados antigos de planilhas CSV.',
+          elementos: [
+            { tipo: 'Aviso', nome: 'Ordem de Importação', desc: 'Siga estritamente a ordem dos botões 1, 2 e 3. Se importar os Ativos antes dos Locais, o banco de dados rejeitará a planilha.' }
+          ]
+        }
+      ]
     },
     {
-      id: 'lote',
-      icon: '🗂️',
-      title: 'Ações em Lote (Transferências e QR Codes)',
-      subtitle: 'Trabalhando com múltiplos itens de uma vez.',
-      keywords: ['lote', 'qr code', 'etiqueta', 'imprimir', 'transferir', 'varios', 'selecionar', 'massa'],
-      content: (
-        <div className="space-y-4 text-sm opacity-90" style={{ color: 'var(--text-main)' }}>
-          <p>Nunca faça trabalho repetitivo. Use as <strong>Caixinhas de Seleção</strong> ao lado esquerdo das máquinas na tabela.</p>
-          
-          <div className="p-4 rounded-xl border shadow-sm mt-4 transition-colors" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-            <h4 className="font-black mb-3 text-blue-500">A Barra Azul Flutuante</h4>
-            <p className="mb-3">Ao marcar uma ou mais máquinas, uma barra aparecerá no topo. As opções são:</p>
-            <ul className="list-disc pl-5 space-y-2">
-              <li><strong>🖨️ QRs:</strong> Gera uma folha pronta com os QR Codes de todas as máquinas marcadas. Dica: Imprima em papel adesivo (Etiqueta Pimaco).</li>
-              <li><strong>🚚 Transferir:</strong> Abre um painel para escolher um novo Setor. Todas as máquinas selecionadas serão movidas para lá com 1 clique.</li>
-              <li><strong>✏️ Editar Lote:</strong> Altera a Marca ou Modelo de dezenas de equipamentos ao mesmo tempo.</li>
-              <li><strong>🛠️ Status:</strong> Manda todas as máquinas selecionadas para a Manutenção (ou para o lixo) de uma vez só.</li>
-            </ul>
-          </div>
-        </div>
-      )
+      id: 'auditoria',
+      titulo: 'Auditoria (Rastreabilidade)',
+      icone: <FaShieldAlt />,
+      descricao: 'A "caixa-preta" do sistema. Registra todas as ações executadas por segurança e LGPD.',
+      abas: [
+        {
+          nome: 'Tela Única: Linha do Tempo',
+          descricao: 'Onde tudo que acontece no sistema fica gravado de forma imutável.',
+          elementos: [
+            { tipo: 'Filtro', nome: 'Pesquisa', desc: 'Permite buscar por nome do operador ou tipo de ação (Ex: EXCLUSÃO, TRANSFERENCIA).' },
+            { tipo: 'Botão', nome: 'Exportar p/ Excel', desc: 'Baixa todo o histórico do sistema para fins legais e de compliance.' },
+            { tipo: 'Botão', nome: '🔑 Ver Motivo', desc: 'Aparece em amarelo dentro do log se a ação exigiu uma justificativa (Ex: Exclusão de máquina, mudança de status). Clique para ler o que o usuário escreveu.' }
+          ]
+        }
+      ]
     },
     {
-      id: 'manutencao',
-      icon: '🛠️',
-      title: 'Manutenção, Sucata e Restauração',
-      subtitle: 'O ciclo de vida do equipamento quebrado.',
-      keywords: ['quebrou', 'manutenção', 'sucata', 'lixo', 'restaurar', 'conserto', 'descarte'],
-      content: (
-        <div className="space-y-4 text-sm opacity-90" style={{ color: 'var(--text-main)' }}>
-          <h4 className="font-black mt-2 text-amber-500">Fluxo Correto para Consertos:</h4>
-          <ol className="list-decimal pl-5 space-y-2">
-            <li>A máquina quebrou. Encontre-a na lista, clique em <strong>Opções ▾ &gt; 🛠️ Alterar Status</strong> e mude para <strong>Manutenção</strong>.</li>
-            <li>Preencha o motivo ("Teclado ruim") e, se houver, o número do chamado (O.S.).</li>
-            <li>Quando a máquina for consertada, repita o processo e volte-a para <strong>Ativo</strong>.</li>
-          </ol>
-
-          <h4 className="font-black mt-6 text-red-500">Deu Perda Total? (Envio para Sucata)</h4>
-          <p>Nunca exclua a máquina! Mude o status dela para <strong>SUCATA</strong>. Ela sumirá da lista principal, mantendo os relatórios da empresa organizados.</p>
-
-          <h4 className="font-black mt-6 text-emerald-500">Jogou na Sucata por engano?</h4>
-          <p>Acesse a aba <strong>📜 Histórico & Descartes</strong> (na tela de Gestão de Ativos). Lá fica o cemitério das máquinas. Encontre o patrimônio e clique no botão <strong>♻️ Restaurar</strong> para trazê-la de volta à vida.</p>
-        </div>
-      )
-    },
-    {
-      id: 'importacao',
-      icon: '🚀',
-      title: 'Importação (Excel) e Cadastros Base',
-      subtitle: 'Configurando o sistema pela primeira vez.',
-      keywords: ['importar', 'csv', 'excel', 'cadastros', 'migração', 'planilha', 'locais', 'categorias', 'configurações'],
-      content: (
-        <div className="space-y-4 text-sm opacity-90" style={{ color: 'var(--text-main)' }}>
-          <p>Se você for Administrador, use a tela de <strong>Configurações ⚙️</strong> para alimentar o sistema.</p>
-          
-          <div className="space-y-3 mt-4">
-            <div className="p-3 border rounded-xl shadow-sm transition-colors" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-              <strong className="text-blue-500">1. Cadastros de Base (Locais e Categorias)</strong><br/>
-              Antes de colocar uma máquina, o sistema precisa saber quais Secretarias/Salas existem, e quais Tipos de equipamento vocês usam. Crie isso primeiro nas abas "Locais" e "Categorias".
-            </div>
-            <div className="p-3 border rounded-xl shadow-sm transition-colors" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-              <strong className="text-emerald-500">2. Migração via Excel (CSV)</strong><br/>
-              Na aba "Migração e Backup", você pode subir arquivos CSV. Cuidado: O sistema só aceita o formato <strong>CSV (separado por vírgulas)</strong>. Suba primeiro a planilha de Secretarias, depois a de Categorias, e só no final a de Inventário.
-            </div>
-            <div className="p-3 border rounded-xl shadow-sm transition-colors" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-              <strong className="text-amber-500">3. Auditoria</strong><br/>
-              Acessível pelo menu lateral, a Auditoria é o "Olho Que Tudo Vê". Administradores podem usá-la para investigar exatamente quem excluiu ou modificou uma máquina.
-            </div>
-          </div>
-        </div>
-      )
+      id: 'perfil',
+      titulo: 'Meu Perfil',
+      icone: <FaUserShield />,
+      descricao: 'Área pessoal do operador para alterar credenciais.',
+      abas: [
+        {
+          nome: 'Menu Header: Acesso',
+          descricao: 'Como acessar e o que fazer.',
+          elementos: [
+            { tipo: 'Ação', nome: 'Abrir Perfil', desc: 'Clique no seu nome/avatar no canto superior direito da tela e selecione "Meu Perfil".' },
+            { tipo: 'Botão', nome: 'Avatar e Nome', desc: 'Permite escolher um Emoji para substituir suas iniciais e alterar como você é chamado pelo sistema.' },
+            { tipo: 'Botão', nome: 'Atualizar Senha Secreta', desc: 'Exige a senha antiga, a nova, e atualizará suas credenciais de login imediatamente.' }
+          ]
+        }
+      ]
     }
   ];
 
-  const topicosFiltrados = topicos.filter(t => {
-    const termo = busca.toLowerCase();
-    return (
-      t.title.toLowerCase().includes(termo) ||
-      t.subtitle.toLowerCase().includes(termo) ||
-      t.keywords.some(k => k.includes(termo))
-    );
-  });
-
-  const topicoSelecionado = topicos.find(t => t.id === topicoAtivo) || topicosFiltrados[0];
+  const moduloSelecionado = mapaDoSistema.find(m => m.id === moduloAtivo);
 
   return (
-    <div className="max-w-[1400px] mx-auto space-y-6 animate-fade-in pb-10">
+    <div className="max-w-7xl mx-auto animate-fade-in pb-12 flex flex-col md:flex-row gap-8 items-start">
       
-      {/* CABEÇALHO */}
-      <div className="p-8 rounded-3xl border shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
-        <div className="flex items-center gap-5">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl shadow-inner border" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>📚</div>
+      {/* 🗂️ COLUNA ESQUERDA: NAVEGAÇÃO DOS MÓDULOS */}
+      <div className="w-full md:w-80 flex-shrink-0 space-y-3 sticky top-24">
+        <div className="mb-6 px-2">
+          <h2 className="text-2xl font-black tracking-tight" style={{ color: 'var(--text-main)' }}>Mapa do Sistema</h2>
+          <p className="text-xs font-bold uppercase tracking-widest opacity-50 mt-1" style={{ color: 'var(--text-muted)' }}>Documentação Detalhada</p>
+        </div>
+
+        {mapaDoSistema.map((mod) => (
+          <button
+            key={mod.id}
+            onClick={() => { setModuloAtivo(mod.id); setAbaExpandida(null); }}
+            className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl font-bold text-sm transition-all shadow-sm ${
+              moduloAtivo === mod.id 
+                ? 'bg-blue-600 text-white scale-105 shadow-blue-500/30' 
+                : 'bg-[var(--bg-card)] text-[var(--text-main)] hover:bg-[var(--bg-input)] border border-[var(--border-light)]'
+            }`}
+          >
+            <span className="text-xl">{mod.icone}</span>
+            <div className="text-left">
+              <span className="block">{mod.titulo}</span>
+            </div>
+            {moduloAtivo === mod.id && <FaChevronRight className="ml-auto opacity-50" />}
+          </button>
+        ))}
+      </div>
+
+      {/* 🗺️ COLUNA DIREITA: DETALHAMENTO DA TELA (MAPA) */}
+      <div className="flex-1 w-full bg-[var(--bg-card)] rounded-3xl border shadow-xl p-8 sm:p-10" style={{ borderColor: 'var(--border-light)' }}>
+        
+        {/* Cabeçalho do Módulo */}
+        <div className="flex items-center gap-4 border-b pb-8 mb-8" style={{ borderColor: 'var(--border-light)' }}>
+          <div className="w-16 h-16 rounded-2xl bg-blue-500/10 text-blue-600 flex items-center justify-center text-3xl border border-blue-500/20 shadow-inner">
+            {moduloSelecionado.icone}
+          </div>
           <div>
-            <h2 className="text-3xl font-black tracking-tight" style={{ color: 'var(--text-main)' }}>Central de Ajuda</h2>
-            <p className="text-xs font-bold uppercase tracking-widest mt-1 opacity-50" style={{ color: 'var(--text-muted)' }}>O manual definitivo do Nexus.inv</p>
+            <h1 className="text-3xl font-black tracking-tight" style={{ color: 'var(--text-main)' }}>{moduloSelecionado.titulo}</h1>
+            <p className="text-sm font-medium mt-2 opacity-80" style={{ color: 'var(--text-muted)' }}>{moduloSelecionado.descricao}</p>
           </div>
         </div>
 
-        <div className="w-full md:w-[400px] flex items-center gap-3 p-2 rounded-2xl border transition-all focus-within:ring-2 focus-within:ring-blue-500/20" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-          <span className="pl-3 text-lg opacity-50">🔍</span>
-          <input 
-            type="text" 
-            placeholder="O que você quer aprender hoje?..." 
-            value={busca} 
-            onChange={(e) => { setBusca(e.target.value); if(topicosFiltrados.length > 0) setTopicoAtivo(topicosFiltrados[0].id); }}
-            className="w-full p-3 bg-transparent font-bold outline-none" style={{ color: 'var(--text-main)' }}
-          />
-        </div>
-      </div>
+        {/* Acordeão de Telas e Botões */}
+        <div className="space-y-6">
+          {moduloSelecionado.abas.map((aba, index) => {
+            const isAbaAberta = abaExpandida === aba.nome || (abaExpandida === null && index === 0);
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        
-        {/* MENU LATERAL DA AJUDA */}
-        <div className="lg:col-span-4 flex flex-col gap-3 sticky top-6">
-          {topicosFiltrados.length === 0 ? (
-            <div className="p-6 text-center rounded-2xl border border-dashed opacity-50 font-bold" style={{ borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
-              Nenhum artigo encontrado para "{busca}".
-            </div>
-          ) : (
-            topicosFiltrados.map(t => (
-              <button 
-                key={t.id}
-                onClick={() => setTopicoAtivo(t.id)}
-                className={`w-full text-left p-5 rounded-2xl border transition-all flex items-center gap-4 ${topicoAtivo === t.id ? 'shadow-lg border-blue-500 scale-[1.02]' : 'shadow-sm opacity-80 hover:opacity-100 hover:bg-gray-500/5'}`}
-                style={{ 
-                  backgroundColor: topicoAtivo === t.id ? 'var(--bg-input)' : 'var(--bg-card)', 
-                  borderColor: topicoAtivo === t.id ? 'var(--color-blue)' : 'var(--border-light)' 
-                }}
-              >
-                <span className="text-2xl">{t.icon}</span>
-                <div>
-                  <h4 className="font-black text-[13px]" style={{ color: 'var(--text-main)' }}>{t.title}</h4>
-                  <p className="text-[9px] font-bold uppercase tracking-widest mt-1 opacity-50" style={{ color: 'var(--text-muted)' }}>{t.subtitle}</p>
-                </div>
-              </button>
-            ))
-          )}
-        </div>
+            return (
+              <div key={aba.nome} className="rounded-2xl border overflow-hidden transition-all duration-300 shadow-sm" style={{ borderColor: isAbaAberta ? 'var(--color-blue)' : 'var(--border-light)' }}>
+                
+                {/* Título da Aba (Clicável) */}
+                <button 
+                  onClick={() => toggleAba(aba.nome)}
+                  className="w-full px-6 py-5 flex items-center justify-between bg-[var(--bg-input)] hover:brightness-110 transition-all text-left"
+                >
+                  <div>
+                    <h3 className="text-lg font-black" style={{ color: 'var(--text-main)' }}>{aba.nome}</h3>
+                    {/* 🚀 CORRIGIDO: Usando text-main com opacidade em vez de text-muted */}
+                    <p className="text-xs font-bold uppercase tracking-widest mt-1" style={{ color: 'var(--text-main)', opacity: 0.6 }}>{aba.descricao}</p>
+                  </div>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-300 ${isAbaAberta ? 'rotate-90 bg-blue-500 text-white' : 'bg-gray-500/20'}`} style={{ color: isAbaAberta ? '#fff' : 'var(--text-main)' }}>
+                    <FaChevronRight className="text-sm" />
+                  </div>
+                </button>
 
-        {/* CONTEÚDO DO ARTIGO */}
-        <div className="lg:col-span-8">
-          {topicoSelecionado && (
-            <div className="p-8 md:p-12 rounded-3xl border shadow-xl min-h-[600px] animate-fade-in relative overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', ...borderStrong }}>
-              <div className="absolute top-0 left-0 w-full h-1 bg-blue-500"></div>
-              
-              <div className="flex items-center gap-5 mb-10 border-b pb-8" style={{ borderColor: 'var(--border-light)' }}>
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl shadow-md border" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-                  {topicoSelecionado.icon}
-                </div>
-                <div>
-                  <h2 className="text-2xl md:text-3xl font-black tracking-tight" style={{ color: 'var(--text-main)' }}>{topicoSelecionado.title}</h2>
-                  <p className="text-xs font-bold uppercase tracking-widest mt-2 text-blue-500">{topicoSelecionado.subtitle}</p>
-                </div>
-              </div>
+                {/* Conteúdo da Aba (Os Botões) */}
+                {isAbaAberta && (
+                  <div className="p-6 bg-[var(--bg-card)] border-t" style={{ borderColor: 'var(--border-light)' }}>
+                    <div className="space-y-4">
+                      {aba.elementos.map((el, i) => (
+                        <div key={i} className="p-5 rounded-xl border flex flex-col sm:flex-row sm:items-start gap-5 hover:shadow-md transition-all hover:border-blue-400" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
+                          
+                          {/* Badge do Tipo (Botão, Filtro, Menu) */}
+                          <div className="shrink-0 w-24 pt-0.5">
+                            {/* 🚀 CORRIGIDO: Cores mais vibrantes para os selos no modo escuro */}
+                            <span className="block text-center px-2 py-1.5 rounded-lg bg-blue-500/20 text-blue-500 dark:text-blue-400 text-[10px] font-black uppercase tracking-widest border border-blue-500/30 shadow-sm">
+                              {el.tipo}
+                            </span>
+                          </div>
 
-              <div className="leading-relaxed text-[15px]">
-                {topicoSelecionado.content}
+                          {/* Detalhe da Função */}
+                          <div className="flex-1">
+                            <h4 className="font-black text-base mb-1.5" style={{ color: 'var(--text-main)' }}>{el.nome}</h4>
+                            {/* 🚀 CORRIGIDO: Fonte mais clara e legível no modo escuro */}
+                            <p className="text-[13px] font-medium leading-relaxed" style={{ color: 'var(--text-main)', opacity: 0.85 }}>{el.desc}</p>
+                          </div>
+                          
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              
-              <div className="mt-16 pt-8 border-t flex items-center justify-between opacity-30" style={{ borderColor: 'var(--border-light)' }}>
-                <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-main)' }}>Fim do Guia</span>
-                <span className="text-xl font-black tracking-tighter" style={{ color: 'var(--text-main)' }}>Nexus.inv</span>
-              </div>
-            </div>
-          )}
+            );
+          })}
         </div>
 
       </div>

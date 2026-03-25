@@ -138,7 +138,7 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
           {isSidebarOpen ? (
             <>
               <span className="text-[10px] font-black tracking-[0.2em] text-gray-500 uppercase">Nexus System</span>
-              <span className="text-[9px] font-mono font-bold text-blue-500 mt-1">v5.7.1.0</span>
+              <span className="text-[9px] font-mono font-bold text-blue-500 mt-1">v5.7.2.0</span>
             </>
           ) : (
             <span className="text-[9px] font-mono font-bold text-blue-500">v2.0</span>

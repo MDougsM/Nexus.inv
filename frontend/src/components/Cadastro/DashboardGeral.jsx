@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 export default function DashboardGeral({ 
-  stats, dadosCategoria, dadosStatus, logsRecentes, ativosTotais, getMiniIcon, borderStrong 
+  stats, dadosCategoria, dadosStatus, logsRecentes, ativosTotais, getMiniIcon, borderStrong, categorias 
 }) {
   const navigate = useNavigate();
   const [statusDetalhe, setStatusDetalhe] = useState(null);
@@ -135,7 +135,9 @@ export default function DashboardGeral({
              </div>
 
              {/* O filtro das máquinas abre embaixo de tudo */}
+             {/* 🚀 NOVO GRÁFICO DINÂMICO DE CATEGORIAS AO CLICAR NO STATUS */}
              {statusDetalhe && (() => {
+                  // 1. Filtra as máquinas pelo status clicado
                   const ativosDaLista = ativosTotais.filter(a => {
                     const st = (a.status || 'ATIVO').toUpperCase();
                     if (statusDetalhe === 'Ativos') return st === 'ATIVO' || st === 'ONLINE';
@@ -144,23 +146,55 @@ export default function DashboardGeral({
                     return false;
                   });
 
+                  // 2. Agrupa essas máquinas por categoria
+                  const contagemCatDetalhe = {};
+                  ativosDaLista.forEach(a => {
+                     const catObj = categorias.find(c => c.id === a.categoria_id);
+                     const catName = catObj ? catObj.nome : 'Sem Categoria';
+                     contagemCatDetalhe[catName] = (contagemCatDetalhe[catName] || 0) + 1;
+                  });
+
+                  // 3. Formata para o Recharts
+                  const dadosGraficoDetalhe = Object.keys(contagemCatDetalhe)
+                     .map(k => ({ name: k, quantidade: contagemCatDetalhe[k] }))
+                     .sort((a,b) => b.quantidade - a.quantidade);
+
                   return (
-                    <div className="w-full mt-6 p-5 rounded-2xl border bg-blue-50/30 animate-fade-in" style={{ borderColor: 'var(--border-light)' }}>
-                      <div className="flex justify-between items-center mb-4">
-                        <h5 className="font-black text-[11px] uppercase tracking-widest text-blue-600">📋 Máquinas: {statusDetalhe}</h5>
-                        <button onClick={() => setStatusDetalhe(null)} className="text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors">❌ Fechar</button>
+                    <div className="w-full mt-6 p-6 rounded-2xl border bg-blue-50/30 animate-fade-in" style={{ borderColor: 'var(--border-light)' }}>
+                      <div className="flex justify-between items-center mb-6">
+                        <h5 className="font-black text-[11px] uppercase tracking-widest text-blue-600">📊 Tipos de Equipamento: {statusDetalhe}</h5>
+                        <button onClick={() => setStatusDetalhe(null)} className="text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors shadow-sm">❌ Fechar</button>
                       </div>
-                      <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-2 pr-2">
-                        {ativosDaLista.length === 0 ? <p className="text-xs opacity-50 font-bold">Nenhuma máquina encontrada.</p> : 
-                          ativosDaLista.map(a => (
-                            <div key={a.id} className="flex justify-between items-center p-3 rounded-xl border bg-white shadow-sm text-xs transition-colors hover:bg-gray-50" style={{ borderColor: 'var(--border-light)' }}>
-                              <span className="font-black text-blue-600">{a.patrimonio}</span>
-                              <span className="truncate flex-1 px-4 font-bold opacity-70" style={{ color: 'var(--text-main)' }}>{a.marca} {a.modelo}</span>
-                              <span className="font-bold opacity-60" style={{ color: 'var(--text-main)' }}>{a.secretaria || 'Sem Local'}</span>
-                            </div>
-                          ))
-                        }
-                      </div>
+
+                      {dadosGraficoDetalhe.length === 0 ? (
+                         <p className="text-xs opacity-50 font-bold text-center py-6">Nenhum equipamento encontrado neste status.</p>
+                      ) : (
+                         <div className="h-64 w-full">
+                           <ResponsiveContainer width="100%" height="100%">
+                             <BarChart data={dadosGraficoDetalhe} margin={{ top: 10, right: 10, left: -20, bottom: 40 }}>
+                               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(150,150,150,0.2)" />
+                               <XAxis 
+                                  dataKey="name" 
+                                  tick={{fontSize: 9, fontWeight: 'bold', fill: 'var(--text-muted)'}} 
+                                  axisLine={false} 
+                                  tickLine={false} 
+                                  angle={-45} 
+                                  textAnchor="end" 
+                               />
+                               <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold', fill: 'var(--text-muted)'}} />
+                               <Tooltip 
+                                  cursor={{fill: 'rgba(59, 130, 246, 0.1)'}} 
+                                  contentStyle={{ borderRadius: '12px', border: '1px solid var(--border-light)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold', fontSize: '12px' }} 
+                               />
+                               <Bar dataKey="quantidade" name="Quantidade" radius={[6, 6, 0, 0]} barSize={35}>
+                                  {dadosGraficoDetalhe.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={['#3b82f6', '#0ea5e9', '#06b6d4', '#14b8a6', '#10b981'][index % 5]} />
+                                  ))}
+                               </Bar>
+                             </BarChart>
+                           </ResponsiveContainer>
+                         </div>
+                      )}
                     </div>
                   );
              })()}

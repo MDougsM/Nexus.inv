@@ -204,9 +204,14 @@ export default function Dashboard() {
       {/* RENDERIZADOR DE ABAS */}
       {abaAtiva === 'geral' && (
         <DashboardGeral 
-          stats={stats} dadosCategoria={dadosCategoria} dadosStatus={dadosStatus} 
-          logsRecentes={logsRecentes} ativosTotais={ativosTotais} 
-          getMiniIcon={getMiniIcon} borderStrong={borderStrong} 
+          stats={stats} 
+          dadosCategoria={dadosCategoria} 
+          dadosStatus={dadosStatus} 
+          logsRecentes={logsRecentes} 
+          ativosTotais={ativosTotais} 
+          getMiniIcon={getMiniIcon} 
+          borderStrong={borderStrong} 
+          categorias={categoriasTotais} // 🚀 ADICIONE ESTA LINHA AQUI!
         />
       )}
 

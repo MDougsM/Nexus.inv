@@ -9,7 +9,6 @@ services:
       - "${BACKEND_PORT}:${BACKEND_PORT}"
     volumes:
       - ./backend:/app
-      - ./data:/app/data
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - VERSAO_ATUAL=${VERSAO_ATUAL}

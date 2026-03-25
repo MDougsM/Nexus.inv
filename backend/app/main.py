@@ -130,7 +130,7 @@ def get_me():
 
 @app.get("/api/backup/download")
 def download_backup():
-    db_path = "nexus.db"
+    db_path = "./data/nexus.db" # 🚀 Ajustado para buscar o banco dentro do cofre (data)
     if os.path.exists(db_path):
         return FileResponse(path=db_path, filename="nexus_backup.db", media_type="application/octet-stream")
     return {"error": "Arquivo de banco de dados não encontrado."}
