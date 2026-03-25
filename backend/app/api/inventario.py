@@ -17,7 +17,7 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 
-VERSAO_DESTE_AGENTE = "4.4" 
+VERSAO_DESTE_AGENTE = "4.5" 
 BASE_URL = "http://localhost:8001" 
 COLETA_URL = f"{BASE_URL}/api/inventario/agente/coleta"
 VERSAO_URL = f"{BASE_URL}/api/inventario/agente/versao"
@@ -46,7 +46,7 @@ def get_db():
 @router.get("/agente/versao")
 def versao_agente():
     return {
-        "versao_atual": "4.4", 
+        "versao_atual": "4.5", 
         "url_download": "/api/inventario/download/agente"
     }
 

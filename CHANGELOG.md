@@ -1,6 +1,17 @@
 # Changelog - Nexus.inv
 
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
+## [v5.7.3.0] - 2026-03-25
+
+### 🚀 Adicionado (Added)
+- **Roteamento Dinâmico (Cérebro Externo):** O Agente Nexus (agora na v4.5) foi reescrito para eliminar o Ponto Único de Falha (Single Point of Failure) de URLs "chumbadas". Ele agora consome um arquivo de texto em nuvem (GitHub Gist) em tempo de execução para descobrir a URL atual do Backend (Cloudflare/Domínio), permitindo atualizações de rota sem necessidade de recompilar ou reinstalar o executável nos clientes.
+- **Cache de Resiliência de Rede:** Implementado um sistema de memória no Agente (`nexus_link_cache.txt`). Caso o GitHub esteja bloqueado no firewall do cliente ou a rede falhe, o Agente busca no disco o último link válido conhecido e tenta a conexão, garantindo alta disponibilidade.
+- **Dashboard Nativo do Agente:** A interface do Agente Windows foi completamente redesenhada. A antiga caixa de texto simples foi substituída por um Grid de Cards interativo (estilo Dashboard), exibindo os componentes detectados (CPU, RAM, Disco, Rede, Serial) com ícones e formatação premium em Modo Escuro.
+- **UX de Sincronização:** Adicionada uma barra de progresso oculta que surge apenas durante o envio dos dados, acompanhada de mensagens de status em tempo real ("Empacotando Hardware", "Autenticando na Nuvem", "Transmitindo Dados"), melhorando o feedback visual para o usuário.
+
+### 🐛 Corrigido (Fixed)
+- **Crashes de Compilação do Tkinter:** Corrigidos os erros fatais de renderização do `CustomTkinter` que impediam a abertura do `.exe` compilado, substituindo propriedades visuais incompatíveis (como `weight="black"` para `"bold"` e `italic=True` para `slant="italic"`).
+
 ## [v5.7.2.0] - 2026-03-25
 
 ### 🚀 Adicionado (Added)
