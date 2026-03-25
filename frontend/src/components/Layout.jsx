@@ -24,6 +24,10 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
   const isAdmin = localStorage.getItem('isAdmin') === 'true';
   const permissoesObj = JSON.parse(localStorage.getItem('permissoes') || '[]');
 
+  // 🚀 LENDO A VERSÃO DIRETO DO .ENV (Se falhar, mostra 0.0.0.0 para você saber na hora)
+  const versaoCompleta = import.meta.env.VITE_VERSAO_SISTEMA || "0.0.0.0";
+  const versaoCurta = import.meta.env.VITE_VERSAO_SISTEMA ? import.meta.env.VITE_VERSAO_SISTEMA.split('.')[0] + ".0" : "0.0";
+
   const carregarPerfil = async () => {
     if (!usuarioAtual) return;
     try {
@@ -138,10 +142,10 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
           {isSidebarOpen ? (
             <>
               <span className="text-[10px] font-black tracking-[0.2em] text-gray-500 uppercase">Nexus System</span>
-              <span className="text-[9px] font-mono font-bold text-blue-500 mt-1">v5.7.2.0</span>
+              <span className="text-[9px] font-mono font-bold text-blue-500 mt-1">v{versaoCompleta}</span>
             </>
           ) : (
-            <span className="text-[9px] font-mono font-bold text-blue-500">v2.0</span>
+            <span className="text-[9px] font-mono font-bold text-blue-500">v{versaoCurta}</span>
           )}
         </div>
       </aside>

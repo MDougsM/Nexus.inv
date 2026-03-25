@@ -1,9 +1,19 @@
 # Changelog - Nexus.inv
 
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
+## [v5.8.1.6] - 2026-03-25
+### 💄 UI/UX & Frontend
+- **Versão Dinâmica:** Remoção do versionamento "chumbado" (hardcoded `v5.7.2.0`) no layout do menu lateral. O sistema React agora lê a versão dinamicamente direto do arquivo `.env` através da variável `VITE_VERSAO_SISTEMA`, evitando dessincronização visual nas próximas atualizações.
+
+## [v5.8.1.0] - 2026-03-25
+### 🛠️ Correções (Hotfixes & Stability)
+- **Agente v5.0.1 (WMI/COM Memory Fix):** Resolvido o erro crítico `Win32 exception occurred releasing IUnknown` removendo o encerramento prematuro do `pythoncom.CoUninitialize()`, permitindo que o Garbage Collector do Python gerencie a memória do WMI nativamente sem crashar a thread do C2.
+- **Agente v5.0.1 (Encoding UTF-8):** Injetada a flag `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` diretamente no subprocesso do PowerShell. Acentuações (ç, ã, í) agora são renderizadas perfeitamente no terminal do React.
+- **Backend (Rota C2):** Corrigido o endpoint `GET /api/comandos/maquina/{patrimonio}` com o modificador `:path` para evitar erros 404/500 em patrimônios que contêm barras (ex: `S/P_001`).
+- **Frontend (Terminal Remoto):** Adicionado *timestamp* (Data e Hora) em cada log de comando disparado para melhor rastreabilidade de execução.
+
 
 # Changelog - Nexus System v5.8.0.0 🚀
-
 ## [Novo] Terminal Remoto & C2 Engine
 - **Frontend**: Adicionado componente `TerminalRemoto.jsx` com suporte a scripts PowerShell/CMD.
 - **Backend**: Implementada fila de comandos (C2) para execução assíncrona nos agentes.
@@ -19,7 +29,6 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 - Ajuste de flags no Inno Setup para execução imediata pós-instalação.
 
 ## [v5.7.3.0] - 2026-03-25
-
 ### 🚀 Adicionado (Added)
 - **Roteamento Dinâmico (Cérebro Externo):** O Agente Nexus (agora na v4.5) foi reescrito para eliminar o Ponto Único de Falha (Single Point of Failure) de URLs "chumbadas". Ele agora consome um arquivo de texto em nuvem (GitHub Gist) em tempo de execução para descobrir a URL atual do Backend (Cloudflare/Domínio), permitindo atualizações de rota sem necessidade de recompilar ou reinstalar o executável nos clientes.
 - **Cache de Resiliência de Rede:** Implementado um sistema de memória no Agente (`nexus_link_cache.txt`). Caso o GitHub esteja bloqueado no firewall do cliente ou a rede falhe, o Agente busca no disco o último link válido conhecido e tenta a conexão, garantindo alta disponibilidade.

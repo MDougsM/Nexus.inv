@@ -1,247 +1,195 @@
-# Nexus.inv - Sistema de Inventário de Ativos de TI
+﻿# Nexus.inv - Sistema de Inventário e Agente CMD/C2 (v5)
 
-Nexus.inv é um sistema completo de gerenciamento de inventário de ativos de TI, com foco especial em impressoras e equipamentos de rede. O sistema integra um backend robusto em FastAPI, um frontend moderno em React com Vite, e um aplicativo sentinel para monitoramento contínuo via SNMP.
+Nexus.inv é um sistema de inventário de ativos de TI com backend FastAPI, frontend React/Vite, app Sentinel SNMP e um agente remoto (C2) com receptor de comandos CMD/PowerShell.
 
-## 🚀 Funcionalidades Principais
+## 🔥 Novidades da versão atual
 
-### 📊 Gerenciamento de Inventário
-- Cadastro completo de ativos de TI (impressoras, computadores, periféricos)
-- Categorias configuráveis com campos dinâmicos
-- Ficha técnica detalhada com telemetria em tempo real
-- Transferências entre unidades e setores
-- Controle de manutenção preventiva e corretiva
+- Agente com **receptor de comandos via C2** (polling 30s): `api/agente/comandos/pendentes/{uuid_persistente}`
+- Suporte a execuções remotas de **PowerShell + CMD** diretamente pela interface de cadastro
+- Endpoint de download do instalador atualizado para `Nexus_Instalador_v5.exe`
+- Fluxo completo de enfileiramento / leitura / retorno de resultados de comandos
+- Histórico de execução com status e logs no frontend (`TerminalRemoto`)
 
-### 🔍 Monitoramento e Telemetria (Sentinel)
-- Aplicativo desktop para monitoramento contínuo de impressoras via SNMP
-- Coleta automática de dados como níveis de toner, contadores de página e status
-- Detecção de mudanças de IP e alertas de suprimento
-- Interface gráfica moderna com modo escuro
+## 📁 Estrutura do repositório
 
-### 🤖 Agente de Auto-Discovery
-- Agente executável para descoberta automática de hardware
-- Identificação de componentes (BIOS, placa-mãe, discos, CPU)
-- Atualização automática (OTA) via servidor
-- Instalador personalizado com Inno Setup
+- `backend/` - FastAPI + SQLAlchemy + DB
+- `frontend/` - React 18 + Vite + Tailwind
+- `Nexus_Print_Sentinel/` - App desktop SNMP
+- `ARQUITETURA_SISTEMA.md` - documentação arquitetural
+- `CHANGELOG.md` - histórico de versões
 
-### 📈 Relatórios e Auditoria
-- Geração automática de relatórios de faturamento e uso
-- Histórico completo de auditoria de ações
-- Exportação para CSV e PDF
-- Agendamento de relatórios com APScheduler
-
-### 👥 Controle de Acesso
-- Sistema de permissões granulares (RBAC)
-- Gestão de usuários e perfis
-- Autenticação JWT
-- Menu lateral dinâmico baseado em permissões
-
-### 🌐 Interface Web Moderna
-- Dashboard responsivo com gráficos interativos (Recharts)
-- Consulta pública via QR Code
-- Interface em modo escuro
-- Suporte a múltiplas unidades e setores
-
-## 🏗️ Arquitetura do Sistema
-
-O sistema é composto por três componentes principais:
+## 🧩 Componentes principais
 
 ### Backend (FastAPI)
-- **Localização:** `backend/`
-- **Tecnologias:** FastAPI, SQLAlchemy, PostgreSQL/MySQL
-- **Porta padrão:** 8001
-- **APIs:** Inventário, autenticação, auditoria, transferências, usuários, manutenção
+- Rotas inventário: `/api/inventario/*`
+- Auth: `/api/login`, `/api/usuarios`, `/api/auditoria`
+- Agente C2 e terminal remoto:
+  - `POST /api/comandos/enviar`
+  - `GET /api/comandos/maquina/{patrimonio:path}`
+  - `GET /api/agente/comandos/pendentes/{uuid_persistente}`
+  - `POST /api/agente/comandos/resultado`
+- Rota de instalador: `/api/inventario/download/agente` retorna `Nexus_Instalador_v5.exe`
+- Rotas de comando global de coleta (legacy): `/api/inventario/agente/comando*`
 
 ### Frontend (React)
-- **Localização:** `frontend/`
-- **Tecnologias:** React 18, Vite, Tailwind CSS, Axios
-- **Porta padrão:** 5173
-- **Funcionalidades:** Dashboard, cadastro, relatórios, configurações
+- Página de configurações com botão de download de instalador
+- `components/Cadastro/TerminalRemoto.jsx` com formulário de script e log
+- Histórico de comandos no `ativo.patrimonio`
 
-### Sentinel (Desktop App)
-- **Localização:** `Nexus_Print_Sentinel/`
-- **Tecnologias:** CustomTkinter, PySNMP, SQLite local
-- **Funcionalidades:** Monitoramento SNMP, telemetria, logs
+### Sentinel (Desktop)
+- `Nexus_Print_Sentinel/sentinel_app.py` realiza coleta SNMP, status e auditoria
+- Agente local (`agente_nexus.pyw`) com thread `escutar_comandos_c2(...)`
 
-## 📋 Pré-requisitos
+## 📦 Instalação
 
-- **Python 3.8+** (para backend e sentinel)
-- **Node.js 20+** (para frontend)
-- **Docker e Docker Compose** (para deploy)
-- **Banco de dados:** PostgreSQL ou MySQL
-- **Inno Setup** (para empacotamento do agente)
+### Pré-requisitos
+- Python 3.8+
+- Node.js 16+ (ou 20+)
+- Docker + Docker Compose (opcional)
+- Inno Setup para empacotar agente instalador
 
-## 🚀 Instalação e Execução
+### Backend
 
-### 1. Clonagem do Repositório
-```bash
-git clone <url-do-repositorio>
-cd NexusInv
-```
-
-### 2. Configuração do Ambiente
-Crie um arquivo `.env` na raiz do projeto com as seguintes variáveis:
-```env
-DATABASE_URL=postgresql://usuario:senha@localhost:5432/nexus_db
-BACKEND_PORT=8001
-FRONTEND_PORT=5173
-VITE_API_URL=http://localhost:8001
-VERSAO_ATUAL=2.1.0.0
-```
-
-### 3. Deploy com Docker (Recomendado)
-```bash
-# Construir e iniciar os serviços
-docker-compose up -d --build
-
-# Verificar logs
-docker-compose logs -f
-```
-
-### 4. Execução Manual (Desenvolvimento)
-
-#### Backend
-```bash
+```ps1
 cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 ```
 
-#### Frontend
+### Frontend
+
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-#### Sentinel
+### Sentinel
+
 ```bash
 cd Nexus_Print_Sentinel
 pip install -r requirements.txt
 python sentinel_app.py
 ```
 
-## 📖 Uso
+### Docker (recomendado)
 
-### Acesso ao Sistema
-1. Acesse `http://localhost:5173` (frontend)
-2. Faça login com usuário padrão: `admin` / `admin123`
-3. Configure unidades, categorias e usuários conforme necessário
+```bash
+docker-compose up -d --build
+```
 
-### Configuração Inicial
-1. **Unidades:** Cadastre secretarias e setores
-2. **Categorias:** Defina tipos de equipamento e campos dinâmicos
-3. **Usuários:** Crie perfis com permissões específicas
-4. **Sentinel:** Configure IPs de impressoras para monitoramento
+## 🚀 Fluxo do Agente C2 (CMD/PowerShell)
 
-### Agente de Auto-Discovery
-1. Compile o agente: `pyinstaller --noconsole --onefile agente_nexus.pyw`
-2. Empacote com Inno Setup usando `Nexus_Agente.iss`
-3. Faça upload do instalador para `backend/app/static/`
-4. Atualize a versão na API `/api/inventario/agente/versao`
+1. O frontend chama `POST /api/comandos/enviar` com:
+   - `patrimonio`, `uuid_persistente`, `script_content`, `usuario_emissor`
+2. O backend grava em `comandos_agente` com `status='PENDENTE'`
+3. O agente periodicamente busca em `/api/agente/comandos/pendentes/{uuid}`:
+   - retorna `{tem_comando: true, comando_id, script_content}`
+   - marca `status='EXECUTANDO'`
+4. Agente executa script (cmd/powershell) e envia log para `/api/agente/comandos/resultado`
+5. Frontend atualiza histórico via `/api/comandos/maquina/{patrimonio}`
 
-## 🔧 Estrutura de Dados
+## 🛠️ Configuração do agente instalador
 
-### Tabelas Principais
-- **ativos:** Inventário principal com dados dinâmicos (JSON)
-- **categorias:** Tipos de equipamento com configuração de campos
-- **logs_auditoria:** Histórico de ações do sistema
-- **historico_leituras:** Dados temporais de telemetria
-- **usuarios:** Controle de acesso e permissões
+- Instalação do pacote: `backend/app/static/Nexus_Instalador_v5.exe`
+- Rota de download no frontend e API aponta para `Nexus_Instalador_v5.exe`
+- Caso ainda use `Nexus_Instalador.exe`, atualize para a nova nomenclatura:
+  - `backend/app/api/inventario.py`
+  - `backend/app/main.py`
+  - `frontend/src/pages/ConfiguracoesComponents/PainelFerramentas.jsx`
 
-### APIs Principais
-- `GET /api/inventario/` - Listagem de ativos
-- `GET /api/inventario/id/{id}` - Ficha técnica
-- `PUT /api/inventario/ficha/editar/id/{id}` - Edição
-- `POST /api/inventario/agente/comando/enviar` - Comandos SNMP
+## 📡 Integração SNMP (Sentinel)
 
-## 📊 Relatórios
+- Coleta automática de contador, toner, e status via SNMP
+- Grava alertas de queda, tempo de funcionamento e IP
+- Histórico de leituras em `historico_leituras`
 
-O sistema gera relatórios automáticos de:
-- Faturamento por impressora
-- Uso de suprimentos
-- Alertas de manutenção
-- Auditoria de transferências
+## ⚙️ Banco de dados
 
-Relatórios são armazenados em `relatorios_gerados_csv/` e podem ser baixados via interface.
+Tabelas-chave:
+- `ativos`, `categorias`, `usuarios`, `logs_auditoria`
+- `comandos_agente` (C2)
+- `historico_leituras`
 
-## 🔐 Segurança
+## 🧪 Testes manuais
 
-- Autenticação JWT com expiração
-- Controle de acesso baseado em roles
-- Logs de auditoria completos
-- Validação de entrada em todas as APIs
-- Sanitização de dados para prevenir injeção
+1. Registrar máquina e conferir inventário.
+2. Abrir terminal remoto e enviar script `ipconfig /all` ou `Get-Process`.
+3. Confirmar retorno de log e status `CONCLUIDO` no histórico.
+4. Verificar rota de download do instalador em `/api/inventario/download/agente`.
 
-## 🐛 Troubleshooting
+## 📌 Dicas de deploy
 
-### Erro 405/404 em URLs
-- Use sempre IDs numéricos em rotas, evite barras (/) em patrimônios
+- Mantenha o `.env` em produção com URLs corretas:
+  - `VITE_API_URL` = backend
+  - `FRONTEND_URL` = frontend
+- Evite sobrescrever `backend/data` e `.env` em updates.
+- Use `docker-compose down && docker-compose up -d --build`.
 
-### Campos não aparecem na ficha técnica
-- Verifique configuração da categoria
-- Certifique-se que `categoria_id` é numérico
+## 📝 Changelog resumido
+- Terminal remoto C2 adicionado
+- Agente com pooling de comandos e execução remota
+- Instalador atualizado para `Nexus_Instalador_v5.exe`
+- Endpoint de comando global mantido para fallback
 
-### Sentinel não coleta dados
-- Verifique conectividade SNMP nas impressoras
-- Confirme IPs configurados no banco local
+### Exemplos de Payloads C2
 
-### Agente não atualiza
-- Verifique versão no servidor vs. cliente
-- Confirme URL de download no `IP_PRODUCAO`
+#### Enviar Comando (POST /api/comandos/enviar)
+```json
+{
+  "patrimonio": "PC001",
+  "uuid_persistente": "550e8400-e29b-41d4-a716-446655440000",
+  "script_content": "ipconfig /all",
+  "usuario_emissor": "admin"
+}
+```
 
-## 📝 Desenvolvimento
+#### Verificar Comandos Pendentes (GET /api/agente/comandos/pendentes/{uuid})
+Resposta se há comando:
+```json
+{
+  "tem_comando": true,
+  "comando_id": 123,
+  "script_content": "Get-Process | Select Name, CPU"
+}
+```
 
-### Contribuição
-1. Fork o projeto
-2. Crie uma branch para sua feature
-3. Commit suas mudanças
-4. Push para a branch
-5. Abra um Pull Request
+#### Enviar Resultado (POST /api/agente/comandos/resultado)
+```json
+{
+  "comando_id": 123,
+  "status": "CONCLUIDO",
+  "output_log": "Nome    CPU\n----    ---\nsystem  0.1\nchrome  5.2\n..."
+}
+```
 
-### Convenções de Código
-- Backend: PEP 8
-- Frontend: ESLint padrão
-- Commits: Conventional Commits
+### Schema da Tabela `comandos_agente`
+- `id` (PK)
+- `patrimonio` (string)
+- `uuid_persistente` (string)
+- `script_content` (text)
+- `status` (PENDENTE/EXECUTANDO/CONCLUIDO/ERRO)
+- `output_log` (text, nullable)
+- `usuario_emissor` (string)
+- `data_criacao`, `data_conclusao` (datetime)
 
-## 📄 Licença
+## 🔧 Troubleshooting
 
-Este projeto é proprietário da organização Nexus.
+### C2 não executa comandos
+- Verifique se o agente está rodando com privilégios SYSTEM
+- Confirme UUID persistente no banco vs. agente
+- Logs do agente em `C:\Nexus\logs\`
+
+### Instalador não baixa
+- Arquivo `Nexus_Instalador_v5.exe` deve estar em `backend/app/static/`
+- Verifique permissões de leitura na pasta
+
+### Sentinel não coleta SNMP
+- IPs das impressoras devem estar corretos
+- Porta SNMP 161 aberta no firewall
 
 ## 📞 Suporte
+- Link interno /poa/contato ou equipe de DevOps
 
-Para suporte técnico, entre em contato com a equipe de desenvolvimento.
-
----
-
-**Versão atual:** 2.1.0.0
-**Última atualização:** 23 de março de 2026
-
-.env
-
-## 🚀 Como Atualizar o Nexus Print em Produção (Deploy Limpo)
-
-Para evitar erros de cache, links quebrados ou banco de dados travado durante uma atualização, siga estritamente o procedimento abaixo na máquina de produção.
-
-### 1. Atualizar o código
-Baixe os arquivos mais recentes do projeto (via Git ou copiando a pasta). **Atenção:** Não sobrescreva a pasta `/data` nem o arquivo `.env` da produção.
-
-### 2. Configurar o `.env` (Se for a primeira vez)
-Crie um arquivo `.env` na raiz do projeto contendo as URLs corretas do Cloudflare:
-\`\`\`env
-VITE_API_URL=https://<url-do-backend-8001>
-FRONTEND_URL=https://<url-do-frontend-5174>
-\`\`\`
-
-### 3. O Ritual de Atualização (Comandos Docker)
-Abra o terminal na pasta do projeto e execute os comandos abaixo, um por vez:
-
-1. **Derrubar os serviços antigos com segurança:**
-   \`docker-compose down\`
-
-2. **Reconstruir as imagens limpando o cache (Injeta as novas URLs do .env):**
-   \`docker-compose build --no-cache\`
-
-3. **Subir o sistema atualizado:**
-   \`docker-compose up -d\`
-
-O sistema estará no ar em cerca de 30 segundos, já lendo os links de produção atualizados!

@@ -75,10 +75,13 @@ export default function TerminalRemoto({ ativo, onClose, usuarioAtual }) {
             historico.map(cmd => (
               <div key={cmd.id} className="border border-blue-900/30 rounded bg-[#0f172a]/50 p-3">
                 <div className="flex justify-between items-start mb-2 border-b border-blue-900/30 pb-2">
-                  <div className="text-blue-400">
-                    <span className="text-emerald-500 font-bold">[{cmd.usuario_emissor}]</span> executou:
-                    <div className="text-gray-300 mt-1 pl-2 border-l-2 border-emerald-500/30 whitespace-pre-wrap">{cmd.script_content}</div>
-                  </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-emerald-500 font-bold">[{cmd.usuario_emissor}]</span>
+                        <span className="text-gray-500 text-[10px]">
+                            ({new Date(cmd.data_criacao).toLocaleString('pt-BR')})
+                        </span>
+                        <span className="text-blue-400">executou:</span>
+                    </div>
                   <span className={`px-2 py-0.5 rounded text-[9px] font-black tracking-widest uppercase ${cmd.status === 'PENDENTE' ? 'bg-yellow-500/20 text-yellow-500' : cmd.status === 'EXECUTANDO' ? 'bg-blue-500/20 text-blue-500 animate-pulse' : cmd.status === 'ERRO' ? 'bg-red-500/20 text-red-500' : 'bg-emerald-500/20 text-emerald-500'}`}>
                     {cmd.status}
                   </span>
