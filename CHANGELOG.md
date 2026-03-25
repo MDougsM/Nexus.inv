@@ -1,6 +1,23 @@
 # Changelog - Nexus.inv
 
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
+
+# Changelog - Nexus System v5.8.0.0 🚀
+
+## [Novo] Terminal Remoto & C2 Engine
+- **Frontend**: Adicionado componente `TerminalRemoto.jsx` com suporte a scripts PowerShell/CMD.
+- **Backend**: Implementada fila de comandos (C2) para execução assíncrona nos agentes.
+- **Agente (v5.0)**: Nova thread de escuta ativa (polling de 30s) para execução de comandos em background com privilégios `SYSTEM`.
+
+## [Ajustes de Infraestrutura]
+- **Persistência**: Migração do Watchdog de intervalo fixo (15 min) para `ONLOGON` para evitar múltiplas instâncias.
+- **Segurança**: Adicionada exceção automática no Windows Defender via instalador para a pasta `C:\Nexus.inv`.
+- **Performance**: Otimização do timeout de descoberta de IP de 5s para 1.5s para carregamento instantâneo da GUI.
+
+## [Correções]
+- Erro de `NameError: ComandoCreate` no endpoint de comandos resolvido.
+- Ajuste de flags no Inno Setup para execução imediata pós-instalação.
+
 ## [v5.7.3.0] - 2026-03-25
 
 ### 🚀 Adicionado (Added)

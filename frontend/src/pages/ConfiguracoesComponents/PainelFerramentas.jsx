@@ -75,7 +75,7 @@ export default function PainelFerramentas() {
             <div className="w-14 h-14 rounded-2xl bg-purple-900/40 border border-purple-500/30 flex items-center justify-center text-2xl shadow-inner">💻</div>
             <div>
               <h3 className="text-base font-black text-white flex items-center gap-2">
-                Agente Nexus <span className="text-[9px] bg-purple-600 px-2 py-0.5 rounded text-white uppercase tracking-widest">v4.5</span>
+                Agente Nexus <span className="text-[9px] bg-purple-600 px-2 py-0.5 rounded text-white uppercase tracking-widest">v5.0</span>
               </h3>
               <p className="text-gray-400 text-xs font-bold mt-1">Agente de telemetria geral para PCs.</p>
             </div>

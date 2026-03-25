@@ -105,9 +105,12 @@ class ComandoAgente(Base):
     __tablename__ = "comandos_agente"
     
     id = Column(Integer, primary_key=True, index=True)
-    cliente = Column(String, index=True)
-    comando = Column(String) # Ex: "FORCAR_COLETA"
-    status = Column(String, default="PENDENTE") # PENDENTE, CONCLUIDO, ERRO
+    patrimonio = Column(String, index=True) # Máquina alvo
+    uuid_persistente = Column(String, index=True) # O ID físico do PC para ele saber que é pra ele
+    script_content = Column(Text) # O código PowerShell/CMD a ser rodado
+    status = Column(String, default="PENDENTE") # PENDENTE, EXECUTANDO, CONCLUIDO, ERRO
+    output_log = Column(Text, nullable=True) # A resposta do terminal do cliente
+    usuario_emissor = Column(String) # Qual Admin mandou rodar
     data_criacao = Column(DateTime, default=datetime.utcnow)
     data_conclusao = Column(DateTime, nullable=True)
 

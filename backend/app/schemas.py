@@ -48,3 +48,17 @@ class AgenteColeta(BaseModel):
     setor: str
     patrimonio_manual: Optional[str] = ""
     override_patrimonio: Optional[bool] = False
+
+# ==========================================
+# SCHEMAS DO TERMINAL REMOTO (C2)
+# ==========================================
+class ComandoCreate(BaseModel):
+    patrimonio: str
+    uuid_persistente: str
+    script_content: str
+    usuario_emissor: str
+
+class ComandoResultado(BaseModel):
+    comando_id: int
+    status: str
+    output_log: str

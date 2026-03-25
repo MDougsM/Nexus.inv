@@ -19,7 +19,8 @@ export default function TabelaInventario({
   formStatus,
   setFormStatus,
   setModalExcluir,
-  setMotivoExclusao
+  setMotivoExclusao,
+  setModalTerminal
 }) {
 
   const isOnline = (ultimaComunicacao) => {
@@ -126,6 +127,7 @@ export default function TabelaInventario({
                           <button onClick={() => {abrirEdicao(ativo); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-gray-500/10 font-medium" style={{ color: 'var(--text-main)' }}>✏️ Editar Cadastro</button>
                           <button onClick={() => {setModalTransferencia({ aberto: true, ativos: [ativo] }); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-gray-500/10 font-medium" style={{ color: 'var(--text-main)' }}>🚚 Transferir Local</button>
                           <button onClick={() => {setModalStatus({ aberto: true, ativos: [ativo] }); setFormStatus({...formStatus, novo_status: ativo.status === 'MANUTENÇÃO' ? 'ATIVO' : 'MANUTENÇÃO'}); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-gray-500/10 font-medium" style={{ color: 'var(--text-main)' }}>🛠️ Alterar Status</button>
+                          <button onClick={() => { setModalTerminal({ aberto: true, ativo: ativo }); setDropdownAberto(null); }} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-emerald-500/10 font-bold" style={{ color: 'var(--color-green)' }}>&gt;_ Terminal Remoto</button>
                           <div className="border-t my-1" style={{ borderColor: 'var(--border-light)' }}></div>
                           <button onClick={() => {setModalExcluir({ aberto: true, ativos: [ativo] }); setMotivoExclusao(''); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-red-500/10 font-bold" style={{ color: 'var(--color-red)' }}>🗑️ Excluir Definitivo</button>
                        </div>

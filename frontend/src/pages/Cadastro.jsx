@@ -11,6 +11,7 @@ import { getNomeTipoEquipamento, getStatusBadge } from '../utils/helpers';
 import BarraPesquisa from '../components/Cadastro/BarraPesquisa';
 import BarraAcoesLote from '../components/Cadastro/BarraAcoesLote';
 import TabelaInventario from '../components/Cadastro/TabelaInventario';
+import TerminalRemoto from '../components/Cadastro/TerminalRemoto'; // 🚀 IMPORTAÇÃO
 
 export default function Cadastro() {
   const [abaAtiva, setAbaAtiva] = useState('lista'); 
@@ -36,6 +37,7 @@ export default function Cadastro() {
   const [modalQRLote, setModalQRLote] = useState({ aberto: false, ativos: [] }); 
   const [modalEdicao, setModalEdicao] = useState({ aberto: false, ativo: null, form: {dados_dinamicos:{}} });
   const [modalEdicaoMassa, setModalEdicaoMassa] = useState({ aberto: false, ativos: [] });
+  const [modalTerminal, setModalTerminal] = useState({ aberto: false, ativo: null });
   const [modalStatus, setModalStatus] = useState({ aberto: false, ativos: [] });
   const [formStatus, setFormStatus] = useState({ novo_status: 'MANUTENÇÃO', os_referencia: '', motivo: '', destino: '' });
   const [modalTransferencia, setModalTransferencia] = useState({ aberto: false, ativos: [] });
@@ -279,6 +281,7 @@ export default function Cadastro() {
             setFormStatus={setFormStatus}
             setModalExcluir={setModalExcluir}
             setMotivoExclusao={setMotivoExclusao}
+            setModalTerminal={setModalTerminal}
           />
             </div>
 
@@ -306,6 +309,13 @@ export default function Cadastro() {
 
       {/* COMPONENTES DE MODAIS EXECUTANDO EM SEGUNDO PLANO */}
       <ModaisEdicao modalEdicao={modalEdicao} setModalEdicao={setModalEdicao} modalEdicaoMassa={modalEdicaoMassa} setModalEdicaoMassa={setModalEdicaoMassa} categorias={categorias} secretarias={secretarias} usuarioAtual={usuarioAtual} carregarDados={carregarDados} setSelecionados={setSelecionados} ativos={ativos} />
+        {modalTerminal.aberto && (
+          <TerminalRemoto 
+            ativo={modalTerminal.ativo} 
+            onClose={() => setModalTerminal({ aberto: false, ativo: null })} 
+            usuarioAtual={usuarioAtual} 
+          />
+        )}
       <ModaisOperacao modalFicha={modalFicha} setModalFicha={setModalFicha} modalQR={modalQR} setModalQR={setModalQR} modalQRLote={modalQRLote} setModalQRLote={setModalQRLote} modalStatus={modalStatus} setModalStatus={setModalStatus} formStatus={formStatus} setFormStatus={setFormStatus} modalTransferencia={modalTransferencia} setModalTransferencia={setModalTransferencia} formTransfer={formTransfer} setFormTransfer={setFormTransfer} modalExcluir={modalExcluir} setModalExcluir={setModalExcluir} motivoExclusao={motivoExclusao} setMotivoExclusao={setMotivoExclusao} categorias={categorias} secretarias={secretarias} usuarioAtual={usuarioAtual} carregarDados={carregarDados} setSelecionados={setSelecionados} />
     </div>
   );

@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from apscheduler.schedulers.background import BackgroundScheduler
+from app.schemas import ComandoCreate, ComandoResultado
 
 # Importação dos seus módulos
 from app.api import auth, inventario, unidades, auditoria, transferencia, usuarios, manutencao, importacao, agendamentos
@@ -288,6 +289,63 @@ async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session =
     return {"patrimonio": maquina_atual.patrimonio, "nome": maquina_atual.modelo}
 
 
+# ==========================================
+# 💻 ROTAS DO TERMINAL REMOTO (C2)
+# ==========================================
+
+# 1. Frontend manda um script para a fila da máquina
+@app.post("/api/comandos/enviar")
+def enviar_comando(dados: ComandoCreate, db: Session = Depends(get_db)):
+    novo_comando = ComandoAgente(
+        patrimonio=dados.patrimonio,
+        uuid_persistente=dados.uuid_persistente,
+        script_content=dados.script_content,
+        usuario_emissor=dados.usuario_emissor,
+        status="PENDENTE"
+    )
+    db.add(novo_comando)
+    db.commit()
+    db.refresh(novo_comando)
+    return {"message": "Comando enfileirado com sucesso!", "comando_id": novo_comando.id}
+
+# 2. Frontend lê o histórico de comandos de uma máquina específica
+@app.get("/api/comandos/maquina/{patrimonio}")
+def listar_comandos(patrimonio: str, db: Session = Depends(get_db)):
+    comandos = db.query(ComandoAgente).filter(ComandoAgente.patrimonio == patrimonio).order_by(ComandoAgente.data_criacao.desc()).limit(10).all()
+    return comandos
+
+# 3. Agente pergunta a cada 30s: "Tem ordem pra mim?"
+@app.get("/api/agente/comandos/pendentes/{uuid_persistente}")
+def verificar_comandos(uuid_persistente: str, db: Session = Depends(get_db)):
+    # Busca o comando mais antigo que ainda está pendente para esta máquina
+    comando = db.query(ComandoAgente).filter(
+        ComandoAgente.uuid_persistente == uuid_persistente,
+        ComandoAgente.status == "PENDENTE"
+    ).order_by(ComandoAgente.data_criacao.asc()).first()
+    
+    if comando:
+        # Muda para "EXECUTANDO" para não mandar o mesmo comando duas vezes
+        comando.status = "EXECUTANDO"
+        db.commit()
+        return {
+            "tem_comando": True, 
+            "comando_id": comando.id, 
+            "script_content": comando.script_content
+        }
+        
+    return {"tem_comando": False}
+
+# 4. Agente rodou o script e devolve o log do terminal (Sucesso ou Erro)
+@app.post("/api/agente/comandos/resultado")
+def receber_resultado_comando(dados: ComandoResultado, db: Session = Depends(get_db)):
+    comando = db.query(ComandoAgente).filter(ComandoAgente.id == dados.comando_id).first()
+    if comando:
+        comando.status = dados.status
+        comando.output_log = dados.output_log
+        comando.data_conclusao = datetime.utcnow()
+        db.commit()
+        return {"message": "Resultado gravado com sucesso"}
+    raise HTTPException(status_code=404, detail="Comando não encontrado")
 
 # ========================================================
 # 🔗 REGISTRO DE ROTADORES (Controllers Externos)
