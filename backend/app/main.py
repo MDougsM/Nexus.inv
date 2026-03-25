@@ -309,7 +309,7 @@ def enviar_comando(dados: ComandoCreate, db: Session = Depends(get_db)):
     return {"message": "Comando enfileirado com sucesso!", "comando_id": novo_comando.id}
 
 # 2. Frontend lê o histórico de comandos de uma máquina específica
-@app.get("/api/comandos/maquina/{patrimonio}")
+@app.get("/api/comandos/maquina/{patrimonio:path}")
 def listar_comandos(patrimonio: str, db: Session = Depends(get_db)):
     comandos = db.query(ComandoAgente).filter(ComandoAgente.patrimonio == patrimonio).order_by(ComandoAgente.data_criacao.desc()).limit(10).all()
     return comandos
