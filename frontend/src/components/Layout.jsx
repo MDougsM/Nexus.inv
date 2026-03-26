@@ -33,12 +33,27 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
     try {
       const res = await api.get('/api/usuarios/');
       const meuUser = res.data.find(u => u.username === usuarioAtual);
+      
       if (meuUser) {
         setNomeUsuario(meuUser.nome_exibicao || usuarioAtual);
         setAvatarUsuario(meuUser.avatar || 'letras');
+        
         // Uma dupla checagem caso o usuário logado perca o Admin no meio da sessão
         localStorage.setItem('isAdmin', meuUser.is_admin);
         localStorage.setItem('permissoes', JSON.stringify(meuUser.permissoes || []));
+
+        // 🚨 O LEÃO DE CHÁCARA: Verifica a LGPD logo que o sistema carrega
+        const aceitou = meuUser.termos_aceitos === true || meuUser.termos_aceitos === 1;
+        
+        if (!aceitou) {
+            localStorage.setItem('nexus_bloqueado', 'true');
+            setBloqueado(true);
+        } else {
+            localStorage.removeItem('nexus_bloqueado'); // Remove a trava
+            setBloqueado(false); // Libera o menu
+            // IMPORTANTE: Avisa a RotaProtegida que agora está liberado!
+            window.dispatchEvent(new Event('statusTermosAlterado'));
+        }
       }
     } catch (e) {
       console.error("Erro ao buscar perfil", e);
@@ -102,10 +117,35 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
     { id: 'ajuda', path: '/ajuda', label: 'Central de Ajuda', icon: '📚' },
   ];
 
-  // Regra: Se for admin OU for o menu de Ajuda (livre para todos) OU estiver na lista de permissões, exibe!
-  const menuFiltrado = menuItemsGerais.filter(item => 
-    isAdmin || item.id === 'ajuda' || permissoesObj.includes(item.id)
-  );
+  // 🛡️ O "ESPIÃO" DO ACEITE: Verifica se o usuário não aceitou os termos
+  const [bloqueado, setBloqueado] = useState(localStorage.getItem('nexus_bloqueado') === 'true');
+
+  useEffect(() => {
+    // Função que re-lê o localStorage quando o evento dispara
+    const verificarTrava = () => {
+        setBloqueado(localStorage.getItem('nexus_bloqueado') === 'true');
+    };
+
+    // Escuta o evento personalizado disparado pelo MeuPerfil.jsx
+    window.addEventListener('statusTermosAlterado', verificarTrava);
+    
+    // Limpa o ouvinte ao desmontar o componente
+    return () => window.removeEventListener('statusTermosAlterado', verificarTrava);
+  }, []);
+
+  // Regra: Filtra primeiro pelas permissões de Admin/Usuário, DEPOIS aplica a trava dos Termos
+  const menuFiltrado = menuItemsGerais.filter(item => {
+      // 1. Checa a permissão normal do perfil (Admin ou na lista)
+      const temPermissaoNormal = isAdmin || item.id === 'ajuda' || permissoesObj.includes(item.id);
+      
+      // 2. 🛡️ Se o sistema estiver bloqueado pela LGPD, esconde TUDO, exceto 'Ajuda'
+      if (bloqueado && item.id !== 'ajuda') {
+          return false; // Esconde o item do menu
+      }
+      
+      // Retorna true apenas se passar pelas duas checagens
+      return temPermissaoNormal;
+  });
 
   return (
     <div className="flex h-screen overflow-hidden text-sm transition-colors duration-300" style={{ backgroundColor: 'var(--bg-page)', color: 'var(--text-main)' }}>
@@ -166,7 +206,12 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
                     style={{ backgroundColor: 'var(--bg-card)', border: borderStrong, color: 'var(--text-main)' }}>
               {isSidebarOpen ? '◀' : '▶'}
             </button>
-            <div className="font-black text-lg hidden md:block" style={{ color: 'var(--text-main)' }}>Inventário Nexus</div>
+            {/* TÍTULO DINÂMICO AQUI */}
+            <div className="font-black text-lg hidden md:block uppercase tracking-tight" style={{ color: 'var(--text-main)' }}>
+              {location.pathname === '/perfil' ? 'Meu Perfil' : 
+              location.pathname === '/cadastro' ? 'Gestão de Ativos' : 
+              location.pathname === '/config' ? 'Configurações' : 'Inventário Nexus'}
+            </div>
           </div>
           
           <div className="flex items-center gap-3">

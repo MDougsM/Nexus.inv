@@ -20,16 +20,33 @@ export default function Login() {
       const res = await api.post('/api/usuarios/login', { username, password });
       
       localStorage.setItem('usuario', res.data.username);
+        if (res.data.termos_aceitos === false) {
+            localStorage.setItem('nexus_bloqueado', 'true');
+        } else {
+            localStorage.removeItem('nexus_bloqueado');
+        }
       localStorage.setItem('isAdmin', res.data.is_admin);
       localStorage.setItem('permissoes', JSON.stringify(res.data.permissoes || [])); 
       
+      const aceitouTermos = res.data.termos_aceitos; // Pega o que o backend mandou
+
+      if (!aceitouTermos) {
+          localStorage.setItem('nexus_bloqueado', 'true');
+      } else {
+          localStorage.removeItem('nexus_bloqueado');
+      }
+
       toast.success(res.data.message);
       
       setTimeout(() => {
-        navigate('/cadastro'); 
+        if (!aceitouTermos) {
+            navigate('/perfil'); // Se tá bloqueado, vai direto ler os termos!
+        } else {
+            navigate('/cadastro'); // Se tá livre, vai trabalhar normal.
+        }
       }, 500);
 
-    } catch (e) {
+    } catch (error) {
       toast.error(e.response?.data?.detail || "Erro de conexão com o servidor.");
     } finally {
       setLoading(false);

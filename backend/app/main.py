@@ -6,7 +6,8 @@ from datetime import datetime
 from typing import Optional
 from sqlalchemy import text
 
-from fastapi import FastAPI, APIRouter, HTTPException, Depends
+# 🛡️ CORREÇÃO: Removido Flask (causador do erro) e corrigido imports do FastAPI
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -16,8 +17,11 @@ from app.schemas import ComandoCreate, ComandoResultado
 
 # Importação dos seus módulos
 from app.api import auth, inventario, unidades, auditoria, transferencia, usuarios, manutencao, importacao, agendamentos
-from app.db.database import engine, SessionLocal 
+from app.db.database import engine, SessionLocal, get_db
 from app.models import Base, Categoria, Usuario, Ativo, LogAuditoria, HistoricoLeitura, ComandoAgente
+
+# 🛡️ CORREÇÃO: Definindo o router que estava faltando no topo
+router = APIRouter()
 
 BACKEND_PORT = int(os.getenv("BACKEND_PORT", 8001))
 
@@ -25,29 +29,92 @@ BACKEND_PORT = int(os.getenv("BACKEND_PORT", 8001))
 Base.metadata.create_all(bind=engine)
 
 # ==========================================
+# 👤 ROTA DE PERFIL (VERSÃO CORRIGIDA FASTAPI)
+# ==========================================
+@router.put("/usuarios/perfil/atualizar")
+async def atualizar_perfil(request: Request, db: Session = Depends(get_db)):
+    dados = await request.json()
+    username = dados.get('username')
+
+    usuario = db.query(Usuario).filter(Usuario.username == username).first()
+    
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+
+    # ⚖️ LÓGICA DO ACEITE / REVOGAÇÃO DOS TERMOS
+    if 'termos_aceitos' in dados:
+        aceitou = dados.get('termos_aceitos')
+        usuario.termos_aceitos = aceitou
+        
+        if aceitou:
+            usuario.data_aceite = datetime.utcnow()
+            usuario.ip_aceite = request.client.host 
+            print(f"✅ Termos aceitos por {username} no IP {usuario.ip_aceite}")
+        else:
+            usuario.data_aceite = None
+            usuario.ip_aceite = None
+            print(f"❌ Assinatura revogada por {username}")
+
+    # Atualizações normais
+    if 'nome_exibicao' in dados:
+        usuario.nome_exibicao = dados.get('nome_exibicao')
+    if 'avatar' in dados:
+        usuario.avatar = dados.get('avatar')
+
+    db.commit()
+    db.refresh(usuario)
+    return {
+        "status": "sucesso", 
+        "msg": "Perfil atualizado!",
+        "termos_aceitos": usuario.termos_aceitos,
+        "nome_exibicao": usuario.nome_exibicao,
+        "avatar": usuario.avatar
+    }
+
+
+# ==========================================
 # 🚀 FUNÇÃO DE SEED (Alimentação Automática)
 # ==========================================
 def create_initial_data():
     db = SessionLocal()
     try:       
-        # Garante o usuário admin com a senha padrão
+        # Garante o usuário admin com a senha padrão e TERMOS ACEITOS
         user = db.query(Usuario).filter(Usuario.username == "admin").first()
+        
         if not user:
             print("👤 Criando usuário mestre: admin / admin123")
             novo_admin = Usuario(
                 username="admin", 
                 password="admin123", 
                 is_admin=True,
-                nome_exibicao="Administrador do Sistema" 
+                nome_exibicao="Administrador do Sistema",
+                termos_aceitos=True, # 🚀 Nasce com os termos aceitos!
+                data_aceite=datetime.now(),
+                ip_aceite="127.0.0.1 (Sistema)"
             )
             db.add(novo_admin)
             db.commit()
             print("✅ Usuário Admin criado e salvo com sucesso!")
             
-        elif user.password != "admin123":
-            user.password = "admin123"
-            db.commit()
-            print("✅ Senha do Admin resetada para o padrão.")
+        else:
+            # Se o Admin já existe, mas está com a senha errada ou SEM os termos:
+            mudou_algo = False
+            
+            if user.password != "admin123":
+                user.password = "admin123"
+                mudou_algo = True
+                print("✅ Senha do Admin resetada para o padrão.")
+                
+            # Garante que o Admin atual seja atualizado para a regra nova
+            if not user.termos_aceitos:
+                user.termos_aceitos = True
+                user.data_aceite = datetime.now()
+                user.ip_aceite = "127.0.0.1 (Atualização do Sistema)"
+                mudou_algo = True
+                print("✅ Termos de uso validados automaticamente para o Admin.")
+                
+            if mudou_algo:
+                db.commit()
             
         # GARANTE A CATEGORIA MULTIFUNCIONAL NO BANCO
         cat_print = db.query(Categoria).filter(Categoria.nome == "Multifuncional").first()
@@ -76,25 +143,27 @@ scheduler.start()
 @app.on_event("startup")
 def carregar_cron_jobs():
     db = SessionLocal()
-    from app.models import AgendamentoRelatorio
+    # Import dinâmico para evitar circular import
     from app.api.agendamentos import gerar_e_enviar_relatorio
+    from app.models import AgendamentoRelatorio
     
     ativos = db.query(AgendamentoRelatorio).filter(AgendamentoRelatorio.status == True).all()
     for ag in ativos:
-        hora, minuto = ag.horario.split(":")
-        job_id = f"relatorio_{ag.id}"
-        scheduler.add_job(
-            gerar_e_enviar_relatorio, 'cron', 
-            day=ag.dia_do_mes, hour=int(hora), minute=int(minuto), 
-            args=[ag.id], id=job_id, replace_existing=True
-        )
+        if ag.horario:
+            hora, minuto = ag.horario.split(":")
+            job_id = f"relatorio_{ag.id}"
+            scheduler.add_job(
+                gerar_e_enviar_relatorio, 'cron', 
+                day=ag.dia_do_mes, hour=int(hora), minute=int(minuto), 
+                args=[ag.id], id=job_id, replace_existing=True
+            )
     db.close()
     print(f"⏰ APScheduler iniciado! {len(ativos)} relatório(s) agendado(s) na memória.")
 
 # ==========================================
 # 🔒 CONFIGURAÇÃO DE SEGURANÇA (CORS)
 # ==========================================
-FRONTEND_URL = os.getenv("FRONTEND_URL", "") # 🚀 Lê a URL do painel direto do .env
+FRONTEND_URL = os.getenv("FRONTEND_URL", "") 
 
 origens_permitidas = [
     "http://localhost",
@@ -102,7 +171,6 @@ origens_permitidas = [
     "http://localhost:8001"
 ]
 
-# Libera o acesso para o link do Cloudflare (ou qualquer outro) que estiver no .env
 if FRONTEND_URL:
     origens_permitidas.append(FRONTEND_URL)
 
@@ -114,16 +182,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Injeção de Dependência do Banco de Dados
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
 # ==========================================
-# 📥 ROTAS DE DOWNLOAD & UTILITÁRIOS
+# 📥 ROTAS DE UTILITÁRIOS
 # ==========================================
 @app.get("/api/usuarios/me")
 def get_me():
@@ -131,7 +191,7 @@ def get_me():
 
 @app.get("/api/backup/download")
 def download_backup():
-    db_path = "./data/nexus.db" # 🚀 Ajustado para buscar o banco dentro do cofre (data)
+    db_path = "./data/nexus.db" 
     if os.path.exists(db_path):
         return FileResponse(path=db_path, filename="nexus_backup.db", media_type="application/octet-stream")
     return {"error": "Arquivo de banco de dados não encontrado."}
@@ -141,26 +201,24 @@ def baixar_sentinel():
     caminho = os.path.join("app", "static", "Nexus_Sentinel_Instalador.exe")
     if os.path.exists(caminho):
         return FileResponse(caminho, filename="Nexus_Sentinel_Instalador.exe")
-    return {"erro": "Arquivo Sentinel não encontrado. Verifique a pasta static."}
+    return {"erro": "Arquivo Sentinel não encontrado."}
 
 @app.get("/api/inventario/download/agente")
 def baixar_agente():
     caminho = os.path.join("app", "static", "Nexus_Instalador_v5.exe")
     if os.path.exists(caminho):
         return FileResponse(caminho, filename="Nexus_Instalador_v5.exe")
-    return {"erro": "Arquivo Agente não encontrado. Verifique a pasta static."}
+    return {"erro": "Arquivo Agente não encontrado."}
 
 # ==========================================
 # 🤖 ROTAS DO AGENTE SENTINEL (TELEMETRIA)
 # ==========================================
-
-# Modelo de dados que o Sentinel envia
 class TelemetriaImpressora(BaseModel):
     alerta_critico: bool
     patrimonio_sugerido: str
     dados_da_maquina: dict 
     localizacao: dict      
-    telemetria: dict       
+    telemetria: dict      
 
 @app.post("/api/inventario/telemetria")
 async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session = Depends(get_db)):
@@ -171,46 +229,27 @@ async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session =
     ativo = None
     todas_maquinas = db.query(Ativo).all()
 
-    # 1. 🚀 BUSCA INTELIGENTE: Varre o banco procurando por Serial ou Hostname
     for a in todas_maquinas:
-        # Checa a coluna direta
         if sn and sn != "N/A" and a.uuid_persistente == sn:
             ativo = a
             break
             
-        # Abre o cofre dos dados dinâmicos para procurar lá dentro
         dd = a.dados_dinamicos
         if isinstance(dd, str):
             try: dd = json.loads(dd.replace("'", '"').replace("None", "null"))
             except: dd = {}
         if not isinstance(dd, dict): dd = {}
 
-        sn_banco = str(dd.get('Serial') or dd.get('serial') or dd.get('Número de Série') or "").strip()
+        sn_banco = str(dd.get('Serial') or dd.get('serial') or "").strip()
         host_banco = str(dd.get('Hostname') or dd.get('hostname') or "").strip()
 
-        # Bateu o Serial? É ela!
         if sn and sn != "N/A" and sn == sn_banco:
             ativo = a
             break
-            
-        # Bateu o Hostname? É ela!
         if hostname and hostname != "N/A" and hostname == host_banco:
             ativo = a
             break
 
-    # 2. Se os nomes e seriais falharem, tenta pelo IP em último caso
-    if not ativo and ip:
-        for a in todas_maquinas:
-            dd = a.dados_dinamicos
-            if isinstance(dd, str):
-                try: dd = json.loads(dd.replace("'", '"').replace("None", "null"))
-                except: dd = {}
-            if isinstance(dd, dict):
-                ip_banco = str(dd.get('ip') or dd.get('IP') or "").strip()
-                if ip_banco == ip:
-                    ativo = a
-                    break
-    
     novos_dados_dinamicos = {
         "ip": ip,
         "hostname": hostname,
@@ -221,13 +260,9 @@ async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session =
         "alerta_critico": dados.alerta_critico
     }
 
-    maquina_atual = None
-
     if ativo:
         ativo.status = 'Online'
         ativo.ultima_comunicacao = datetime.utcnow()
-        
-        # Puxa os dados dinâmicos atuais (Onde ficam os seus campos misturados com os do Sentinel)
         dict_atual = {}
         if isinstance(ativo.dados_dinamicos, str):
             try: dict_atual = json.loads(ativo.dados_dinamicos.replace("'", '"').replace("None", "null"))
@@ -235,28 +270,18 @@ async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session =
         elif isinstance(ativo.dados_dinamicos, dict):
             dict_atual = dict(ativo.dados_dinamicos)
             
-        # 🚀 A MÁGICA ACONTECE AQUI: A Trava de Sobrescrita
-        # O backend vai iterar sobre os dados que o Sentinel mandou.
-        # Ele SÓ vai atualizar a chave se o Sentinel realmente tiver um dado válido.
-        # Se o Sentinel mandar vazio ou "N/A", ele ignora e mantém a sua edição intacta!
         for chave, valor in novos_dados_dinamicos.items():
             valor_str = str(valor).strip()
-            if valor is not None and valor_str != "" and valor_str != "N/A" and valor_str != "None":
+            if valor is not None and valor_str not in ["", "N/A", "None"]:
                 dict_atual[chave] = valor
         
-        # Salva o dicionário fundido e protegido de volta no banco
-        ativo.dados_dinamicos = json.loads(json.dumps(dict_atual))
-        
-        # Grava o SN na coluna principal para as próximas leituras serem ultra-rápidas
-        if getattr(ativo, 'uuid_persistente', None) is None and sn and sn != "N/A":
+        ativo.dados_dinamicos = dict_atual
+        if not ativo.uuid_persistente and sn and sn != "N/A":
             ativo.uuid_persistente = sn
-            
         maquina_atual = ativo
     else:
-        # Só cria uma máquina nova se realmente não achar nada
         novo_patrimonio = f"S/P_{str(uuid.uuid4().hex)[:6].upper()}"
         cat = db.query(Categoria).filter(Categoria.nome == "Multifuncional").first()
-        
         novo_ativo = Ativo(
             patrimonio=novo_patrimonio,
             categoria_id=cat.id if cat else None,
@@ -265,7 +290,7 @@ async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session =
             secretaria=dados.localizacao.get('secretaria'),
             setor=dados.localizacao.get('setor'),
             status="Online",
-            dados_dinamicos=json.loads(json.dumps(novos_dados_dinamicos)),
+            dados_dinamicos=novos_dados_dinamicos,
             uuid_persistente=sn,
             ultima_comunicacao=datetime.utcnow()
         )
@@ -273,27 +298,20 @@ async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session =
         db.flush() 
         maquina_atual = novo_ativo
 
-    # Salva o Histórico de Leitura (Odômetro)
-    paginas_str = str(dados.telemetria.get('paginas_impressas', '0')).strip()
-    if not paginas_str.isdigit(): paginas_str = '0'
-
     nova_leitura = HistoricoLeitura(
         patrimonio=maquina_atual.patrimonio,
-        paginas_totais=int(paginas_str),
+        paginas_totais=int(dados.telemetria.get('paginas_impressas', 0) or 0),
         toner_nivel=str(dados.telemetria.get('nivel_toner_percentual', 'N/A')),
         cilindro_nivel=str(dados.telemetria.get('nivel_cilindro_percentual', 'N/A'))
     )
     db.add(nova_leitura)
     db.commit()
-    
     return {"patrimonio": maquina_atual.patrimonio, "nome": maquina_atual.modelo}
 
 
 # ==========================================
 # 💻 ROTAS DO TERMINAL REMOTO (C2)
 # ==========================================
-
-# 1. Frontend manda um script para a fila da máquina
 @app.post("/api/comandos/enviar")
 def enviar_comando(dados: ComandoCreate, db: Session = Depends(get_db)):
     novo_comando = ComandoAgente(
@@ -305,37 +323,25 @@ def enviar_comando(dados: ComandoCreate, db: Session = Depends(get_db)):
     )
     db.add(novo_comando)
     db.commit()
-    db.refresh(novo_comando)
-    return {"message": "Comando enfileirado com sucesso!", "comando_id": novo_comando.id}
+    return {"message": "Comando enfileirado!", "comando_id": novo_comando.id}
 
-# 2. Frontend lê o histórico de comandos de uma máquina específica
 @app.get("/api/comandos/maquina/{patrimonio:path}")
 def listar_comandos(patrimonio: str, db: Session = Depends(get_db)):
-    comandos = db.query(ComandoAgente).filter(ComandoAgente.patrimonio == patrimonio).order_by(ComandoAgente.data_criacao.desc()).limit(10).all()
-    return comandos
+    return db.query(ComandoAgente).filter(ComandoAgente.patrimonio == patrimonio).order_by(ComandoAgente.data_criacao.desc()).limit(10).all()
 
-# 3. Agente pergunta a cada 30s: "Tem ordem pra mim?"
 @app.get("/api/agente/comandos/pendentes/{uuid_persistente}")
 def verificar_comandos(uuid_persistente: str, db: Session = Depends(get_db)):
-    # Busca o comando mais antigo que ainda está pendente para esta máquina
     comando = db.query(ComandoAgente).filter(
         ComandoAgente.uuid_persistente == uuid_persistente,
         ComandoAgente.status == "PENDENTE"
     ).order_by(ComandoAgente.data_criacao.asc()).first()
     
     if comando:
-        # Muda para "EXECUTANDO" para não mandar o mesmo comando duas vezes
         comando.status = "EXECUTANDO"
         db.commit()
-        return {
-            "tem_comando": True, 
-            "comando_id": comando.id, 
-            "script_content": comando.script_content
-        }
-        
+        return {"tem_comando": True, "comando_id": comando.id, "script_content": comando.script_content}
     return {"tem_comando": False}
 
-# 4. Agente rodou o script e devolve o log do terminal (Sucesso ou Erro)
 @app.post("/api/agente/comandos/resultado")
 def receber_resultado_comando(dados: ComandoResultado, db: Session = Depends(get_db)):
     comando = db.query(ComandoAgente).filter(ComandoAgente.id == dados.comando_id).first()
@@ -344,12 +350,11 @@ def receber_resultado_comando(dados: ComandoResultado, db: Session = Depends(get
         comando.output_log = dados.output_log
         comando.data_conclusao = datetime.utcnow()
         db.commit()
-        return {"message": "Resultado gravado com sucesso"}
-    raise HTTPException(status_code=404, detail="Comando não encontrado")
+        return {"message": "Sucesso"}
+    raise HTTPException(status_code=404, detail="Não encontrado")
 
-# ========================================================
-# 🔗 REGISTRO DE ROTADORES (Controllers Externos)
-# ========================================================
+# 🔗 Registro das rotas
+app.include_router(router, prefix="/api") # Incluindo a rota de perfil definida no topo
 app.include_router(auth.router, prefix="/api")
 app.include_router(inventario.router, prefix="/api")
 app.include_router(unidades.router, prefix="/api")

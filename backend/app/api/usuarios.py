@@ -73,10 +73,11 @@ def listar_usuarios(db: Session = Depends(get_db)):
         "id": u.id, 
         "username": u.username, 
         "is_admin": u.is_admin,
-        # 🚀 O getattr evita que o sistema quebre enquanto o banco atualiza
         "permissoes": getattr(u, 'permissoes', []) or [], 
         "nome_exibicao": getattr(u, 'nome_exibicao', u.username) or u.username,
-        "avatar": getattr(u, 'avatar', 'letras') or 'letras'
+        "avatar": getattr(u, 'avatar', 'letras') or 'letras',
+        # 🚀 O PULO DO GATO: Entregando o status para o Layout.jsx
+        "termos_aceitos": getattr(u, 'termos_aceitos', False) 
     } for u in usuarios]
 
 @router.post("/")
@@ -174,5 +175,7 @@ def fazer_login(dados: dict, db: Session = Depends(get_db)):
         "message": "Login efetuado com sucesso!",
         "username": usuario.username,
         "is_admin": usuario.is_admin,
-        "permissoes": getattr(usuario, 'permissoes', []) or [] # 🚀 ENVIANDO PERMISSÕES NO LOGIN
+        "permissoes": getattr(usuario, 'permissoes', []) or [],
+        # 🚀 AQUI TAMBÉM: Entregando o status no momento exato do login
+        "termos_aceitos": getattr(usuario, 'termos_aceitos', False)
     }

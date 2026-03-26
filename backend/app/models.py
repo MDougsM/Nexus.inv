@@ -67,6 +67,9 @@ class Usuario(Base):
     nome_exibicao = Column(String, nullable=True)
     avatar = Column(String, default="letras")
     permissoes = Column(JSON, default=list)
+    termos_aceitos = Column(Boolean, default=False)
+    data_aceite = Column(DateTime, nullable=True)
+    ip_aceite = Column(String(50), nullable=True)
 
 class Transferencia(Base):
     __tablename__ = "transferencias"

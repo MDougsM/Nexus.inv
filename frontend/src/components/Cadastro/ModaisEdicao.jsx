@@ -93,7 +93,7 @@ export default function ModaisEdicao({
     <>
       {/* MODAL INDIVIDUAL */}
       {modalEdicao.aberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in" onClick={() => setModalEdicao({ aberto: false, form: {dados_dinamicos:{}} })}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-fade-in" onClick={() => setModalEdicao({ aberto: false, form: {dados_dinamicos:{}} })}>
           <div className="w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden border border-white/10 animate-scale-up flex flex-col max-h-[90vh]" style={{backgroundColor: 'var(--bg-card)'}} onClick={e => e.stopPropagation()}>
             
             {/* Header */}

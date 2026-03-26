@@ -1,36 +1,42 @@
 import sqlite3
+import os
 
-def atualizar_banco():
-    print("Iniciando atualização do banco de dados (SQLite)...")
-    
-    # Conecta ao arquivo do banco
-    conn = sqlite3.connect('nexus.db')
+# 🚀 CAMINHO ABSOLUTO E EXATO DO SEU BANCO DE DADOS
+caminho_base = r"C:\NexusInv\backend\data\nexus.db"
+
+print(f"🔄 Conectando ao banco de dados: {caminho_base}")
+
+if not os.path.exists(caminho_base):
+    print("❌ ERRO: O arquivo do banco de dados não foi encontrado nesse caminho!")
+    print("Verifique se o nexus.db está mesmo dentro da pasta backend.")
+    exit()
+
+try:
+    conn = sqlite3.connect(caminho_base)
     cursor = conn.cursor()
 
-    try:
-        # Tenta adicionar a coluna dia_inicio_ciclo
-        print("Adicionando coluna 'dia_inicio_ciclo'...")
-        cursor.execute("ALTER TABLE agendamentos_relatorio ADD COLUMN dia_inicio_ciclo INTEGER DEFAULT 1;")
-    except sqlite3.OperationalError as e:
-        if "duplicate column name" in str(e):
-            print("A coluna 'dia_inicio_ciclo' já existe, pulando...")
-        else:
-            print(f"Erro inesperado: {e}")
+    colunas_novas = [
+        ("permissoes", "TEXT DEFAULT '[]'"),
+        ("termos_aceitos", "BOOLEAN DEFAULT 0"),
+        ("data_aceite", "DATETIME DEFAULT NULL"),
+        ("ip_aceite", "VARCHAR(50) DEFAULT NULL")
+    ]
 
-    try:
-        # Tenta adicionar a coluna dia_fim_ciclo
-        print("Adicionando coluna 'dia_fim_ciclo'...")
-        cursor.execute("ALTER TABLE agendamentos_relatorio ADD COLUMN dia_fim_ciclo INTEGER DEFAULT 30;")
-    except sqlite3.OperationalError as e:
-        if "duplicate column name" in str(e):
-            print("A coluna 'dia_fim_ciclo' já existe, pulando...")
-        else:
-            print(f"Erro inesperado: {e}")
+    print("🛠️ Verificando e atualizando tabela 'usuarios'...")
 
-    # Salva e fecha
+    for coluna, tipo in colunas_novas:
+        try:
+            cursor.execute(f"ALTER TABLE usuarios ADD COLUMN {coluna} {tipo};")
+            print(f"  ✅ Coluna '{coluna}' injetada com sucesso!")
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" in str(e).lower():
+                print(f"  ⚠️ A coluna '{coluna}' já existe. Pulando...")
+            else:
+                print(f"  ❌ Erro ao adicionar '{coluna}': {e}")
+
     conn.commit()
     conn.close()
-    print("Atualização concluída com sucesso! Pode iniciar o servidor.")
+    print("🚀 Banco atualizado com sucesso! Vá testar a criação de usuários.")
 
-if __name__ == "__main__":
-    atualizar_banco()
+except Exception as e:
+    print(f"❌ Erro crítico ao conectar no banco: {e}")

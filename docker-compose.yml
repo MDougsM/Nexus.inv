@@ -12,7 +12,7 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - VERSAO_ATUAL=${VERSAO_ATUAL}
-      - FRONTEND_URL=${FRONTEND_URL}  # 🚀 LINHA ADICIONADA AQUI
+      - FRONTEND_URL=${FRONTEND_URL}
       - TZ=America/Campo_Grande
     command: uvicorn app.main:app --host 0.0.0.0 --port ${BACKEND_PORT} ${RELOAD_FLAGS}
 
@@ -24,6 +24,7 @@ services:
       - "${FRONTEND_PORT}:${FRONTEND_PORT}"
     environment:
       - VITE_API_URL=${VITE_API_URL}
+      - VITE_VERSAO_SISTEMA=${VITE_VERSAO_SISTEMA} # 🚀 O CANO CONECTADO AQUI!
     volumes:
       - ./frontend:/app
       - /app/node_modules

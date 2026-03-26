@@ -10,6 +10,23 @@ Nexus.inv é um sistema de inventário de ativos de TI com backend FastAPI, fron
 - Fluxo completo de enfileiramento / leitura / retorno de resultados de comandos
 - Histórico de execução com status e logs no frontend (`TerminalRemoto`)
 
+## 🐛 Últimas Correções (v5.8.2.0 - 26/03/2026)
+
+### ✅ Correções Críticas Backend
+- **main.py**: Corrigidos imports inválidos, decoradores órfãos e código Flask misturado com FastAPI
+- Rota `/usuarios/perfil/atualizar` agora retorna confirmação de dados salvos
+- Validação robusta de `termos_aceitos` no banco de dados
+
+### ✅ Correções Frontend
+- **MeuPerfil.jsx**: Resolvido loop infinito ao aceitar termos
+- Adicionada seção "Gerenciamento de Termos" com botões:
+  - 📖 **Reler Termos**: Reabre modal para leitura
+  - 🚪 **Revogar Acesso**: Permite revogar aceite (com confirmação dupla)
+- Interface mostra status visual: ✅ Aceito / ❌ Não aceito
+
+### 📦 Versionamento
+- Instalador atualizado para **`Nexus_Instalador_v5.exe`** em todos os endpoints
+
 ## 📁 Estrutura do repositório
 
 - `backend/` - FastAPI + SQLAlchemy + DB
@@ -129,10 +146,14 @@ Tabelas-chave:
 - Use `docker-compose down && docker-compose up -d --build`.
 
 ## 📝 Changelog resumido
+- ✅ **[v5.8.2.0]** Correções críticas no backend (main.py) e resolução do loop infinito de termos
+- ✅ Gerenciamento de Termos com releitura e revogação de acesso
 - Terminal remoto C2 adicionado
 - Agente com pooling de comandos e execução remota
 - Instalador atualizado para `Nexus_Instalador_v5.exe`
 - Endpoint de comando global mantido para fallback
+
+Veja `CHANGELOG.md` para histórico completo e detalhado.
 
 ### Exemplos de Payloads C2
 

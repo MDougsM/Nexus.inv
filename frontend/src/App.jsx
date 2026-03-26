@@ -17,13 +17,30 @@ import MeuPerfil from './pages/MeuPerfil';
 import NexusPrint from './pages/NexusPrint';
 
 // ==========================================
-// GUARDA DE SEGURANÇA (ROTA PROTEGIDA)
+// GUARDA DE SEGURANÇA (ROTA PROTEGIDA + TRAVA DE TERMOS)
 // ==========================================
 const RotaProtegida = ({ children }) => {
-  const logado = !!localStorage.getItem('usuario'); // Verifica se há usuário no cofre do navegador
-  
-  // Se não estiver logado, bloqueia a renderização e chuta de volta pro Login
-  return logado ? children : <Navigate to="/login" replace />;
+  const logado = !!localStorage.getItem('usuario');
+  // Usamos um state para que a rota mude assim que o localStorage mudar
+  const [isBloqueado, setIsBloqueado] = React.useState(localStorage.getItem('nexus_bloqueado') === 'true');
+
+  React.useEffect(() => {
+    const checkLock = () => {
+      setIsBloqueado(localStorage.getItem('nexus_bloqueado') === 'true');
+    };
+    // Escuta o evento que criamos para saber quando desbloquear
+    window.addEventListener('statusTermosAlterado', checkLock);
+    return () => window.removeEventListener('statusTermosAlterado', checkLock);
+  }, []);
+
+  if (!logado) return <Navigate to="/login" replace />;
+
+  const rotaAtual = window.location.pathname;
+  if (isBloqueado && rotaAtual !== '/perfil' && rotaAtual !== '/ajuda') {
+    return <Navigate to="/perfil" replace />;
+  }
+
+  return children;
 };
 
 export default function App() {

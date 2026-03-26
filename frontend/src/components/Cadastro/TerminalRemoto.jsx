@@ -49,7 +49,7 @@ export default function TerminalRemoto({ ativo, onClose, usuarioAtual }) {
   };
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-[100] p-4 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+    <div className="fixed inset-0 flex items-center justify-center bg-black/95 z-[100] p-4 backdrop-blur-sm animate-fade-in" onClick={onClose}>
       <div className="w-full max-w-4xl bg-[#0f172a] rounded-2xl shadow-2xl border border-blue-500/30 overflow-hidden flex flex-col h-[85vh]" onClick={e => e.stopPropagation()}>
         
         {/* HEADER HACKER */}

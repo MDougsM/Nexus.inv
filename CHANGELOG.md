@@ -1,6 +1,38 @@
 # Changelog - Nexus.inv
 
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
+
+## [v5.8.2.0] - 2026-03-26
+### 🛠️ Correções (Hotfixes & Stability)
+- **Backend (main.py):** Corrigidos erros críticos no arquivo principal:
+  - Import inválido `from fastapi import requests` → corrigido para `Request`
+  - Decorador órfão `@router.put("/perfil/atualizar")` removido (router não estava registrado)
+  - Código Flask misturado com FastAPI (`@app.route`) convertido para decoradores FastAPI
+  - Função `atualizar_perfil()` duplicada (FastAPI e Flask) consolidada em uma única implementação
+  - Rota ajustada para `/usuarios/perfil/atualizar` com retorno de confirmação (`termos_aceitos`, `nome_exibicao`, `avatar`)
+
+- **Frontend (MeuPerfil.jsx):** Resolvido loop infinito na tela de Termos:
+  - Estado inicial `termosAceitos` estava `true` (deveria ser `false`)
+  - Adicionada validação de resposta do servidor antes de liberar acesso
+  - Substituído `navigate()` por `window.location.href = '/'` para reload real
+  - Botão agora mostra feedback `⏳ PROCESSANDO...` enquanto salva nos termos
+
+### 🚀 Adicionado (Added)
+- **Frontend (MeuPerfil.jsx):** Nova seção "Gerenciamento de Termos de Responsabilidade" no container de Segurança e Acesso:
+  - Botão **"📖 Reler Termos"**: Reabre o modal para visualizar os termos novamente
+  - Botão **"🚪 Revogar Acesso"**: Permite ao usuário revogar os termos aceitos
+    - Pede confirmação dupla antes de revogar
+    - Define `termos_aceitos = false` no banco de dados
+    - Ativa `nexus_bloqueado = true` no localStorage
+  - Status visual dinâmico (✅ Aceito / ❌ Não aceito)
+  - Botão de revogação aparece apenas se os termos já foram aceitos
+
+### 📦 Versionamento & Nomenclatura
+- **Agente Instalador:** Atualizado de `Nexus_Instalador.exe` para `Nexus_Instalador_v5.exe` nos seguintes arquivos:
+  - `backend/app/api/inventario.py`
+  - `backend/app/main.py`
+  - `frontend/src/pages/ConfiguracoesComponents/PainelFerramentas.jsx`
+
 ## [v5.8.1.6] - 2026-03-25
 ### 💄 UI/UX & Frontend
 - **Versão Dinâmica:** Remoção do versionamento "chumbado" (hardcoded `v5.7.2.0`) no layout do menu lateral. O sistema React agora lê a versão dinamicamente direto do arquivo `.env` através da variável `VITE_VERSAO_SISTEMA`, evitando dessincronização visual nas próximas atualizações.
