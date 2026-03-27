@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'react-toastify';
 import api from '../api/api';
 
@@ -190,8 +191,8 @@ export default function Unidades() {
       {/* ------------------------------------------- */}
       {/* MODAL DE EDIÇÃO COM RESPOSTAS RÁPIDAS */}
       {/* ------------------------------------------- */}
-      {modalEdicao.aberto && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4">
+      {modalEdicao.aberto && createPortal(
+        <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-[9999] p-4">
           <div className="w-full max-w-md rounded-xl p-6 shadow-2xl animate-fade-in" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
             <h3 className="text-lg font-bold mb-2" style={{ color: 'var(--color-blue)' }}>Editar {modalEdicao.tipo}</h3>
             <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>Alterar o nome de <strong>{modalEdicao.nomeAntigo}</strong>.</p>
@@ -233,14 +234,14 @@ export default function Unidades() {
               <button onClick={confirmarEdicao} className="px-4 py-2 rounded font-bold text-white bg-blue-500 hover:bg-blue-600">Salvar Alteração</button>
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
 
       {/* ------------------------------------------- */}
       {/* MODAL DE EXCLUSÃO COM RESPOSTAS RÁPIDAS */}
       {/* ------------------------------------------- */}
-      {modalExclusao.aberto && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4">
+      {modalExclusao.aberto && createPortal(
+        <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-[9999] p-4">
           <div className="w-full max-w-md rounded-xl p-6 shadow-2xl animate-fade-in" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
             <h3 className="text-lg font-bold text-red-500 mb-2">Excluir {modalExclusao.tipo}</h3>
             <p className="text-sm mb-4" style={{ color: 'var(--text-main)' }}>
@@ -283,7 +284,7 @@ export default function Unidades() {
               <button onClick={confirmarExclusao} className="px-4 py-2 rounded font-bold text-white bg-red-500 hover:bg-red-600">Confirmar Exclusão</button>
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
     </div>
   );

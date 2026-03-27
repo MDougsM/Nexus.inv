@@ -72,23 +72,8 @@ export default function AbaNovoCadastro({
     if (!formNovo.categoria_id) return toast.warn("Selecione o tipo de equipamento.");
     if (!secIdNovo || !setorNovo) return toast.warn("Selecione o local.");
 
+    // 🚀 Pega apenas o que o usuário digitou (Vazio se não digitou nada)
     let patrimonioFinal = formNovo.patrimonio.trim();
-    
-    if (!patrimonioFinal) {
-      if (ativos && ativos.length > 0) {
-        const spAtivos = ativos.filter(a => a.patrimonio && a.patrimonio.startsWith('S/P_'));
-        const numeros = spAtivos.map(a => {
-          const numPart = a.patrimonio.split('_')[1];
-          return parseInt(numPart);
-        }).filter(n => !isNaN(n));
-        
-        const maxNumero = numeros.length > 0 ? Math.max(...numeros) : 0;
-        patrimonioFinal = `S/P_${maxNumero + 1}`;
-      } else {
-        patrimonioFinal = `S/P_1`; 
-      }
-      toast.info(`Patrimônio gerado automaticamente: ${patrimonioFinal}`);
-    }
 
     const payload = {
       ...formNovo,
@@ -100,8 +85,12 @@ export default function AbaNovoCadastro({
     };
 
     try {
-      await api.post('/api/inventario/', payload);
-      toast.success("✅ Ativo cadastrado com sucesso!");
+      const res = await api.post('/api/inventario/', payload);
+      
+      // 🚀 Mostra o nome gerado pelo backend (NXS-XXXX) no alerta de sucesso!
+      const nomeGerado = res.data.patrimonio_gerado;
+      toast.success(`✅ Ativo cadastrado! Etiqueta: ${nomeGerado || patrimonioFinal}`);
+      
       limparFormNovo();
       carregarDados();
       setAbaAtiva('lista'); 

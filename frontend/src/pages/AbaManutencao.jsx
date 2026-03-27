@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'react-toastify';
 import api from '../api/api';
 
@@ -96,8 +97,8 @@ export default function AbaManutencao({ historicoManut, carregarDados }) {
         </div>
       </div>
 
-      {modalRestore.aberto && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-50 p-4 backdrop-blur-sm animate-fade-in">
+      {modalRestore.aberto && createPortal(
+        <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-[9999] p-4 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-sm rounded-3xl p-8 shadow-2xl border border-green-500/30 animate-scale-up" style={{ backgroundColor: 'var(--bg-card)' }}>
             <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center text-3xl mb-4 text-green-500 mx-auto shadow-inner border border-green-500/20">♻️</div>
             <h3 className="text-xl font-black tracking-tight mb-2 text-center" style={{ color: 'var(--text-main)' }}>Restaurar Ativo</h3>
@@ -113,7 +114,7 @@ export default function AbaManutencao({ historicoManut, carregarDados }) {
               <button onClick={() => setModalRestore({ aberto: false, log: null, motivo: '' })} className="w-full py-3 rounded-xl font-bold hover:bg-gray-500/10 transition-all" style={{ color: 'var(--text-main)' }}>Cancelar operação</button>
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
     </div>
   );

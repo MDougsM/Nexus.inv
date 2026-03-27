@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'react-toastify';
 import api from '../api/api';
 
@@ -97,8 +98,8 @@ export default function Usuarios() {
       </div>
 
       {/* MODAL: REDEFINIR SENHA */}
-      {modalSenha.aberto && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4">
+      {modalSenha.aberto && createPortal(
+        <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-[9999] p-4">
           <div className="w-full max-w-md rounded-xl p-6 shadow-2xl animate-fade-in" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
             <h3 className="text-lg font-bold mb-2" style={{ color: 'var(--color-blue)' }}>Redefinir Senha</h3>
             <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>Você está alterando a credencial de <strong>{modalSenha.username}</strong>.</p>
@@ -109,12 +110,12 @@ export default function Usuarios() {
               <button onClick={confirmarEdicaoSenha} className="px-4 py-2 rounded font-bold text-white bg-blue-500 hover:bg-blue-600">Salvar Senha</button>
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
 
       {/* MODAL: EXCLUSÃO */}
-      {modalExclusao.aberto && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4">
+      {modalExclusao.aberto && createPortal(
+        <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-[9999] p-4">
           <div className="w-full max-w-md rounded-xl p-6 shadow-2xl animate-fade-in" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
             <h3 className="text-lg font-bold text-red-500 mb-2">Atenção: Revogar Acesso</h3>
             <p className="text-sm mb-4" style={{ color: 'var(--text-main)' }}>O usuário <strong>{modalExclusao.username}</strong> perderá acesso imediato ao sistema.</p>
@@ -124,7 +125,7 @@ export default function Usuarios() {
               <button onClick={confirmarExclusao} className="px-4 py-2 rounded font-bold text-white bg-red-500 hover:bg-red-600">Revogar</button>
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
 
     </div>

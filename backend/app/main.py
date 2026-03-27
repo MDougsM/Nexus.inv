@@ -7,7 +7,7 @@ from typing import Optional
 from sqlalchemy import text
 
 # 🛡️ CORREÇÃO: Removido Flask (causador do erro) e corrigido imports do FastAPI
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -27,6 +27,17 @@ BACKEND_PORT = int(os.getenv("BACKEND_PORT", 8001))
 
 # Cria as tabelas no banco de dados se não existirem
 Base.metadata.create_all(bind=engine)
+
+# ==========================================
+# 🔑 GUARDA-COSTAS DO AGENTE SENTINEL (API KEY)
+# ==========================================
+# Essa é a chave de 64 caracteres que só o Agente conhece
+AGENTE_SECRET_TOKEN = "NEXUS_AGENTE_V5_9b7e1f2a4c6d8e0f3a5b7c9d1e2f4a6b8c0d2e4f6a8b0c2d"
+
+def validar_token_agente(x_nexus_token: str = Header(None)):
+    if not x_nexus_token or x_nexus_token != AGENTE_SECRET_TOKEN:
+        print(f"⚠️ Tentativa de invasão bloqueada! Token recebido: {x_nexus_token}")
+        raise HTTPException(status_code=403, detail="Acesso negado. Token de Agente inválido ou ausente.")
 
 # ==========================================
 # 👤 ROTA DE PERFIL (VERSÃO CORRIGIDA FASTAPI)
@@ -60,6 +71,8 @@ async def atualizar_perfil(request: Request, db: Session = Depends(get_db)):
         usuario.nome_exibicao = dados.get('nome_exibicao')
     if 'avatar' in dados:
         usuario.avatar = dados.get('avatar')
+    if 'email' in dados:
+        usuario.email = dados.get('email')
 
     db.commit()
     db.refresh(usuario)
@@ -220,7 +233,7 @@ class TelemetriaImpressora(BaseModel):
     localizacao: dict      
     telemetria: dict      
 
-@app.post("/api/inventario/telemetria")
+@app.post("/api/inventario/telemetria", dependencies=[Depends(validar_token_agente)])
 async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session = Depends(get_db)):
     sn = dados.dados_da_maquina.get('serial', '').strip()
     ip = dados.dados_da_maquina.get('ip', '').strip()
@@ -329,7 +342,7 @@ def enviar_comando(dados: ComandoCreate, db: Session = Depends(get_db)):
 def listar_comandos(patrimonio: str, db: Session = Depends(get_db)):
     return db.query(ComandoAgente).filter(ComandoAgente.patrimonio == patrimonio).order_by(ComandoAgente.data_criacao.desc()).limit(10).all()
 
-@app.get("/api/agente/comandos/pendentes/{uuid_persistente}")
+@app.get("/api/agente/comandos/pendentes/{uuid_persistente}", dependencies=[Depends(validar_token_agente)])
 def verificar_comandos(uuid_persistente: str, db: Session = Depends(get_db)):
     comando = db.query(ComandoAgente).filter(
         ComandoAgente.uuid_persistente == uuid_persistente,
@@ -342,7 +355,7 @@ def verificar_comandos(uuid_persistente: str, db: Session = Depends(get_db)):
         return {"tem_comando": True, "comando_id": comando.id, "script_content": comando.script_content}
     return {"tem_comando": False}
 
-@app.post("/api/agente/comandos/resultado")
+@app.post("/api/agente/comandos/resultado", dependencies=[Depends(validar_token_agente)])
 def receber_resultado_comando(dados: ComandoResultado, db: Session = Depends(get_db)):
     comando = db.query(ComandoAgente).filter(ComandoAgente.id == dados.comando_id).first()
     if comando:

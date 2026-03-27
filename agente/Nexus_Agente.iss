@@ -12,8 +12,8 @@ PrivilegesRequired=admin
 CloseApplications=force
 
 [Files]
-; O Source deve apontar para o .exe gerado pelo PyInstaller
-Source: "C:\Users\Douglas\Downloads\agente\dist\Nexus_Agente.exe"; DestDir: "{app}"; Flags: ignoreversion
+; O Source aponta para o .exe gerado pelo PyInstaller (modo --onefile)
+Source: "C:\NexusInv\agente\dist\Nexus_Agente.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{commonprograms}\Nexus Agente"; Filename: "{app}\Nexus_Agente.exe"
@@ -23,15 +23,17 @@ Name: "{commonprograms}\Nexus Agente"; Filename: "{app}\Nexus_Agente.exe"
 ; 1. Libera o Windows Defender para não bloquear a automação de C2
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -WindowStyle Hidden -Command ""Add-MpPreference -ExclusionPath '{app}'"""; Flags: runhidden waituntilterminated
 
-; 2. Cria a Tarefa Agendada para iniciar JUNTO COM O WINDOWS (ONLOGON) com privilégios máximos
-Filename: "schtasks"; Parameters: "/Create /SC ONLOGON /TN ""NexusWatchdog"" /TR ""'{app}\Nexus_Agente.exe' --silent"" /RL HIGHEST /F"; Flags: runhidden
+; 2. 🚀 A MÁGICA DO AUTO-UPDATE: Cria a Tarefa Agendada rodando como SYSTEM (Deus)
+; Isso garante que quando o agente atualizar em background, o Windows não peça permissão (UAC)
+Filename: "schtasks"; Parameters: "/Create /SC ONLOGON /TN ""NexusWatchdog"" /TR ""'{app}\Nexus_Agente.exe' --silent"" /RU ""SYSTEM"" /RL HIGHEST /F"; Flags: runhidden
 
-; 3. Inicia o agente NORMALMENTE para o técnico fazer a primeira vinculação
-Filename: "{app}\Nexus_Agente.exe"; Description: "Abrir Nexus Sentinel para Cadastro"; Flags: nowait postinstall skipifsilent
+; 3. Inicia o agente NORMALMENTE (Com a tela visual) para o técnico fazer a primeira vinculação
+Filename: "{app}\Nexus_Agente.exe"; Description: "Abrir Nexus Agente para Cadastro"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-; Remove a tarefa agendada do Windows quando o sistema for desinstalado
-Filename: "schtasks"; Parameters: "/Delete /TN ""NexusWatchdog"" /F"; Flags: runhidden
+; 🚀 DESINSTALAÇÃO LIMPA: Remove a tarefa e MATA o processo invisível antes de apagar a pasta
+Filename: "schtasks"; Parameters: "/Delete /TN ""NexusWatchdog"" /F"; Flags: runhidden; RunOnceId: "DeletarWatchdogNexusAgente"
+Filename: "cmd.exe"; Parameters: "/c taskkill /F /IM Nexus_Agente.exe /T"; Flags: runhidden waituntilterminated; RunOnceId: "MatarProcessoNexusAgente"
 
 [Code]
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -45,5 +47,8 @@ begin
     
     // 2. Mata o processo do Agente com força bruta (/F) e toda a sua árvore (/T)
     Exec('cmd.exe', '/c taskkill /F /IM Nexus_Agente.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    
+    // 3. Dá 2 segundos de respiro pro Windows soltar o arquivo antigo do disco
+    Sleep(2000);
   end;
 end;

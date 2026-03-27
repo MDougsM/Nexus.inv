@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'react-toastify';
 import api from '../api/api';
 
@@ -168,8 +169,8 @@ export default function TiposEquipamento() {
         </div>
       </div>
 
-      {modalEdit.aberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setModalEdit({aberto: false, id: null, nome: '', campos_texto: ''})}>
+      {modalEdit.aberto && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in" onClick={() => setModalEdit({aberto: false, id: null, nome: '', campos_texto: ''})}>
           <div className="w-full max-w-md rounded-xl shadow-2xl border p-6" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }} onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4" style={{ color: 'var(--text-main)' }}>Editar Tipo de Equipamento</h3>
             
@@ -184,7 +185,7 @@ export default function TiposEquipamento() {
               <button onClick={handleSalvarEdicao} className="px-6 py-2 text-sm rounded font-bold text-white shadow-sm transition-opacity hover:opacity-90" style={{ backgroundColor: 'var(--color-blue)' }}>Salvar Alterações</button>
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
 
     </div>

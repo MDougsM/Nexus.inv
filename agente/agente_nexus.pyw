@@ -1,4 +1,3 @@
-import shutil
 import customtkinter as ctk
 import requests
 import wmi
@@ -13,16 +12,18 @@ import tempfile
 import subprocess
 import tkinter.messagebox as mb
 
-
 # ==========================================
-# CONFIGURAÇÕES DO AGENTE E ROTEAMENTO MÁGICO
+# CONFIGURAÇÕES DO AGENTE E ROTEAMENTO
 # ==========================================
+# 🚀 ADICIONE O CRACHÁ AQUI NO TOPO:
+TOKEN_AGENTE = "NEXUS_AGENTE_V5_9b7e1f2a4c6d8e0f3a5b7c9d1e2f4a6b8c0d2e4f6a8b0c2d"
+HEADERS_AUTH = {
+    "Content-Type": "application/json",
+    "X-Nexus-Token": TOKEN_AGENTE
+}
 
-# 🚀 O LINK DO GIST (Sem o hash no meio para pegar sempre o texto mais recente)
 LINK_ROTEADOR = "https://gist.githubusercontent.com/MDougsM/883aefc8a4cb0fe4dc1bc2e8eaf61d6e/raw/nexus_router.txt"
-
-VERSAO_DESTE_AGENTE = "4.6" 
-
+VERSAO_DESTE_AGENTE = "5.0"
 ARQUIVO_CACHE_LINK = os.path.join(os.environ.get('SystemDrive', 'C:'), '\\Nexus.inv', 'nexus_link_cache.txt')
 
 def obter_url_backend():
@@ -43,7 +44,6 @@ def obter_url_backend():
     return "https://catalogue-vermont-united-reveal.trycloudflare.com"
 
 BASE_URL = obter_url_backend()
-#BASE_URL = "http://localhost:8001"
 COLETA_URL = f"{BASE_URL}/api/inventario/agente/coleta"
 VERSAO_URL = f"{BASE_URL}/api/inventario/agente/versao"
 
@@ -51,20 +51,36 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 def auto_atualizar():
+    """Baixa o instalador mais recente e atualiza de forma furtiva (Sem UAC se rodar como SYSTEM)"""
     try:
         res = requests.get(VERSAO_URL, timeout=10)
         if res.status_code == 200:
             dados = res.json()
-            if dados.get("versao_atual") > VERSAO_DESTE_AGENTE:
+            
+            # Se a versão da API for maior que a versão escrita neste arquivo...
+            if str(dados.get("versao_atual", "0")) > VERSAO_DESTE_AGENTE:
                 url_download = f"{BASE_URL}{dados.get('url_download')}"
                 pasta_temp = tempfile.gettempdir()
-                caminho_instalador = os.path.join(pasta_temp, "Nexus_Update.exe")
-                resposta_arquivo = requests.get(url_download, stream=True)
-                with open(caminho_instalador, 'wb') as f:
-                    for chunk in resposta_arquivo.iter_content(chunk_size=8192): f.write(chunk)
-                subprocess.Popen([caminho_instalador, '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'])
-                sys.exit(0) 
-    except: pass 
+                caminho_instalador = os.path.join(pasta_temp, "Nexus_Update_v_nova.exe")
+                
+                # Faz o download do arquivo novo
+                resposta_arquivo = requests.get(url_download, stream=True, timeout=30)
+                if resposta_arquivo.status_code == 200:
+                    with open(caminho_instalador, 'wb') as f:
+                        for chunk in resposta_arquivo.iter_content(chunk_size=8192): 
+                            f.write(chunk)
+                    
+                    # Dispara o instalador de forma FURTIVA (Sem tela, sem caixa de diálogo, sem reiniciar o PC)
+                    subprocess.Popen(
+                        [caminho_instalador, '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'],
+                        creationflags=subprocess.CREATE_NO_WINDOW
+                    )
+                    
+                    # 🚀 O SUICÍDIO TÁTICO: O agente desliga imediatamente para o instalador poder sobrescrever o .exe
+                    os._exit(0) 
+    except Exception as e:
+        # Falhas de rede ou timeout na verificação serão ignoradas silenciosamente
+        pass
 
 def obter_id_persistente():
     caminho_id = os.path.join(os.environ.get('SystemDrive', 'C:'), '\\Nexus.inv', 'nexus_dna.txt')
@@ -75,7 +91,7 @@ def obter_id_persistente():
         import uuid
         novo_id = str(uuid.uuid4())
         with open(caminho_id, 'w') as f: f.write(novo_id)
-        try: subprocess.run(['attrib', '+h', caminho_id])
+        try: subprocess.run(['attrib', '+h', caminho_id], creationflags=subprocess.CREATE_NO_WINDOW)
         except: pass
         return novo_id
 
@@ -117,7 +133,7 @@ def ler_hardware_maquina(secretaria="Ping Automático", setor="Background", patr
 
         tipo_maq = "Notebook" if chassis.ChassisTypes[0] in [8, 9, 10, 11, 12, 14, 18, 21, 31, 32] else "Desktop"
 
-        payload = {
+        return {
             "uuid_persistente": obter_id_persistente(), 
             "tipo": tipo_maq, 
             "marca": sistema.Manufacturer.strip(), 
@@ -137,107 +153,76 @@ def ler_hardware_maquina(secretaria="Ping Automático", setor="Background", patr
             "patrimonio_manual": patrimonio_manual, 
             "override_patrimonio": override 
         }
-        return payload
     except Exception as e:
         return None
-    
+    finally:
+        pythoncom.CoUninitialize() # Previne memory leaks na thread
 
 def enviar_para_servidor(payload):
     try:
-        res = requests.post(COLETA_URL, json=payload, timeout=15)
+        # 🚀 Enviando a coleta com o crachá!
+        res = requests.post(COLETA_URL, json=payload, headers=HEADERS_AUTH, timeout=15)
         return res.status_code == 200, res.json() if res.status_code == 200 else res.text
     except Exception as e:
         return False, str(e)
 
-
-def escutar_comandos_c2(base_url, uuid_pc):
-    print("🎧 Ouvinte de Comandos Iniciado...")
-    while True:
-        try:
-            url_check = f"{base_url}/api/agente/comandos/pendentes/{uuid_pc}"
-            res = requests.get(url_check, timeout=10)
-            
-            if res.status_code == 200:
-                dados = res.json()
-                if dados.get("tem_comando"):
-                    comando_id = dados.get("comando_id")
-                    script_content = dados.get("script_content")
-                    
-                    print(f"\n🔥 Comando recebido! ID: {comando_id}")
-                    print(f"🖥️ Script: {script_content}")
-                    
-                    try:
-                        print("⚙️ Executando no PowerShell...")
-                        processo = subprocess.run(
-                            ["powershell", "-NoProfile", "-Command", f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; {script_content}"],
-                            capture_output=True,
-                            text=True,
-                            encoding='utf-8', # Força a leitura perfeita dos acentos
-                            creationflags=subprocess.CREATE_NO_WINDOW
-                        )
-                        saida = processo.stdout if processo.stdout else ""
-                        erro = processo.stderr if processo.stderr else ""
-                        status_final = "CONCLUIDO" if processo.returncode == 0 else "ERRO"
-                        log_final = saida + "\n" + erro
-                        print(f"✅ Execução finalizada! Status: {status_final}")
-                        
-                    except Exception as e:
-                        status_final = "ERRO"
-                        log_final = f"Falha fatal ao rodar script: {str(e)}"
-                        print(f"❌ Erro no Subprocesso: {e}")
-                    
-                    url_resultado = f"{base_url}/api/agente/comandos/resultado"
-                    print("📡 Enviando log para o servidor...")
-                    
-                    res_post = requests.post(url_resultado, json={
-                        "comando_id": comando_id,
-                        "status": status_final,
-                        "output_log": log_final.strip()
-                    }, timeout=15)
-                    
-                    print(f"🏁 Resposta do Servidor: {res_post.status_code} - {res_post.text}")
-                    
-        except Exception as e:
-            print(f"⚠️ Erro de Conexão no C2: {e}")
-            
-        time.sleep(60) # Mudamos para 60 segundos para debugar rápido
 
 # ==========================================
 # INTERFACE GRÁFICA DO AGENTE (UI PREMIUM)
 # ==========================================
 class NexusAgent(ctk.CTk):
 
-    def ao_fechar_tela(self):
-        """O Agente NUNCA morre. Apenas fecha a cortina visual e vai trabalhar nos bastidores."""
-        self.withdraw() # Oculta a janela instantaneamente. O programa NÃO fecha.
-        
-        # Dispara o loop de heartbeat (ping) em background sem criar processos novos
-        threading.Thread(target=self.loop_silencioso, daemon=True).start()
-
-    def loop_silencioso(self):
-        """O loop que mantém o Agente vivo enviando dados de hora em hora após a tela fechar"""
-        while True:
-            try:
-                # auto_atualizar() -> COMENTADO TEMPORARIAMENTE NO DEV PARA ELE NÃO SE MATAR
-                payload_bg = ler_hardware_maquina("Ping Automático", "Background")
-                if payload_bg:
-                    enviar_para_servidor(payload_bg)
-            except Exception:
-                pass
-            time.sleep(3600) # Dorme 1 hora
-
-    def __init__(self):
+    def __init__(self, base_url, meu_uuid):
         super().__init__()
-        self.title("Nexus.inv - Agente de Coleta")
-        self.geometry("440x760")
+        self.base_url = base_url
+        self.meu_uuid = meu_uuid
+        
+        self.title(f"Nexus Agent v{VERSAO_DESTE_AGENTE}")
+        self.geometry("450x800")
         self.resizable(False, False)
+        
         self.secretarias_data = []
         self.dados_hardware = None 
         
         self.construir_interface()
         self.carregar_secretarias()
         
+        # Inicia a escuta de comandos C2 focada na UI
+        threading.Thread(target=self.escutar_comandos_c2, daemon=True).start()
         threading.Thread(target=self.carregar_resumo_tela, daemon=True).start()
+
+    def ao_fechar_tela(self):
+        """Oculta a tela, mas mantém o programa vivo enviando Heartbeats."""
+        self.withdraw()
+        self.escrever_log("ℹ️ Tela minimizada. Operando em background.")
+        threading.Thread(target=self.loop_silencioso, daemon=True).start()
+
+    def loop_silencioso(self):
+        while True:
+            try:
+                # auto_atualizar() -> DESATIVADO PARA NÃO ACIONAR O UAC DO WINDOWS
+                payload_bg = ler_hardware_maquina("Ping Automático", "Background")
+                if payload_bg:
+                    enviar_para_servidor(payload_bg)
+            except: pass
+            time.sleep(3600)
+
+    # --- NOVO SISTEMA DE LOGS NA TELA ---
+    def escrever_log(self, mensagem):
+        """Escreve na aba de terminal do Agente de forma Thread-Safe"""
+        try:
+            agora = time.strftime("%H:%M:%S")
+            linha = f"[{agora}] {mensagem}\n"
+            print(linha.strip())
+            
+            def atualizar_ui():
+                self.textbox_logs.configure(state="normal")
+                self.textbox_logs.insert("end", linha)
+                self.textbox_logs.see("end")
+                self.textbox_logs.configure(state="disabled")
+                
+            self.after(0, atualizar_ui)
+        except: pass
 
     def popup_moderno(self, titulo, mensagem, cor_destaque="#10B981"):
         pop = ctk.CTkToplevel(self)
@@ -250,20 +235,16 @@ class NexusAgent(ctk.CTk):
         pop.grab_set() 
         ctk.CTkLabel(pop, text=titulo.upper(), font=ctk.CTkFont(size=14, weight="bold"), text_color=cor_destaque).pack(pady=(20, 10))
         ctk.CTkLabel(pop, text=mensagem, wraplength=300, justify="center").pack(pady=10)
-        ctk.CTkButton(pop, text="OK, Entendi", command=pop.destroy, fg_color=cor_destaque, hover_color="#059669").pack(pady=15)
+        ctk.CTkButton(pop, text="OK", command=pop.destroy, fg_color=cor_destaque, hover_color="#059669").pack(pady=15)
 
     def criar_card_info(self, pai, icone, titulo, valor, row, col):
-        """Cria um mini-card para o grid de hardware"""
         frame = ctk.CTkFrame(pai, fg_color="#18181B", corner_radius=10)
         frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
-        
         ctk.CTkLabel(frame, text=icone, font=ctk.CTkFont(size=20)).pack(side="left", padx=(10, 5), pady=10)
         info_frame = ctk.CTkFrame(frame, fg_color="transparent")
         info_frame.pack(side="left", fill="x", expand=True, padx=(0, 10), pady=5)
-        
         ctk.CTkLabel(info_frame, text=titulo.upper(), font=ctk.CTkFont(size=9, weight="bold"), text_color="#3B82F6", anchor="w").pack(fill="x")
         
-        # Limita o tamanho do texto para não quebrar o card
         if len(valor) > 18: valor = valor[:15] + "..."
         ctk.CTkLabel(info_frame, text=valor, font=ctk.CTkFont(size=12, weight="bold"), text_color="#F8FAFC", anchor="w").pack(fill="x")
 
@@ -271,60 +252,60 @@ class NexusAgent(ctk.CTk):
         # HEADER
         frame_topo = ctk.CTkFrame(self, fg_color="#1E293B", corner_radius=0)
         frame_topo.pack(fill="x", ipady=15)
-        ctk.CTkLabel(frame_topo, text="NEXUS.INV", font=ctk.CTkFont(size=26, weight="bold"), text_color="#F8FAFC").pack(pady=(10, 0))
-        ctk.CTkLabel(frame_topo, text="AGENTE DE COLETA & TELEMETRIA", font=ctk.CTkFont(size=10, weight="bold"), text_color="#3B82F6").pack()
+        ctk.CTkLabel(frame_topo, text="NEXUS AGENT", font=ctk.CTkFont(size=26, weight="bold"), text_color="#F8FAFC").pack(pady=(10, 0))
+        ctk.CTkLabel(frame_topo, text=f"TELEMETRIA E CONTROLE v{VERSAO_DESTE_AGENTE}", font=ctk.CTkFont(size=10, weight="bold"), text_color="#3B82F6").pack()
 
-        frame_corpo = ctk.CTkFrame(self, fg_color="transparent")
-        frame_corpo.pack(fill="both", expand=True, padx=25, pady=10)
-
-        # 🚀 NOVO PAINEL DE CARDS (Substitui a caixa de texto)
-        ctk.CTkLabel(frame_corpo, text="Diagnóstico do Sistema", font=ctk.CTkFont(size=13, weight="bold"), text_color="#94A3B8").pack(anchor="w", pady=(5, 5))
+        # TABS (ABAS) 🚀
+        self.tabview = ctk.CTkTabview(self, fg_color="transparent")
+        self.tabview.pack(fill="both", expand=True, padx=20, pady=10)
         
-        self.frame_hardware = ctk.CTkFrame(frame_corpo, fg_color="transparent")
+        tab_diag = self.tabview.add("Diagnóstico")
+        tab_logs = self.tabview.add("Terminal de Logs")
+
+        # ================= ABA 1: DIAGNÓSTICO =================
+        ctk.CTkLabel(tab_diag, text="Hardware Local", font=ctk.CTkFont(size=13, weight="bold"), text_color="#94A3B8").pack(anchor="w", pady=(5, 5))
+        
+        self.frame_hardware = ctk.CTkFrame(tab_diag, fg_color="transparent")
         self.frame_hardware.pack(fill="x", pady=(0, 10))
         self.frame_hardware.grid_columnconfigure((0, 1), weight=1)
         
-        # Estado de carregamento inicial
         self.lbl_loading = ctk.CTkLabel(self.frame_hardware, text="Lendo componentes... ⏳", text_color="#3B82F6", font=ctk.CTkFont(size=12, slant="italic"))
         self.lbl_loading.grid(row=0, column=0, columnspan=2, pady=30)
 
-        # DESTINO
-        ctk.CTkLabel(frame_corpo, text="Destino de Vinculação", font=ctk.CTkFont(size=13, weight="bold"), text_color="#94A3B8").pack(anchor="w", pady=(15, 5))
-        
-        self.combo_sec = ctk.CTkComboBox(frame_corpo, values=["Carregando..."], command=self.ao_mudar_secretaria, height=35)
+        ctk.CTkLabel(tab_diag, text="Destino de Vinculação", font=ctk.CTkFont(size=13, weight="bold"), text_color="#94A3B8").pack(anchor="w", pady=(10, 5))
+        self.combo_sec = ctk.CTkComboBox(tab_diag, values=["Carregando..."], command=self.ao_mudar_secretaria, height=35)
         self.combo_sec.pack(fill="x", pady=(0, 10))
 
-        self.combo_setor = ctk.CTkComboBox(frame_corpo, values=["Aguardando secretaria..."], height=35, state="disabled")
+        self.combo_setor = ctk.CTkComboBox(tab_diag, values=["Aguardando secretaria..."], height=35, state="disabled")
         self.combo_setor.pack(fill="x", pady=(0, 15))
 
-        # PATRIMÔNIO
-        ctk.CTkLabel(frame_corpo, text="Patrimônio (Opcional)", font=ctk.CTkFont(size=13, weight="bold"), text_color="#94A3B8").pack(anchor="w", pady=(5, 5))
-        self.entry_patrimonio = ctk.CTkEntry(frame_corpo, placeholder_text="Deixe em branco para auto-gerar...", height=35)
-        self.entry_patrimonio.pack(fill="x", pady=(0, 20))
+        ctk.CTkLabel(tab_diag, text="Patrimônio (Opcional)", font=ctk.CTkFont(size=13, weight="bold"), text_color="#94A3B8").pack(anchor="w", pady=(5, 5))
+        self.entry_patrimonio = ctk.CTkEntry(tab_diag, placeholder_text="Deixe em branco para auto-gerar...", height=35)
+        self.entry_patrimonio.pack(fill="x", pady=(0, 15))
 
-        # 🚀 EFEITO MANEIRO: BARRA DE PROGRESSO OCULTA
-        self.progress_bar = ctk.CTkProgressBar(frame_corpo, height=6, progress_color="#10B981", fg_color="#1E293B")
+        self.progress_bar = ctk.CTkProgressBar(tab_diag, height=6, progress_color="#10B981", fg_color="#1E293B")
         self.progress_bar.set(0)
         
-        self.btn_coletar = ctk.CTkButton(frame_corpo, text="⚡ Sincronizar com Servidor", font=ctk.CTkFont(size=14, weight="bold"), height=45, command=self.iniciar_envio, state="disabled")
-        self.btn_coletar.pack(fill="x", pady=(5, 0))
+        self.btn_coletar = ctk.CTkButton(tab_diag, text="⚡ Enviar para Nuvem", font=ctk.CTkFont(size=14, weight="bold"), height=45, command=self.iniciar_envio, state="disabled")
+        self.btn_coletar.pack(fill="x", side="bottom", pady=(5, 10))
+
+        # ================= ABA 2: LOGS DO C2 =================
+        self.textbox_logs = ctk.CTkTextbox(tab_logs, fg_color="#181A1B", text_color="#4CAF50", font=ctk.CTkFont(family="Consolas", size=11), wrap="word")
+        self.textbox_logs.pack(fill="both", expand=True, pady=5)
+        self.textbox_logs.insert("end", "> Console de Eventos Nexus Iniciado.\n> Aguardando instruções remotas...\n\n")
+        self.textbox_logs.configure(state="disabled")
 
     def atualizar_caixa_resumo(self):
-        # Remove o "Lendo componentes..."
         self.lbl_loading.destroy()
-        
         if self.dados_hardware:
-            # Desenha o Grid de Cards Dinâmico
             self.criar_card_info(self.frame_hardware, "💻", "Máquina", self.dados_hardware['nome_pc'], 0, 0)
             self.criar_card_info(self.frame_hardware, "⚙️", "Sistema", self.dados_hardware['os'].replace("Microsoft", "").strip(), 0, 1)
-            self.criar_card_info(self.frame_hardware, "🧠", "Processador", self.dados_hardware['cpu'].replace("(R)", "").replace("(TM)", ""), 1, 0)
-            self.criar_card_info(self.frame_hardware, "💾", "RAM & Disco", f"{self.dados_hardware['ram']} / {self.dados_hardware['disco']}", 1, 1)
-            self.criar_card_info(self.frame_hardware, "🌐", "Rede (IP)", self.dados_hardware['ip'], 2, 0)
-            self.criar_card_info(self.frame_hardware, "🏷️", "Serial", self.dados_hardware['serial'], 2, 1)
-            
+            self.criar_card_info(self.frame_hardware, "🧠", "CPU", self.dados_hardware['cpu'].replace("(R)", "").replace("(TM)", ""), 1, 0)
+            self.criar_card_info(self.frame_hardware, "💾", "Armaz.", f"{self.dados_hardware['ram']} / {self.dados_hardware['disco']}", 1, 1)
             self.btn_coletar.configure(state="normal") 
+            self.escrever_log("✅ Hardware lido com sucesso.")
         else:
-            ctk.CTkLabel(self.frame_hardware, text="❌ Falha na leitura WMI.\nAbra como Administrador.", text_color="#EF4444").grid(row=0, column=0, columnspan=2)
+            ctk.CTkLabel(self.frame_hardware, text="❌ Falha na leitura WMI.", text_color="#EF4444").grid(row=0, column=0, columnspan=2)
 
     def carregar_resumo_tela(self):
         self.dados_hardware = ler_hardware_maquina()
@@ -333,15 +314,20 @@ class NexusAgent(ctk.CTk):
     def carregar_secretarias(self):
         def fetch():
             try:
-                res = requests.get(f"{BASE_URL}/api/unidades/secretarias", timeout=10)
+                self.escrever_log("🔄 Baixando tabela de secretarias...")
+                res = requests.get(f"{self.base_url}/api/unidades/secretarias", timeout=10)
                 if res.status_code == 200:
                     self.secretarias_data = res.json()
                     nomes = [s["nome"] for s in self.secretarias_data]
-                    self.combo_sec.configure(values=nomes)
-                    if nomes: self.combo_sec.set(nomes[0]); self.ao_mudar_secretaria(nomes[0])
-                else: self.combo_sec.set("Erro no servidor")
-            except:
-                self.combo_sec.set("Falha de Conexão")
+                    self.after(0, lambda: self.combo_sec.configure(values=nomes))
+                    if nomes: 
+                        self.after(0, lambda: self.combo_sec.set(nomes[0]))
+                        self.ao_mudar_secretaria(nomes[0])
+                else: 
+                    self.after(0, lambda: self.combo_sec.set("Erro no servidor"))
+            except Exception as e:
+                self.after(0, lambda: self.combo_sec.set("Falha de Conexão"))
+                self.escrever_log(f"❌ Erro ao buscar secretarias: {str(e)[:40]}")
         threading.Thread(target=fetch, daemon=True).start()
 
     def ao_mudar_secretaria(self, nome_sec):
@@ -350,13 +336,18 @@ class NexusAgent(ctk.CTk):
         if not sec_id: return
         def fetch_setores():
             try:
-                res = requests.get(f"{BASE_URL}/api/unidades/secretarias/{sec_id}/setores", timeout=10)
+                res = requests.get(f"{self.base_url}/api/unidades/secretarias/{sec_id}/setores", timeout=10)
                 if res.status_code == 200:
                     self.setores_data = res.json()
                     nomes_setores = [s["nome"] for s in self.setores_data]
-                    if nomes_setores: self.combo_setor.configure(values=nomes_setores); self.combo_setor.set(nomes_setores[0])
-                    else: self.combo_setor.configure(values=["Nenhum setor"]); self.combo_setor.set("Nenhum setor")
-            except: self.combo_setor.set("Erro ao carregar")
+                    if nomes_setores: 
+                        self.after(0, lambda: self.combo_setor.configure(values=nomes_setores))
+                        self.after(0, lambda: self.combo_setor.set(nomes_setores[0]))
+                    else: 
+                        self.after(0, lambda: self.combo_setor.configure(values=["Nenhum setor"]))
+                        self.after(0, lambda: self.combo_setor.set("Nenhum setor"))
+            except: 
+                self.after(0, lambda: self.combo_setor.set("Erro ao carregar"))
         threading.Thread(target=fetch_setores, daemon=True).start()
 
     def iniciar_envio(self):
@@ -367,7 +358,6 @@ class NexusAgent(ctk.CTk):
         if not sec or not setor or setor == "Carregando...": return
         if not self.dados_hardware: return 
         
-        # Desabilita o botão e mostra a barra de progresso
         self.btn_coletar.configure(state="disabled", fg_color="#F59E0B", text_color="#000000")
         self.progress_bar.pack(fill="x", pady=(10, 0), before=self.btn_coletar)
         self.progress_bar.set(0)
@@ -379,10 +369,8 @@ class NexusAgent(ctk.CTk):
         
         def processar_resposta(sucesso, resposta, override_enviado):
             self.progress_bar.set(1.0)
-            self.after(500, self.progress_bar.pack_forget) # Esconde a barra depois de meio segundo
-            
-            # Reseta o botão para o visual original
-            self.btn_coletar.configure(state="normal", fg_color=["#3a7ebf", "#1f538d"], text_color=["#DCE4EE", "#DCE4EE"], text="⚡ Sincronizar com Servidor")
+            self.after(500, self.progress_bar.pack_forget)
+            self.btn_coletar.configure(state="normal", fg_color=["#3a7ebf", "#1f538d"], text_color=["#DCE4EE", "#DCE4EE"], text="⚡ Enviar para Nuvem")
             
             if sucesso:
                 status = resposta.get("status")
@@ -392,81 +380,152 @@ class NexusAgent(ctk.CTk):
                 elif status == "error":
                     self.popup_moderno("Erro de Cadastro", resposta.get("message"), "#EF4444")
                 else:
-                    self.popup_moderno("Sincronização Concluída", f"O equipamento foi registrado na nuvem.\n\nPatrimônio Gerado: {resposta.get('patrimonio')}", "#10B981")
+                    pat = resposta.get('patrimonio')
+                    self.escrever_log(f"✅ Sincronizado com sucesso! ID: {pat}")
+                    self.popup_moderno("Concluído", f"Registrado na nuvem.\nPatrimônio: {pat}", "#10B981")
                     self.entry_patrimonio.delete(0, 'end') 
             else:
+                self.escrever_log("❌ Falha na conexão de envio.")
                 self.popup_moderno("Erro de Conexão", f"Falha ao comunicar com a Nuvem:\n{resposta}", "#EF4444")
 
         def run(override=False):
-            # EFEITO DE ANIMAÇÃO DA TELA (Executa em background)
-            self.after(0, lambda: self.btn_coletar.configure(text="📦 Empacotando Hardware..."))
-            self.after(0, lambda: self.progress_bar.set(0.2))
-            time.sleep(0.4)
-            
-            self.after(0, lambda: self.btn_coletar.configure(text="🔒 Autenticando na Nuvem..."))
+            self.escrever_log("📦 Enviando inventário para a nuvem...")
+            self.after(0, lambda: self.btn_coletar.configure(text="📦 Enviando Dados..."))
             self.after(0, lambda: self.progress_bar.set(0.5))
-            time.sleep(0.4)
+            time.sleep(0.5)
             
-            self.after(0, lambda: self.btn_coletar.configure(text="🚀 Transmitindo Dados..."))
-            self.after(0, lambda: self.progress_bar.set(0.8))
-            
-            # Executa a chamada HTTP real
             self.dados_hardware["override_patrimonio"] = override
             sucesso, dados = enviar_para_servidor(self.dados_hardware)
-            
-            # Finaliza
             self.after(0, lambda: processar_resposta(sucesso, dados, override))
             
         threading.Thread(target=run, daemon=True).start()
 
+    # --- OUVINTE C2 INTEGRADO COM A TELA ---
+    def escutar_comandos_c2(self):
+        self.escrever_log("🎧 Terminal Remoto (C2) ativado.")
+        while True:
+            try:
+                url_check = f"{self.base_url}/api/agente/comandos/pendentes/{self.meu_uuid}"
+                res = requests.get(url_check, headers=HEADERS_AUTH, timeout=10)
+                
+                if res.status_code == 200:
+                    dados = res.json()
+                    if dados.get("tem_comando"):
+                        comando_id = dados.get("comando_id")
+                        script_content = dados.get("script_content")
+                        
+                        self.escrever_log(f"🔥 Comando recebido (ID: {comando_id})")
+                        self.escrever_log(f"⚙️ Executando script no background...")
+                        
+                        try:
+                            # 🚀 CORREÇÃO 1: Removida a trava que engolia o ipconfig. Deixamos o Python tratar os erros de codificação (errors="replace").
+                            processo = subprocess.run(
+                                ["powershell", "-NoProfile", "-Command", script_content],
+                                capture_output=True, text=True, errors="replace", 
+                                creationflags=subprocess.CREATE_NO_WINDOW
+                            )
+                            saida = processo.stdout.strip() if processo.stdout else ""
+                            erro = processo.stderr.strip() if processo.stderr else ""
+                            status_final = "CONCLUIDO" if processo.returncode == 0 else "ERRO"
+                            
+                            # Junta a saída e os erros
+                            log_final = saida
+                            if erro:
+                                log_final += f"\n[ERROS DO WINDOWS]:\n{erro}"
+                                
+                            # 🚀 CORREÇÃO 2: Se o comando for executado, mas for vazio, quebra a pegadinha do React
+                            if not log_final.strip():
+                                log_final = "> Comando executado com sucesso (Sem retorno de texto no terminal)."
+                                
+                            # Imprime um resumo no log visual do agente
+                            resumo = log_final[:40].replace('\n', ' ') + "..." if len(log_final) > 40 else log_final
+                            self.escrever_log(f"✅ Retorno: {resumo}")
+                            
+                        except Exception as e:
+                            status_final = "ERRO"
+                            log_final = f"Falha fatal ao rodar script: {str(e)}"
+                            self.escrever_log(f"❌ Erro crítico: {str(e)}")
+                        
+                        url_resultado = f"{self.base_url}/api/agente/comandos/resultado"
+                        requests.post(url_resultado, json={
+                            "comando_id": comando_id, "status": status_final, "output_log": log_final
+                        }, headers=HEADERS_AUTH, timeout=15)
+                        
+                        self.escrever_log("📡 Log devolvido ao servidor.")
+            except Exception as e:
+                pass
+            
+            time.sleep(60)
+
 # ==========================================
-# MODO BACKGROUND (HEARTBEAT - 1 HORA)
+# CÓDIGO CORE BACKGROUND (SEM TELA)
 # ==========================================
-if len(sys.argv) > 1 and sys.argv[1] == "--silent":
-    # 🚀 LIGA O OUVINTE DE C2 EM BACKGROUND
-    meu_uuid = obter_id_persistente()
-    threading.Thread(target=escutar_comandos_c2, args=(BASE_URL, meu_uuid), daemon=True).start()
-    
+def escutar_comandos_silencioso(base_url, uuid_pc):
+    """Usado apenas quando o Windows inicia o agente em modo invisível."""
     while True:
-        auto_atualizar()
-        payload_bg = ler_hardware_maquina("Ping Automático", "Background")
-        if payload_bg:
-            enviar_para_servidor(payload_bg)
-        time.sleep(3600)
+        try:
+            url_check = f"{base_url}/api/agente/comandos/pendentes/{uuid_pc}"
+            res = requests.get(url_check, headers=HEADERS_AUTH, timeout=10)
+            
+            if res.status_code == 200 and res.json().get("tem_comando"):
+                dados = res.json()
+                comando_id = dados.get("comando_id")
+                script_content = dados.get("script_content")
+                
+                try:
+                    processo = subprocess.run(
+                        ["powershell", "-NoProfile", "-Command", script_content],
+                        capture_output=True, text=True, errors="replace",
+                        creationflags=subprocess.CREATE_NO_WINDOW
+                    )
+                    saida = processo.stdout.strip() if processo.stdout else ""
+                    erro = processo.stderr.strip() if processo.stderr else ""
+                    
+                    status_final = "CONCLUIDO" if processo.returncode == 0 else "ERRO"
+                    log_final = saida
+                    if erro: 
+                        log_final += f"\n[ERROS DO WINDOWS]:\n{erro}"
+                        
+                    if not log_final.strip():
+                        log_final = "> Comando executado com sucesso (Sem retorno de texto no terminal)."
+                        
+                except Exception as e:
+                    status_final, log_final = "ERRO", str(e)
+                
+                requests.post(f"{base_url}/api/agente/comandos/resultado", json={
+                    "comando_id": comando_id, "status": status_final, "output_log": log_final
+                }, headers=HEADERS_AUTH, timeout=15)
+        except: pass
+        time.sleep(60)
 
 # ==========================================
 # INICIALIZAÇÃO DO AGENTE (A LÓGICA MESTRA)
 # ==========================================
 if __name__ == "__main__":
-    # 1. Carrega as configurações vitais
     base_url = obter_url_backend()
     meu_uuid = obter_id_persistente()
 
-    # 2. O C2 SEMPRE INICIA (Independente de ter tela ou não)
-    threading.Thread(target=escutar_comandos_c2, args=(base_url, meu_uuid), daemon=True).start()
-
-    # 3. Decide qual modo abrir
+    # MODO BACKGROUND - INICIADO PELO WATCHDOG (O INVISÍVEL)
     if "--silent" in sys.argv:
-        # =========================================================
-        # MODO INICIADO PELO WINDOWS AO LIGAR O PC (Sem tela)
-        # =========================================================
+        # Liga o C2 em Background puro
+        threading.Thread(target=escutar_comandos_silencioso, args=(base_url, meu_uuid), daemon=True).start()
+        
+        # Loop de Heartbeat e Auto-Update
         while True:
             try:
-                # auto_atualizar() -> COMENTADO NO DEV
+                # 🚀 AGORA SIM! Ele verifica a atualização. Como o Watchdog roda como SYSTEM, não vai pedir UAC!
+                auto_atualizar() 
+                
+                # Após checar update, faz a coleta normal e manda pra nuvem
                 payload_bg = ler_hardware_maquina("Ping Automático", "Background")
                 if payload_bg:
                     enviar_para_servidor(payload_bg)
-            except Exception:
-                pass
-            time.sleep(3600)
+            except: pass
+            
+            time.sleep(3600) # Dorme por 1 hora e repete o ciclo
+            
+    # MODO TÉCNICO - INICIADO POR CLIQUE DUPLO (Com Interface)
     else:
-        # =========================================================
-        # MODO TÉCNICO (2 cliques no .exe na instalação)
-        # =========================================================
-        app = NexusAgent()
-        
-        # Intercepta o botão "X" para não matar o programa, apenas esconder
+        app = NexusAgent(base_url, meu_uuid)
         app.protocol("WM_DELETE_WINDOW", app.ao_fechar_tela)
-        
-        # Mantém o programa vivo para sempre
         app.mainloop()

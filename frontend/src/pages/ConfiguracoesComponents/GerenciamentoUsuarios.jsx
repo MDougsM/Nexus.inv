@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'react-toastify';
 import api from '../../api/api';
 
@@ -223,8 +224,8 @@ export default function GerenciamentoUsuarios({ usuarioAtual }) {
       </div>
 
       {/* MODAL DE EDIÇÃO */}
-      {modalEdit.aberto && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/70 z-50 p-4 backdrop-blur-md animate-fade-in">
+      {modalEdit.aberto && createPortal(
+        <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-[9999] p-4 backdrop-blur-md animate-fade-in">
           <div className="w-full max-w-lg rounded-3xl p-8 shadow-2xl border animate-scale-up max-h-[95vh] overflow-y-auto custom-scrollbar" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
             <div className="flex items-center gap-4 mb-6 border-b pb-4" style={{ borderColor: 'var(--border-light)' }}>
               <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black shadow-md ${modalEdit.avatar && modalEdit.avatar !== 'letras' ? 'bg-transparent text-4xl' : 'bg-gray-900 text-white text-lg uppercase'}`}>
@@ -273,12 +274,12 @@ export default function GerenciamentoUsuarios({ usuarioAtual }) {
               <button onClick={confirmarEdicao} className="px-8 py-3 rounded-xl font-black text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all active:scale-95">Salvar Acessos</button>
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
 
       {/* MODAL EXCLUSÃO (MANTIDO EXATAMENTE IGUAL) */}
-      {modalExclusao.aberto && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-50 p-4 backdrop-blur-md animate-fade-in">
+      {modalExclusao.aberto && createPortal(
+        <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-[9999] p-4 backdrop-blur-md animate-fade-in">
           <div className="w-full max-w-md rounded-3xl p-8 shadow-2xl border animate-scale-up" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
             <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center text-3xl mb-4 text-red-500 mx-auto shadow-inner border border-red-500/20">⚠️</div>
             <h3 className="text-2xl font-black tracking-tight mb-2 text-center" style={{ color: 'var(--text-main)' }}>Revogar Acesso</h3>
@@ -292,7 +293,7 @@ export default function GerenciamentoUsuarios({ usuarioAtual }) {
               <button onClick={() => setModalExclusao({ aberto: false, id: null })} className="w-full py-3.5 rounded-xl font-bold opacity-60 hover:opacity-100 transition-all hover:bg-gray-500/10" style={{ color: 'var(--text-main)' }}>Cancelar operação</button>
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
     </>
   );

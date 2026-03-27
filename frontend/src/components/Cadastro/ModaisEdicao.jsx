@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'react-toastify';
 import api from '../../api/api';
 import { parseCamposDinamicos } from '../../utils/helpers';
@@ -92,8 +93,8 @@ export default function ModaisEdicao({
   return (
     <>
       {/* MODAL INDIVIDUAL */}
-      {modalEdicao.aberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-fade-in" onClick={() => setModalEdicao({ aberto: false, form: {dados_dinamicos:{}} })}>
+      {modalEdicao.aberto && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in" onClick={() => setModalEdicao({ aberto: false, form: {dados_dinamicos:{}} })}>
           <div className="w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden border border-white/10 animate-scale-up flex flex-col max-h-[90vh]" style={{backgroundColor: 'var(--bg-card)'}} onClick={e => e.stopPropagation()}>
             
             {/* Header */}
@@ -216,12 +217,12 @@ export default function ModaisEdicao({
               <button onClick={salvarEdicao} className="px-8 py-2.5 rounded-xl font-black text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all active:scale-95">Salvar Alterações</button>
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
 
       {/* MODAL LOTE (MANTIDO INTACTO) */}
-      {modalEdicaoMassa.aberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in" onClick={() => setModalEdicaoMassa({ aberto: false, ativos: [] })}>
+      {modalEdicaoMassa.aberto && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in" onClick={() => setModalEdicaoMassa({ aberto: false, ativos: [] })}>
           <div className="w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden border border-white/10" style={{backgroundColor: 'var(--bg-card)'}} onClick={e => e.stopPropagation()}>
             <div className="p-6 border-b flex items-center gap-3 bg-blue-600 text-white">
               <div className="text-2xl">⚡</div>
@@ -266,7 +267,7 @@ export default function ModaisEdicao({
               <button disabled={!categoriaMassa} onClick={salvarLote} className="px-8 py-2.5 rounded-xl font-black text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-30 shadow-lg shadow-blue-500/30 transition-all active:scale-95">Aplicar no Lote</button>
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
     </>
   );

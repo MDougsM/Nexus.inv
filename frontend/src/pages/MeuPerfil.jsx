@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import api from '../api/api';
-// 🛡️ IMPORTANDO O TERMO DO ARQUIVO EXTERNO (Certifique-se que este arquivo existe)
 import { TERMOS_NEXUS } from '../termosNexus';
+import { createPortal } from 'react-dom';
 
 export default function MeuPerfil() {
   const userSafe = localStorage.getItem('usuario') || 'admin';
@@ -10,6 +10,7 @@ export default function MeuPerfil() {
   const [senhas, setSenhas] = useState({ atual: '', nova: '', confirmacao: '' });
   const [nomeExibicao, setNomeExibicao] = useState('');
   const [avatarAtivo, setAvatarAtivo] = useState('letras');
+  const [email, setEmail] = useState(''); // 🚀 NOVO STATE DO EMAIL
   
   const [termosAceitos, setTermosAceitos] = useState(false); 
   const [mostrarModal, setMostrarModal] = useState(false);
@@ -26,17 +27,16 @@ export default function MeuPerfil() {
         if (meuUsuario) {
           setNomeExibicao(meuUsuario.nome_exibicao || userSafe);
           setAvatarAtivo(meuUsuario.avatar || 'letras');
+          setEmail(meuUsuario.email || ''); // 🚀 CARREGA O E-MAIL DO BANCO
           
           const aceitou = meuUsuario.termos_aceitos === true;
           setTermosAceitos(aceitou);
           
-          // 🚀 SINCRONIZAÇÃO CRÍTICA COM O MENU
           if (!aceitou) {
               localStorage.setItem('nexus_bloqueado', 'true');
           } else {
               localStorage.removeItem('nexus_bloqueado');
           }
-          // Avisa o Layout.jsx para re-renderizar o menu se necessário
           window.dispatchEvent(new Event('statusTermosAlterado'));
         }
       } catch (e) {
@@ -56,33 +56,22 @@ export default function MeuPerfil() {
         username: userSafe,
         termos_aceitos: true,
         nome_exibicao: nomeExibicao,
-        avatar: avatarAtivo
+        avatar: avatarAtivo,
+        email: email // 🚀 MANDA O EMAIL QUANDO ACEITA OS TERMOS
       });
 
-      // 1. CONFIRMA NO RETORNO DO SERVIDOR
       if (res.data.termos_aceitos === true) {
-        // 2. Limpa a trava do localStorage
         localStorage.removeItem('nexus_bloqueado');
-        
-        // 3. Atualiza os ESTADOS LOCAIS
         setTermosAceitos(true);
         setMostrarModal(false);
-        
-        // 4. Dispara os eventos globais
         window.dispatchEvent(new Event('statusTermosAlterado'));
         window.dispatchEvent(new Event('perfilAtualizado'));
-        
         toast.success("✅ Termos aceitos! Acesso liberado. 🚀");
-        
-        // 5. Redireciona após confirmação visual
-        setTimeout(() => {
-          window.location.href = '/';
-        }, 1500);
+        setTimeout(() => window.location.href = '/', 1500);
       } else {
         toast.error("Erro: Servidor não confirmou o aceite. Tente novamente.");
       }
     } catch (e) {
-      console.error("Erro ao aceitar termos:", e);
       toast.error("Erro ao registrar aceite. Verifique a conexão.");
     } finally {
       setRecarregando(false);
@@ -90,10 +79,7 @@ export default function MeuPerfil() {
   };
 
   const revogarTermos = async () => {
-    if (!window.confirm("⚠️ Tem certeza? Ao revogar os termos, você perderá acesso ao sistema até aceitar novamente.")) {
-      return;
-    }
-    
+    if (!window.confirm("⚠️ Tem certeza? Ao revogar os termos, você perderá acesso ao sistema até aceitar novamente.")) return;
     setRecarregando(true);
     try {
       const res = await api.put('/api/usuarios/perfil/atualizar', {
@@ -104,21 +90,14 @@ export default function MeuPerfil() {
       if (res.data.termos_aceitos === false) {
         localStorage.setItem('nexus_bloqueado', 'true');
         setTermosAceitos(false);
-        
         window.dispatchEvent(new Event('statusTermosAlterado'));
         window.dispatchEvent(new Event('perfilAtualizado'));
-        
         toast.warning("❌ Termos revogados. Seu acesso foi restringido.");
-        
-        // Redireciona para perfil (a rota protegida vai segurar lá)
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
+        setTimeout(() => window.location.reload(), 1500);
       } else {
         toast.error("Erro ao revogar termos.");
       }
     } catch (e) {
-      console.error("Erro ao revogar termos:", e);
       toast.error("Erro ao processar revogação.");
     } finally {
       setRecarregando(false);
@@ -131,11 +110,14 @@ export default function MeuPerfil() {
       await api.put('/api/usuarios/perfil/atualizar', {
         username: userSafe,
         nome_exibicao: nomeExibicao,
-        avatar: avatarAtivo
+        avatar: avatarAtivo,
+        email: email // 🚀 ENVIA O EMAIL PARA SALVAR
       });
       toast.success("Perfil atualizado! ✨");
       window.dispatchEvent(new Event('perfilAtualizado'));
-    } catch (e) { toast.error("Erro ao salvar perfil."); }
+    } catch (e) { 
+      toast.error(e.response?.data?.detail || "Erro ao salvar perfil."); 
+    }
   };
 
   const salvarSenha = async (e) => {
@@ -157,7 +139,6 @@ export default function MeuPerfil() {
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-fade-in pb-10">
       
-      {/* 🚩 AVISO DE BLOQUEIO */}
       {!termosAceitos && (
         <div className="bg-red-500/10 border-2 border-red-500/50 p-6 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4 animate-pulse">
             <div className="flex items-center gap-4">
@@ -169,16 +150,12 @@ export default function MeuPerfil() {
                     </p>
                 </div>
             </div>
-            <button 
-                onClick={() => setMostrarModal(true)}
-                className="px-8 py-3 bg-red-600 text-white font-black rounded-xl hover:bg-red-700 transition-all shadow-lg shadow-red-500/40"
-            >
+            <button onClick={() => setMostrarModal(true)} className="px-8 py-3 bg-red-600 text-white font-black rounded-xl hover:bg-red-700 transition-all shadow-lg shadow-red-500/40">
                 LER E LIBERAR AGORA
             </button>
         </div>
       )}
 
-      {/* CABEÇALHO */}
       <div className="flex items-center gap-4 border-b pb-6" style={{ borderColor: 'var(--border-light)' }}>
         <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-lg border" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
           {avatarAtivo === 'letras' ? '👤' : avatarAtivo}
@@ -192,12 +169,12 @@ export default function MeuPerfil() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
         {/* COLUNA ESQUERDA: IDENTIDADE */}
         <div className="lg:col-span-5 space-y-6">
           <div className="p-8 rounded-3xl border shadow-xl transition-all" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
             <form onSubmit={salvarPerfil} className="space-y-6">
               
-              {/* Seleção de Avatar */}
               <div>
                 <label className="block text-[10px] font-black uppercase opacity-60 mb-2 ml-1" style={{ color: 'var(--text-main)' }}>Escolha seu Avatar</label>
                 <div className="grid grid-cols-4 gap-2">
@@ -212,10 +189,18 @@ export default function MeuPerfil() {
                 </div>
               </div>
 
-               <div>
-                <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Nome de Exibição</label>
-                <input value={nomeExibicao} onChange={e => setNomeExibicao(e.target.value)} className="w-full p-4 rounded-xl border font-bold outline-none" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} />
-              </div>
+               <div className="space-y-4 mt-6">
+                 <div>
+                  <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Nome de Exibição</label>
+                  <input value={nomeExibicao} onChange={e => setNomeExibicao(e.target.value)} className="w-full p-4 rounded-xl border font-bold outline-none" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} />
+                 </div>
+                 
+                 {/* 🚀 NOVO CAMPO DE EMAIL AQUI */}
+                 <div>
+                  <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>E-mail (Recuperação de Senha)</label>
+                  <input type="email" placeholder="seu.email@dominio.com" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-4 rounded-xl border font-bold outline-none" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} />
+                 </div>
+               </div>
 
               <button type="submit" className="w-full py-3.5 rounded-xl font-black text-white bg-blue-600 shadow-lg shadow-blue-500/30 transition-transform active:scale-95">
                 💾 Salvar Identidade
@@ -229,7 +214,6 @@ export default function MeuPerfil() {
           <div className="p-8 rounded-3xl border shadow-xl transition-all h-full" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
              <h4 className="font-black text-lg mb-4" style={{ color: 'var(--text-main)' }}>Segurança e Acesso</h4>
              
-             {/* 🔐 SEÇÃO DE GERENCIAMENTO DE TERMOS */}
              <div className="mb-8 p-5 rounded-2xl border-2" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
@@ -242,28 +226,17 @@ export default function MeuPerfil() {
                 </div>
                 
                 <div className="flex gap-2">
-                  <button 
-                    type="button"
-                    onClick={() => setMostrarModal(true)}
-                    className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-all active:scale-95"
-                  >
+                  <button onClick={() => setMostrarModal(true)} className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-all active:scale-95">
                     📖 Reler Termos
                   </button>
-                  
                   {termosAceitos && (
-                    <button 
-                      type="button"
-                      onClick={revogarTermos}
-                      disabled={recarregando}
-                      className="flex-1 py-2.5 rounded-lg bg-red-600 text-white text-xs font-black uppercase tracking-widest hover:bg-red-700 transition-all active:scale-95 disabled:opacity-60"
-                    >
+                    <button onClick={revogarTermos} disabled={recarregando} className="flex-1 py-2.5 rounded-lg bg-red-600 text-white text-xs font-black uppercase tracking-widest hover:bg-red-700 transition-all active:scale-95 disabled:opacity-60">
                       🚪 Revogar Acesso
                     </button>
                   )}
                 </div>
              </div>
              
-             {/* FORMULÁRIO DE SENHA */}
              <form onSubmit={salvarSenha} className="space-y-6 flex-1 flex flex-col">
                 <div>
                   <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Senha Atual *</label>
@@ -291,9 +264,9 @@ export default function MeuPerfil() {
         </div>
       </div>
 
-      {/* ⚖️ MODAL MANTIDO */}
-      {mostrarModal && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-fade-in">
+      {/* MODAL TERMOS */}
+      {mostrarModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md animate-fade-in">
           <div className="bg-white max-w-2xl w-full rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-8 bg-gray-950 text-white border-b border-white/10">
                 <h2 className="text-2xl font-black flex items-center gap-3">
@@ -316,29 +289,20 @@ export default function MeuPerfil() {
             </div>
 
             <div className="p-6 bg-gray-50 border-t flex gap-4">
-                <button 
-                  onClick={() => setMostrarModal(false)} 
-                  disabled={recarregando} 
-                  className={`py-4 font-bold rounded-2xl transition-all disabled:opacity-50 ${termosAceitos ? 'w-full bg-gray-200 text-gray-700 hover:bg-gray-300' : 'flex-1 text-gray-500 hover:bg-gray-100'}`}
-                >
+                <button onClick={() => setMostrarModal(false)} disabled={recarregando} className={`py-4 font-bold rounded-2xl transition-all disabled:opacity-50 ${termosAceitos ? 'w-full bg-gray-200 text-gray-700 hover:bg-gray-300' : 'flex-1 text-gray-500 hover:bg-gray-100'}`}>
                     {termosAceitos ? 'FECHAR DOCUMENTO' : 'Fechar'}
                 </button>
                 
-                {/* 🚨 TRAVA: Só mostra o botão azul se ele AINDA NÃO aceitou os termos */}
                 {!termosAceitos && (
-                  <button 
-                    onClick={aceitarTermosFinal} 
-                    disabled={recarregando}
-                    className="flex-[2] py-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
+                  <button onClick={aceitarTermosFinal} disabled={recarregando} className="flex-[2] py-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
                       {recarregando ? '⏳ PROCESSANDO...' : 'CONCORDO E ACEITO OS TERMOS'}
                   </button>
                 )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-
     </div>
   );
 }

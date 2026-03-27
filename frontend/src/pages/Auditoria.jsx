@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'react-toastify';
 import api from '../api/api';
 import * as XLSX from 'xlsx';
@@ -128,8 +129,8 @@ export default function Auditoria() {
       </div>
 
       {/* POP-UP MINIMALISTA (MODAL DO MOTIVO) */}
-      {modalMotivo.aberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setModalMotivo({ aberto: false, log: null })}>
+      {modalMotivo.aberto && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in" onClick={() => setModalMotivo({ aberto: false, log: null })}>
           <div className="w-full max-w-lg rounded-xl shadow-2xl border p-6 transform transition-all scale-100" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }} onClick={e => e.stopPropagation()}>
             
             <div className="flex justify-between items-start mb-4 border-b pb-4" style={{ borderColor: 'var(--border-light)' }}>
@@ -154,7 +155,7 @@ export default function Auditoria() {
               </button>
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
 
     </div>

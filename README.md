@@ -2,30 +2,27 @@
 
 Nexus.inv é um sistema de inventário de ativos de TI com backend FastAPI, frontend React/Vite, app Sentinel SNMP e um agente remoto (C2) com receptor de comandos CMD/PowerShell.
 
-## 🔥 Novidades da versão atual
+## 🔥 Novidades da versão atual (v5.8.3.0)
 
+- **Recuperação de Senha Segura**: Motor SMTP integrado para envio de credenciais temporárias via e-mail.
+- **Identidade Protegida**: Novo campo de E-mail de Recuperação integrado ao painel de Perfil do Usuário.
 - Agente com **receptor de comandos via C2** (polling 30s): `api/agente/comandos/pendentes/{uuid_persistente}`
 - Suporte a execuções remotas de **PowerShell + CMD** diretamente pela interface de cadastro
 - Endpoint de download do instalador atualizado para `Nexus_Instalador_v5.exe`
 - Fluxo completo de enfileiramento / leitura / retorno de resultados de comandos
 - Histórico de execução com status e logs no frontend (`TerminalRemoto`)
 
-## 🐛 Últimas Correções (v5.8.2.0 - 26/03/2026)
+## 🐛 Últimas Correções (v5.8.3.0 - 27/03/2026)
+
+### ✅ Correções Frontend (UI/UX)
+- **Modais e Pop-ups (React Portals)**: O bug da "faixa transparente" acima dos pop-ups foi erradicado. Todos os modais do sistema agora utilizam `createPortal` para sobrepor o Menu Lateral e o Cabeçalho com 100% de cobertura.
+- **MeuPerfil.jsx**: Adicionado formulário inteligente para captura de e-mail e integração visual com os Termos de LGPD. Resolvido loop infinito ao aceitar termos.
+- Adicionada seção "Gerenciamento de Termos" com botões de Reler e Revogar Acesso.
 
 ### ✅ Correções Críticas Backend
-- **main.py**: Corrigidos imports inválidos, decoradores órfãos e código Flask misturado com FastAPI
-- Rota `/usuarios/perfil/atualizar` agora retorna confirmação de dados salvos
-- Validação robusta de `termos_aceitos` no banco de dados
-
-### ✅ Correções Frontend
-- **MeuPerfil.jsx**: Resolvido loop infinito ao aceitar termos
-- Adicionada seção "Gerenciamento de Termos" com botões:
-  - 📖 **Reler Termos**: Reabre modal para leitura
-  - 🚪 **Revogar Acesso**: Permite revogar aceite (com confirmação dupla)
-- Interface mostra status visual: ✅ Aceito / ❌ Não aceito
-
-### 📦 Versionamento
-- Instalador atualizado para **`Nexus_Instalador_v5.exe`** em todos os endpoints
+- **Colisão de Rotas (FastAPI)**: Resolvido o bug onde o `main.py` interceptava a atualização de perfil (`email`), ignorando o controlador `usuarios.py`.
+- Injeção segura da coluna `email` no banco de dados (SQLite) sem perda de dados existentes.
+- Validação robusta de `termos_aceitos` no banco de dados.
 
 ## 📁 Estrutura do repositório
 
@@ -39,7 +36,7 @@ Nexus.inv é um sistema de inventário de ativos de TI com backend FastAPI, fron
 
 ### Backend (FastAPI)
 - Rotas inventário: `/api/inventario/*`
-- Auth: `/api/login`, `/api/usuarios`, `/api/auditoria`
+- Auth: `/api/login`, `/api/usuarios`, `/api/usuarios/recuperar-senha`
 - Agente C2 e terminal remoto:
   - `POST /api/comandos/enviar`
   - `GET /api/comandos/maquina/{patrimonio:path}`
@@ -49,13 +46,14 @@ Nexus.inv é um sistema de inventário de ativos de TI com backend FastAPI, fron
 - Rotas de comando global de coleta (legacy): `/api/inventario/agente/comando*`
 
 ### Frontend (React)
-- Página de configurações com botão de download de instalador
-- `components/Cadastro/TerminalRemoto.jsx` com formulário de script e log
-- Histórico de comandos no `ativo.patrimonio`
+- Modal Global "Esqueci a Senha" na tela de autenticação.
+- Página de configurações com botão de download de instalador.
+- `components/Cadastro/TerminalRemoto.jsx` com formulário de script e log.
+- Histórico de comandos no `ativo.patrimonio`.
 
 ### Sentinel (Desktop)
-- `Nexus_Print_Sentinel/sentinel_app.py` realiza coleta SNMP, status e auditoria
-- Agente local (`agente_nexus.pyw`) com thread `escutar_comandos_c2(...)`
+- `Nexus_Print_Sentinel/sentinel_app.py` realiza coleta SNMP, status e auditoria.
+- Agente local (`agente_nexus.pyw`) com thread `escutar_comandos_c2(...)`.
 
 ## 📦 Instalação
 
@@ -108,14 +106,19 @@ docker-compose up -d --build
 4. Agente executa script (cmd/powershell) e envia log para `/api/agente/comandos/resultado`
 5. Frontend atualiza histórico via `/api/comandos/maquina/{patrimonio}`
 
+## ✉️ Fluxo de Recuperação de Senha (SMTP)
+
+1. Usuário solicita recuperação informando o e-mail no frontend.
+2. Backend valida a existência do e-mail no banco.
+3. Função geradora cria senha complexa aleatória.
+4. O ORM salva o hash bcrypt da nova senha.
+5. `smtplib` conecta aos servidores do Google (via Senha de App) e dispara o aviso para o usuário.
+
 ## 🛠️ Configuração do agente instalador
 
 - Instalação do pacote: `backend/app/static/Nexus_Instalador_v5.exe`
 - Rota de download no frontend e API aponta para `Nexus_Instalador_v5.exe`
-- Caso ainda use `Nexus_Instalador.exe`, atualize para a nova nomenclatura:
-  - `backend/app/api/inventario.py`
-  - `backend/app/main.py`
-  - `frontend/src/pages/ConfiguracoesComponents/PainelFerramentas.jsx`
+- Caso ainda use `Nexus_Instalador.exe`, atualize para a nova nomenclatura nos controllers e frontend.
 
 ## 📡 Integração SNMP (Sentinel)
 
@@ -135,23 +138,24 @@ Tabelas-chave:
 1. Registrar máquina e conferir inventário.
 2. Abrir terminal remoto e enviar script `ipconfig /all` ou `Get-Process`.
 3. Confirmar retorno de log e status `CONCLUIDO` no histórico.
-4. Verificar rota de download do instalador em `/api/inventario/download/agente`.
+4. Testar fluxo de recuperação de senha com um e-mail válido.
+5. Verificar rota de download do instalador em `/api/inventario/download/agente`.
 
 ## 📌 Dicas de deploy
 
-- Mantenha o `.env` em produção com URLs corretas:
-  - `VITE_API_URL` = backend
-  - `FRONTEND_URL` = frontend
+- Mantenha o `.env` em produção com URLs e credenciais SMTP corretas:
+  - `VITE_API_URL` = URL do Backend
+  - `FRONTEND_URL` = URL do Frontend
+  - `SMTP_EMAIL` = logistica.newpc@gmail.com
+  - `SMTP_PASSWORD` = [SuaSenhaDeApp]
 - Evite sobrescrever `backend/data` e `.env` em updates.
-- Use `docker-compose down && docker-compose up -d --build`.
+- Use `docker-compose down -v && docker-compose up -d --build` para limpar caches problemáticos.
 
 ## 📝 Changelog resumido
-- ✅ **[v5.8.2.0]** Correções críticas no backend (main.py) e resolução do loop infinito de termos
-- ✅ Gerenciamento de Termos com releitura e revogação de acesso
-- Terminal remoto C2 adicionado
-- Agente com pooling de comandos e execução remota
-- Instalador atualizado para `Nexus_Instalador_v5.exe`
-- Endpoint de comando global mantido para fallback
+- ✅ **[v5.8.3.0]** Motor SMTP de e-mails, Correção de Z-Index/Modais (React Portals) e Colisão de Rotas no FastAPI.
+- ✅ **[v5.8.2.0]** Correções críticas no backend (main.py) e resolução do loop infinito de termos.
+- ✅ Gerenciamento de Termos com releitura e revogação de acesso.
+- Terminal remoto C2 adicionado.
 
 Veja `CHANGELOG.md` para histórico completo e detalhado.
 
@@ -203,6 +207,10 @@ Resposta se há comando:
 - Confirme UUID persistente no banco vs. agente
 - Logs do agente em `C:\Nexus\logs\`
 
+### Recuperação de senha falha
+- Verifique se a Senha de App do Google foi inserida no `.env` sem espaços.
+- Confirme se a porta 465 (SMTP SSL) não está bloqueada no firewall.
+
 ### Instalador não baixa
 - Arquivo `Nexus_Instalador_v5.exe` deve estar em `backend/app/static/`
 - Verifique permissões de leitura na pasta
@@ -213,4 +221,3 @@ Resposta se há comando:
 
 ## 📞 Suporte
 - Link interno /poa/contato ou equipe de DevOps
-

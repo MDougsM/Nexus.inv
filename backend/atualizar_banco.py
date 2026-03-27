@@ -1,42 +1,28 @@
-import sqlite3
-import os
+from sqlalchemy import text
+from app.db.database import engine
 
-# 🚀 CAMINHO ABSOLUTO E EXATO DO SEU BANCO DE DADOS
-caminho_base = r"C:\NexusInv\backend\data\nexus.db"
-
-print(f"🔄 Conectando ao banco de dados: {caminho_base}")
-
-if not os.path.exists(caminho_base):
-    print("❌ ERRO: O arquivo do banco de dados não foi encontrado nesse caminho!")
-    print("Verifique se o nexus.db está mesmo dentro da pasta backend.")
-    exit()
-
-try:
-    conn = sqlite3.connect(caminho_base)
-    cursor = conn.cursor()
-
-    colunas_novas = [
-        ("permissoes", "TEXT DEFAULT '[]'"),
-        ("termos_aceitos", "BOOLEAN DEFAULT 0"),
-        ("data_aceite", "DATETIME DEFAULT NULL"),
-        ("ip_aceite", "VARCHAR(50) DEFAULT NULL")
-    ]
-
-    print("🛠️ Verificando e atualizando tabela 'usuarios'...")
-
-    for coluna, tipo in colunas_novas:
+def atualizar_tabela_usuarios():
+    print("⏳ Iniciando atualização do banco de dados...")
+    
+    with engine.connect() as conn:
         try:
-            cursor.execute(f"ALTER TABLE usuarios ADD COLUMN {coluna} {tipo};")
-            print(f"  ✅ Coluna '{coluna}' injetada com sucesso!")
-        except sqlite3.OperationalError as e:
-            if "duplicate column name" in str(e).lower():
-                print(f"  ⚠️ A coluna '{coluna}' já existe. Pulando...")
+            # Tenta adicionar a coluna. Funciona perfeitamente em SQLite e PostgreSQL.
+            conn.execute(text("ALTER TABLE usuarios ADD COLUMN email VARCHAR;"))
+            
+            # Como acabamos de criar a coluna, vamos criar um índice para buscas rápidas
+            try:
+                conn.execute(text("CREATE UNIQUE INDEX ix_usuarios_email ON usuarios (email);"))
+            except:
+                pass # Ignora se o índice falhar (alguns bancos geram automático)
+                
+            conn.commit()
+            print("✅ SUCESSO: Coluna 'email' adicionada com sucesso na tabela 'usuarios'!")
+        except Exception as e:
+            erro = str(e).lower()
+            if "duplicate column name" in erro or "already exists" in erro or "duplicada" in erro:
+                print("⚠️ AVISO: A coluna 'email' já existe. Nenhuma alteração foi feita.")
             else:
-                print(f"  ❌ Erro ao adicionar '{coluna}': {e}")
+                print(f"❌ ERRO CRÍTICO ao atualizar: {e}")
 
-    conn.commit()
-    conn.close()
-    print("🚀 Banco atualizado com sucesso! Vá testar a criação de usuários.")
-
-except Exception as e:
-    print(f"❌ Erro crítico ao conectar no banco: {e}")
+if __name__ == "__main__":
+    atualizar_tabela_usuarios()

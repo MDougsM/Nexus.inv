@@ -1,6 +1,22 @@
 # Changelog - Nexus.inv
 
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
+Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
+
+## [v5.8.3.0] - 2026-03-27
+### 🚀 Adicionado (Added)
+- **Recuperação de Senha Automática:** Implementado um fluxo completo de "Esqueci a Senha" na tela de Login.
+  - O backend agora gera uma senha temporária forte e segura.
+  - Integração nativa com servidor SMTP (Gmail/Google Workspace) para envio automático de credenciais.
+  - Funcionalidade "Modo Simulação" adicionada para ambientes de desenvolvimento sem e-mail configurado.
+- **Gestão de E-mail de Usuários:** Adicionado campo `email` na tabela do banco de dados e na interface do painel `MeuPerfil.jsx`, permitindo que os próprios usuários atualizem seus endereços de contato para recuperação de conta.
+
+### 🐛 Corrigido (Fixed)
+- **Overlay Quebrado nos Modais (Z-Index / Stacking Context):** Resolvido o problema crítico visual onde uma "faixa transparente" (Menu Lateral e Cabeçalho) ficava por cima do fundo escuro dos pop-ups. Todos os modais foram migrados para a arquitetura `createPortal` do React, teletransportando a renderização para a raiz do DOM (`document.body`) e garantindo cobertura total de 100% da tela.
+- **Colisão de Rotas no FastAPI:** Corrigido um "Bug Fantasma" na atualização de perfil. A rota de `/usuarios/perfil/atualizar` no arquivo `main.py` estava interceptando chamadas e descartando o novo campo de e-mail antes de alcançar o controlador `usuarios.py`. A lógica foi unificada para garantir a gravação correta no banco.
+- **Sincronização do Docker Cache:** Resolvidas as falhas de hot-reload causadas por compilações fantasma do Python (`__pycache__`) no volume do WSL/Docker durante as atualizações do banco.
+
+---
 
 ## [v5.8.2.0] - 2026-03-26
 ### 🛠️ Correções (Hotfixes & Stability)
