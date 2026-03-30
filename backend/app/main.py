@@ -15,8 +15,12 @@ from sqlalchemy.orm import Session
 from apscheduler.schedulers.background import BackgroundScheduler
 from app.schemas import ComandoCreate, ComandoResultado
 
-# Importação dos seus módulos
-from app.api import auth, inventario, unidades, auditoria, transferencia, usuarios, manutencao, importacao, agendamentos
+# 🚀 1. AQUI ESTÁ A PRIMEIRA MUDANÇA: Tiramos o 'inventario' do app.api
+from app.api import auth, unidades, auditoria, transferencia, usuarios, manutencao, importacao, agendamentos
+
+# 🚀 E IMPORTAMOS OS 4 ARQUIVOS NOVOS DA PASTA ROUTERS
+from app.routers import inventario_core, inventario_categorias, inventario_relatorios, inventario_agente
+
 from app.db.database import engine, SessionLocal, get_db
 from app.models import Base, Categoria, Usuario, Ativo, LogAuditoria, HistoricoLeitura, ComandoAgente
 
@@ -366,10 +370,18 @@ def receber_resultado_comando(dados: ComandoResultado, db: Session = Depends(get
         return {"message": "Sucesso"}
     raise HTTPException(status_code=404, detail="Não encontrado")
 
-# 🔗 Registro das rotas
-app.include_router(router, prefix="/api") # Incluindo a rota de perfil definida no topo
+# ==========================================
+# 🔗 REGISTRO FINAL DE ROTAS
+# ==========================================
+app.include_router(router, prefix="/api") 
 app.include_router(auth.router, prefix="/api")
-app.include_router(inventario.router, prefix="/api")
+
+# 🚀 2. AQUI ESTÁ A SEGUNDA MUDANÇA: Retiramos o 'inventario.router' e colocamos as 4 ramificações novas
+app.include_router(inventario_core.router, prefix="/api")
+app.include_router(inventario_categorias.router, prefix="/api")
+app.include_router(inventario_relatorios.router, prefix="/api")
+app.include_router(inventario_agente.router, prefix="/api")
+
 app.include_router(unidades.router, prefix="/api")
 app.include_router(auditoria.router, prefix="/api")
 app.include_router(transferencia.router, prefix="/api")

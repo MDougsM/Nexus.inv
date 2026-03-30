@@ -55,7 +55,13 @@ export default function App() {
 
   return (
     <Router>
-      <ToastContainer position="top-right" autoClose={3000} theme="colored" />
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        theme="colored"
+        newestOnTop
+        toastStyle={{ zIndex: 2147483647 }}
+      />
       
       <Routes>
         {/* ROTA PÚBLICA (Fora do Layout, ou seja, sem Menu Lateral) */}

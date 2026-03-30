@@ -11,7 +11,6 @@ export default function ModaisEdicao({
   const [formEdicaoMassa, setFormEdicaoMassa] = useState({ marca: '', modelo: '', dados_dinamicos: {} });
   const [motivoEdicao, setMotivoEdicao] = useState('');
 
-  // Sincroniza campos dinâmicos ao abrir o lote
   useEffect(() => {
     if (modalEdicaoMassa.aberto && modalEdicaoMassa.ativos.length > 0) {
       const catId = modalEdicaoMassa.ativos[0].categoria_id;
@@ -23,7 +22,6 @@ export default function ModaisEdicao({
     }
   }, [modalEdicaoMassa.aberto, modalEdicaoMassa.ativos, categorias]);
 
-  // Limpa o motivo quando o modal individual é aberto/fechado
   useEffect(() => {
     if (modalEdicao.aberto) {
       setMotivoEdicao('');
@@ -39,6 +37,7 @@ export default function ModaisEdicao({
     }
 
     try {
+        // 🚀 CORREÇÃO: Voltando a enviar o objeto puro, sem o stringify, para o FastAPI aceitar!
         await api.put(`/api/inventario/ficha/editar/${modalEdicao.ativo.patrimonio}`, {
             ...modalEdicao.form,
             usuario_acao: usuarioAtual,
@@ -71,7 +70,7 @@ export default function ModaisEdicao({
           ...ativo,
           marca: formEdicaoMassa.marca || ativo.marca,
           modelo: formEdicaoMassa.modelo || ativo.modelo,
-          dados_dinamicos: novosDinamicos,
+          dados_dinamicos: novosDinamicos, // 🚀 CORREÇÃO: Objeto puro aqui também
           usuario_acao: usuarioAtual
         });
       });
@@ -87,7 +86,6 @@ export default function ModaisEdicao({
   const categoriaMassa = catsSelecionadas.length === 1 ? categorias.find(c => c.id === catsSelecionadas[0]) : null;
   const camposMassa = parseCamposDinamicos(categoriaMassa);
 
-  // 🚀 CAMPOS QUE O SENTINEL CUIDA (Serão travados)
   const camposBloqueados = ['IP', 'Hostname', 'Serial', 'Páginas Impressas', 'Toner', 'Drum', '% Toner', '% Drum'];
 
   return (
@@ -97,7 +95,6 @@ export default function ModaisEdicao({
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in" onClick={() => setModalEdicao({ aberto: false, form: {dados_dinamicos:{}} })}>
           <div className="w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden border border-white/10 animate-scale-up flex flex-col max-h-[90vh]" style={{backgroundColor: 'var(--bg-card)'}} onClick={e => e.stopPropagation()}>
             
-            {/* Header */}
             <div className="p-6 border-b flex items-center gap-3 shrink-0" style={{ borderColor: 'var(--border-light)', background: 'linear-gradient(to right, rgba(59, 130, 246, 0.05), transparent)' }}>
               <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">✏️</div>
               <div>
@@ -106,18 +103,12 @@ export default function ModaisEdicao({
               </div>
             </div>
 
-            {/* Corpo com Scroll */}
             <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
               
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1" style={{ color: 'var(--text-main)' }}>Patrimônio</label>
-                  <input 
-                    value={modalEdicao.form.patrimonio || ''} 
-                    onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, patrimonio: e.target.value}})} 
-                    className="w-full p-2.5 rounded-xl border outline-none font-bold focus:ring-2 focus:ring-blue-500/20 transition-all" 
-                    style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} 
-                  />
+                  <input value={modalEdicao.form.patrimonio || ''} onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, patrimonio: e.target.value}})} className="w-full p-2.5 rounded-xl border outline-none font-bold focus:ring-2 focus:ring-blue-500/20 transition-all" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1" style={{ color: 'var(--text-main)' }}>Tipo de Equipamento</label>
@@ -127,16 +118,9 @@ export default function ModaisEdicao({
                 </div>
               </div>
 
-              {/* 🚀 O NOVO CAMPO DE APELIDO ADICIONADO AQUI */}
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1 text-emerald-600">Nome da Impressora (Apelido)</label>
-                <input 
-                  value={modalEdicao.form.nome_personalizado || ''} 
-                  placeholder="Ex: Recepção Central"
-                  onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, nome_personalizado: e.target.value}})} 
-                  className="w-full p-3 rounded-xl border outline-none font-bold focus:ring-2 focus:ring-emerald-500/20 transition-all" 
-                  style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} 
-                />
+                <input value={modalEdicao.form.nome_personalizado || ''} placeholder="Ex: Recepção Central" onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, nome_personalizado: e.target.value}})} className="w-full p-3 rounded-xl border outline-none font-bold focus:ring-2 focus:ring-emerald-500/20 transition-all" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} />
               </div>
 
               <div className="grid grid-cols-2 gap-6">
@@ -144,50 +128,50 @@ export default function ModaisEdicao({
                  <div className="space-y-1"><label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1" style={{ color: 'var(--text-main)' }}>Modelo</label><input className="w-full p-3 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500/20 transition-all" style={{backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)'}} value={modalEdicao.form.modelo || ''} onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, modelo: e.target.value}})} /></div>
               </div>
 
-              {/* Campos Técnicos (Com bloqueio automático) */}
               <div className="pt-6 border-t" style={{borderColor: 'var(--border-light)'}}>
                 <h4 className="text-[11px] font-black text-blue-500 uppercase tracking-[2px] mb-4 flex items-center gap-2">⚙️ Especificações Técnicas</h4>
                 <div className="grid grid-cols-2 gap-5">
                   {parseCamposDinamicos(categorias.find(c => c.id == modalEdicao.form.categoria_id)).map(c => {
                     const isBloqueado = camposBloqueados.includes(c);
+                    const isObservacao = c === 'observacao';
+                    const isParVinculo = c === 'par_vinculo';
                     
                     return (
-                      <div key={c} className={`space-y-1 p-3 rounded-2xl border transition-all ${isBloqueado ? 'opacity-60 bg-black/5 cursor-not-allowed' : 'focus-within:border-blue-500 focus-within:shadow-sm'}`} style={{ backgroundColor: isBloqueado ? 'transparent' : 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
+                      <div key={c} className={`space-y-1 p-3 rounded-2xl border transition-all ${isBloqueado ? 'opacity-60 bg-black/5 cursor-not-allowed' : 'focus-within:border-blue-500 focus-within:shadow-sm'} ${isObservacao ? 'col-span-2' : ''}`} style={{ backgroundColor: isBloqueado ? 'transparent' : 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
                         <label className="text-[9px] font-black uppercase opacity-60 flex items-center justify-between" style={{ color: 'var(--text-main)' }}>
-                          {c} {isBloqueado && <span className="text-[8px] text-blue-500">🔒 SENTINEL</span>}
+                          {isParVinculo ? '🔗 Par Vinculado (Patrimônio)' : isObservacao ? '📝 Observação Geral' : c} 
+                          {isBloqueado && <span className="text-[8px] text-blue-500">🔒 SENTINEL</span>}
                         </label>
-                        <input 
-                          disabled={isBloqueado}
-                          className={`w-full bg-transparent border-none p-0 text-sm font-bold outline-none ${isBloqueado ? 'cursor-not-allowed' : 'focus:ring-0'}`} 
-                          style={{color: isBloqueado ? 'var(--text-muted)' : 'var(--text-main)'}} 
-                          value={modalEdicao.form.dados_dinamicos?.[c] || ''} 
-                          onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, dados_dinamicos: {...modalEdicao.form.dados_dinamicos, [c]: e.target.value}}})} 
-                          placeholder={`Definir ${c}...`} 
-                        />
+                        
+                        {isObservacao ? (
+                            <textarea 
+                              className="w-full bg-transparent border-none p-0 text-sm font-bold outline-none focus:ring-0 min-h-[60px]" 
+                              style={{color: 'var(--text-main)'}} 
+                              value={modalEdicao.form.dados_dinamicos?.[c] || ''} 
+                              onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, dados_dinamicos: {...modalEdicao.form.dados_dinamicos, [c]: e.target.value}}})} 
+                              placeholder="Anotações e detalhes do equipamento..." 
+                            />
+                        ) : (
+                            <input 
+                              disabled={isBloqueado}
+                              className={`w-full bg-transparent border-none p-0 text-sm font-bold outline-none ${isBloqueado ? 'cursor-not-allowed' : 'focus:ring-0'}`} 
+                              style={{color: isBloqueado ? 'var(--text-muted)' : 'var(--text-main)'}} 
+                              value={modalEdicao.form.dados_dinamicos?.[c] || ''} 
+                              onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, dados_dinamicos: {...modalEdicao.form.dados_dinamicos, [c]: e.target.value}}})} 
+                              placeholder={isParVinculo ? 'Ex: PM-1234' : `Definir ${c}...`} 
+                            />
+                        )}
                       </div>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Campo de Motivo com Dropdown Inteligente */}
               <div className="pt-6 border-t" style={{borderColor: 'var(--border-light)'}}>
                 <div className="space-y-3">
-                  
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <label className="block text-[10px] font-black uppercase opacity-80 text-blue-500">Justificativa da Alteração *</label>
-                    
-                    <select 
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          const textoAtual = motivoEdicao.trim() ? `${motivoEdicao} - ` : '';
-                          setMotivoEdicao(textoAtual + e.target.value);
-                          e.target.value = ""; 
-                        }
-                      }}
-                      className="text-[10px] p-1.5 rounded-lg border font-bold outline-none cursor-pointer hover:bg-gray-500/10 transition-all shadow-sm"
-                      style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}
-                    >
+                    <select onChange={(e) => { if (e.target.value) { const textoAtual = motivoEdicao.trim() ? `${motivoEdicao} - ` : ''; setMotivoEdicao(textoAtual + e.target.value); e.target.value = ""; } }} className="text-[10px] p-1.5 rounded-lg border font-bold outline-none cursor-pointer hover:bg-gray-500/10 transition-all shadow-sm" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
                       <option value="">⚡ Respostas Rápidas...</option>
                       <option value="Atualização Cadastral">Atualização Cadastral</option>
                       <option value="Adicionado Apelido/Nome">Adicionado Apelido/Nome</option>
@@ -197,21 +181,13 @@ export default function ModaisEdicao({
                       <option value="Correção de Digitação">Correção de Digitação</option>
                     </select>
                   </div>
-
-                  <textarea 
-                    className="w-full p-3 rounded-xl border font-medium outline-none focus:ring-2 focus:ring-blue-500/20 min-h-[80px] transition-all" 
-                    style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} 
-                    placeholder="Selecione uma resposta rápida acima ou digite o motivo aqui..." 
-                    value={motivoEdicao} 
-                    onChange={e => setMotivoEdicao(e.target.value)} 
-                  />
+                  <textarea className="w-full p-3 rounded-xl border font-medium outline-none focus:ring-2 focus:ring-blue-500/20 min-h-[80px] transition-all" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} placeholder="Selecione uma resposta rápida acima ou digite o motivo aqui..." value={motivoEdicao} onChange={e => setMotivoEdicao(e.target.value)} />
                   <p className="text-[10px] opacity-50 italic" style={{ color: 'var(--text-main)' }}>Este motivo será registrado na auditoria sob o seu usuário.</p>
                 </div>
               </div>
 
             </div>
 
-            {/* Footer */}
             <div className="p-6 border-t flex justify-end gap-3 shrink-0" style={{backgroundColor: 'rgba(0,0,0,0.02)', borderColor: 'var(--border-light)'}}>
               <button onClick={() => setModalEdicao({ aberto: false, form: {dados_dinamicos:{}} })} className="px-6 py-2.5 rounded-xl font-bold opacity-60 hover:opacity-100 transition-all" style={{ color: 'var(--text-main)' }}>Cancelar</button>
               <button onClick={salvarEdicao} className="px-8 py-2.5 rounded-xl font-black text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all active:scale-95">Salvar Alterações</button>
@@ -220,7 +196,7 @@ export default function ModaisEdicao({
         </div>, document.body
       )}
 
-      {/* MODAL LOTE (MANTIDO INTACTO) */}
+      {/* MODAL LOTE MANTIDO INTACTO */}
       {modalEdicaoMassa.aberto && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in" onClick={() => setModalEdicaoMassa({ aberto: false, ativos: [] })}>
           <div className="w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden border border-white/10" style={{backgroundColor: 'var(--bg-card)'}} onClick={e => e.stopPropagation()}>

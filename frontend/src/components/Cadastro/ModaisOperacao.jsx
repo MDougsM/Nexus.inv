@@ -15,11 +15,80 @@ export default function ModaisOperacao({
   const [secSelecionadaId, setSecSelecionadaId] = useState('');
   const [setoresTransfer, setSetoresTransfer] = useState([]);
 
-  // 🚀 FUNÇÃO DE EXCLUSÃO CORRIGIDA (SEM ENCODE NA BARRA E MAP PARA LOTE)
+  // 🚀 TRADUTORES PARA O TELETRANSPORTE NÃO BUGAR A TELA
+  const parseJSONSeguro = (dado) => {
+      if (!dado) return {};
+      if (typeof dado === 'object') return dado;
+      if (typeof dado === 'string') {
+          try { return JSON.parse(dado); }
+          catch(e1) {
+              try {
+                  let limpo = dado.replace(/'/g, '"').replace(/None/g, 'null').replace(/False/g, 'false').replace(/True/g, 'true');
+                  return JSON.parse(limpo);
+              } catch(e2) { return {}; }
+          }
+      }
+      return {};
+  };
+
+  const normalizarDinamicosParaModais = (din, uuid_persistente, modelo) => {
+      const n = { ...din };
+      n.ip = n.ip || n.IP || n['Endereço IP'] || '';
+      n.hostname = n.hostname || n.Hostname || n.Modelo || modelo || '';
+      n.serial = n.serial || n.Serial || n['Número de Série'] || uuid_persistente || '';
+      n.paginas_totais = n.paginas_totais || n['Páginas Impressas'] || '';
+      n.toner = n.toner || n['% Toner'] || '';
+      n.cilindro = n.cilindro || n['% Drum'] || '';
+      n.IP = n.ip; n.Hostname = n.hostname; n.Serial = n.serial;
+      n['Páginas Impressas'] = n.paginas_totais; n['% Toner'] = n.toner; n['% Drum'] = n.cilindro;
+      return n;
+  };
+
+  // 🚀 FUNÇÕES DE TELETRANSPORTE E ACESSO WEB
+  const abrirParVinculado = async (patrimonioAlvo) => {
+    if (!patrimonioAlvo || !patrimonioAlvo.trim()) {
+        return toast.info("Digite um patrimônio para abrir.");
+    }
+    
+    try {
+        toast.info("Buscando par vinculado...");
+        const res = await api.get('/api/inventario/');
+        const ativoEncontrado = res.data.find(a => a.patrimonio === patrimonioAlvo.trim());
+        
+        if (ativoEncontrado) {
+            const histRes = await api.get(`/api/inventario/ficha/detalhes/${encodeURIComponent(ativoEncontrado.patrimonio)}`);
+            let payload = histRes.data;
+
+            // 🚀 A MÁGICA DA CORREÇÃO AQUI: Traduz os dados antes de jogar na tela
+            if (payload.ativo) {
+                let din = parseJSONSeguro(payload.ativo.dados_dinamicos);
+                payload.ativo.dados_dinamicos = normalizarDinamicosParaModais(din, payload.ativo.uuid_persistente, payload.ativo.modelo);
+            }
+            
+            setModalFicha({
+                aberto: true,
+                dados: payload
+            });
+            toast.success(`Visualizando: ${ativoEncontrado.patrimonio}`);
+        } else {
+            toast.error("Patrimônio vinculado não encontrado!");
+        }
+    } catch (e) {
+        toast.error("Erro ao buscar ativo no banco.");
+    }
+  };
+
+  const abrirIP = (ip) => {
+    if (!ip || ip.trim() === '' || ip.toUpperCase() === 'N/A') {
+        return toast.warning("IP não configurado ou inválido.");
+    }
+    window.open(`http://${ip.trim()}`, '_blank');
+  };
+
+  // 🚀 FUNÇÃO DE EXCLUSÃO CORRIGIDA
   const deletarEquipamentoMassa = async () => {
     if (!motivoExclusao.trim()) return toast.warn("A justificativa é obrigatória.");
     try {
-      // Usa Promise.all para deletar 1 ou vários, garantindo que o Motivo vá em todos!
       const promises = modalExcluir.ativos.map(ativo => {
           return api.delete(`/api/inventario/${ativo.patrimonio}`, { 
               params: { 
@@ -62,9 +131,7 @@ export default function ModaisOperacao({
     if (!formTransfer.nova_secretaria || !formTransfer.novo_setor || !formTransfer.motivo) return toast.warn("Preencha todos os campos.");
     try {
       const promises = modalTransferencia.ativos.map(ativo => {
-        // 🚀 CORREÇÃO DO 422: Verifica se o modal recebeu o objeto inteiro ou só a string do patrimônio
         const patrimonioTratado = typeof ativo === 'string' ? ativo : ativo.patrimonio;
-        
         return api.post('/api/transferencias/', { 
             patrimonio: patrimonioTratado, 
             nova_secretaria: formTransfer.nova_secretaria, 
@@ -101,73 +168,43 @@ export default function ModaisOperacao({
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in print:bg-white print:p-0 print:block" onClick={() => setModalFicha({ aberto: false, dados: null })}>
             <div className="w-full max-w-5xl max-h-[95vh] rounded-3xl shadow-2xl border overflow-hidden flex flex-col print:border-none print:shadow-none print:max-h-none print:h-auto" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }} onClick={e => e.stopPropagation()}>
               
-              {/* CABEÇALHO DO RG */}
               <div className="p-8 border-b flex justify-between items-center bg-gradient-to-r from-blue-600 to-blue-800 text-white print:bg-none print:text-black print:border-b-2 print:border-black">
                 <div className="flex gap-6 items-center">
                   
-                  {/* CAIXA DO QR CODE */}
                   <div className="hidden md:flex flex-col items-center bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20 shadow-lg print:flex print:bg-gray-100 print:border-gray-300">
                     <div className="text-center mb-3">
-                      <span className="block text-[8px] text-blue-100 uppercase tracking-[0.2em] font-black leading-none mb-1">
-                        Última Sinc.
-                      </span>
+                      <span className="block text-[8px] text-blue-100 uppercase tracking-[0.2em] font-black leading-none mb-1">Última Sinc.</span>
                       <span className="block text-[11px] text-white font-bold opacity-100 leading-none print:text-gray-800">
-                        {ativo.ultima_comunicacao 
-                          ? new Date(ativo.ultima_comunicacao + 'Z').toLocaleString('pt-BR', {
-                              day: '2-digit', month: '2-digit', year: '2-digit', 
-                              hour: '2-digit', minute: '2-digit'
-                            }) 
-                          : 'Nunca'}
+                        {ativo.ultima_comunicacao ? new Date(ativo.ultima_comunicacao + 'Z').toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'}) : 'Nunca'}
                       </span>
                     </div>
-                    <div className="bg-white p-2 rounded-xl shadow-inner">
-                      <QRCodeSVG value={`${window.location.origin}/consulta/${ativo.patrimonio}`} size={64} level="H" includeMargin={false} />
-                    </div>
+                    <div className="bg-white p-2 rounded-xl shadow-inner"><QRCodeSVG value={`${window.location.origin}/consulta/${ativo.patrimonio}`} size={64} level="H" includeMargin={false} /></div>
                   </div>
 
-                  {/* DADOS DA MÁQUINA */}
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-200 mb-1 print:text-gray-500">
-                        Registro Geral de Ativo
-                    </p>
-                    <h3 className="text-4xl font-black tracking-tight mb-2 text-white print:text-black">
-                        {ativo.patrimonio}
-                    </h3>
-                    <p className="text-sm font-bold uppercase tracking-widest text-blue-100 print:text-gray-700">
-                        {getNomeTipoEquipamento(ativo, categorias)} • {ativo.marca} {ativo.modelo}
-                    </p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-200 mb-1 print:text-gray-500">Registro Geral de Ativo</p>
+                    <h3 className="text-4xl font-black tracking-tight mb-2 text-white print:text-black">{ativo.patrimonio}</h3>
+                    <p className="text-sm font-bold uppercase tracking-widest text-blue-100 print:text-gray-700">{getNomeTipoEquipamento(ativo, categorias)} • {ativo.marca} {ativo.modelo}</p>
                   </div>
                 </div>
                 
-                {/* BOTÕES DE AÇÃO */}
                 <div className="flex gap-2 print:hidden">
                   <button onClick={imprimirFicha} className="w-12 h-12 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-xl transition-all backdrop-blur-sm border border-white/10" title="Imprimir PDF">🖨️</button>
                   <button onClick={() => setModalFicha({ aberto: false, dados: null })} className="w-12 h-12 rounded-xl bg-white/10 hover:bg-red-500 flex items-center justify-center text-2xl transition-all backdrop-blur-sm border border-white/10">&times;</button>
                 </div>
               </div>
 
-              {/* CORPO DO RG */}
               <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 custom-scrollbar print:overflow-visible print:p-4">
                 
-                {/* COLUNA ESQUERDA (DADOS TÉCNICOS) */}
                 <div className="lg:col-span-4 space-y-6">
                   <div className="p-6 rounded-3xl border shadow-sm print:border-gray-300" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
                     <h4 className="text-[11px] font-black mb-6 uppercase tracking-widest flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
                       <span className="text-blue-500 text-lg">📍</span> Localização Atual
                     </h4>
                     <div className="space-y-4">
-                      <div>
-                        <p className="text-[9px] font-black opacity-50 uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Secretaria / Prédio</p>
-                        <p className="font-black text-sm" style={{ color: 'var(--text-main)' }}>{ativo.secretaria || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] font-black opacity-50 uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Setor / Sala</p>
-                        <p className="font-black text-sm" style={{ color: 'var(--text-main)' }}>{ativo.setor || 'N/A'}</p>
-                      </div>
-                      <div className="pt-2">
-                        <p className="text-[9px] font-black opacity-50 uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>Status de Operação</p>
-                        {getStatusBadge(ativo.status)}
-                      </div>
+                      <div><p className="text-[9px] font-black opacity-50 uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Secretaria / Prédio</p><p className="font-black text-sm" style={{ color: 'var(--text-main)' }}>{ativo.secretaria || 'N/A'}</p></div>
+                      <div><p className="text-[9px] font-black opacity-50 uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Setor / Sala</p><p className="font-black text-sm" style={{ color: 'var(--text-main)' }}>{ativo.setor || 'N/A'}</p></div>
+                      <div className="pt-2"><p className="text-[9px] font-black opacity-50 uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>Status de Operação</p>{getStatusBadge(ativo.status)}</div>
                     </div>
                   </div>
 
@@ -177,18 +214,39 @@ export default function ModaisOperacao({
                         <span className="text-blue-500 text-lg">⚙️</span> Hardware
                       </h4>
                       <div className="space-y-4">
-                        {camposPermitidos.map((campoNome) => ( ativo.dados_dinamicos[campoNome] ? (
+                        {camposPermitidos.map((campoNome) => {
+                          if (!ativo.dados_dinamicos[campoNome]) return null;
+                          
+                          const isParVinculo = campoNome === 'par_vinculo';
+                          const isIP = campoNome.toUpperCase() === 'IP';
+                          
+                          return (
                             <div key={campoNome}>
-                              <p className="text-[9px] font-black opacity-50 uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>{campoNome}</p>
-                              <p className="font-black text-sm break-words" style={{ color: 'var(--text-main)' }}>{ativo.dados_dinamicos[campoNome]}</p>
+                              <p className="text-[9px] font-black opacity-50 uppercase tracking-widest flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
+                                {isParVinculo ? '🔗 Par Vinculado' : campoNome}
+                              </p>
+                              
+                              <div className="flex items-center gap-2 mt-1">
+                                <p className="font-black text-sm break-words flex-1" style={{ color: 'var(--text-main)' }}>
+                                  {ativo.dados_dinamicos[campoNome]}
+                                </p>
+                                
+                                {isParVinculo && (
+                                  <button onClick={() => abrirParVinculado(ativo.dados_dinamicos[campoNome])} className="w-7 h-7 bg-blue-600 text-white rounded flex items-center justify-center hover:bg-blue-700 hover:scale-105 active:scale-95 shadow-md print:hidden" title="Ver ficha do Par Vinculado">➡️</button>
+                                )}
+                                
+                                {isIP && (
+                                  <button onClick={() => abrirIP(ativo.dados_dinamicos[campoNome])} className="w-7 h-7 bg-emerald-600 text-white rounded flex items-center justify-center hover:bg-emerald-700 hover:scale-105 active:scale-95 shadow-md print:hidden" title="Acessar painel web deste IP">🌐</button>
+                                )}
+                              </div>
                             </div>
-                        ) : null ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* COLUNA DIREITA (HISTÓRICO) */}
                 <div className="lg:col-span-8 p-8 rounded-3xl border shadow-sm print:border-none print:shadow-none print:p-0" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
                   <h4 className="text-[11px] font-black mb-8 uppercase tracking-widest flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
                     <span className="text-blue-500 text-lg">📜</span> Ciclo de Vida (Auditoria)
@@ -305,7 +363,6 @@ export default function ModaisOperacao({
               <div><label className="block text-xs font-bold mb-1" style={{ color: 'var(--text-muted)' }}>NOVA SECRETARIA DESTINO</label><select className="w-full p-3 rounded-lg border outline-none" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} value={secSelecionadaId} onChange={handleSecretariaTransfer}><option value="">Selecione...</option>{secretarias.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></div>
               <div><label className="block text-xs font-bold mb-1" style={{ color: 'var(--text-muted)' }}>NOVO SETOR DESTINO</label><select className="w-full p-3 rounded-lg border outline-none disabled:opacity-50" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} value={formTransfer.novo_setor} onChange={e => setFormTransfer({...formTransfer, novo_setor: e.target.value})} disabled={setoresTransfer.length === 0}><option value="">Selecione...</option>{setoresTransfer.map(s => <option key={s.id} value={s.nome}>{s.nome}</option>)}</select></div>
               
-              {/* 🚀 CAIXA DE MOTIVO COM RESPOSTAS RÁPIDAS (Dropdown) */}
               <div>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1">
                   <label className="block text-xs font-bold" style={{ color: 'var(--text-muted)' }}>MOTIVO DA TRANSFERÊNCIA *</label>
@@ -347,7 +404,7 @@ export default function ModaisOperacao({
         </div>, document.body
       )}
 
-      {/* 🚀 MODAL EXCLUSÃO 100% CORRIGIDO (BLUR TOTAL, Z-INDEX 9000 E DROPWDOWN NOVO) */}
+      {/* 🚀 MODAL EXCLUSÃO 100% CORRIGIDO */}
       {modalExcluir.aberto && createPortal(
         <div 
             className="fixed top-0 left-0 w-screen h-screen z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in" 
