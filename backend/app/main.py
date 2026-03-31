@@ -223,9 +223,9 @@ def baixar_sentinel():
 
 @app.get("/api/inventario/download/agente")
 def baixar_agente():
-    caminho = os.path.join("app", "static", "Nexus_Instalador_v5.exe")
+    caminho = os.path.join("app", "static", "Nexus_Instalador_v5.5.exe")
     if os.path.exists(caminho):
-        return FileResponse(caminho, filename="Nexus_Instalador_v5.exe")
+        return FileResponse(caminho, filename="Nexus_Instalador_v5.5.exe")
     return {"erro": "Arquivo Agente não encontrado."}
 
 # ==========================================

@@ -13,14 +13,14 @@ COMANDO_GLOBAL = {"id": None, "status": "OCIOSO", "timestamp": None, "agentes_co
 @router.get("/download/agente")
 def baixar_agente():
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    caminho_arquivo = os.path.join(BASE_DIR, "app", "static", "Nexus_Instalador_v5.exe") # Ajuste se a pasta static for diferente
+    caminho_arquivo = os.path.join(BASE_DIR, "app", "static", "Nexus_Instalador_v5.5.exe")
     if os.path.exists(caminho_arquivo):
-        return FileResponse(path=caminho_arquivo, filename="Nexus_Instalador_v5.exe", media_type='application/octet-stream')
+        return FileResponse(path=caminho_arquivo, filename="Nexus_Instalador_v5.5.exe", media_type='application/octet-stream')
     raise HTTPException(status_code=404, detail="Arquivo não achado no servidor.")
 
 @router.get("/agente/versao")
 def versao_agente():
-    return {"versao_atual": "5.0", "url_download": "/api/inventario/download/agente"}
+    return {"versao_atual": "5.5", "url_download": "/api/inventario/download/agente"}
 
 @router.post("/agente/coleta")
 def receber_coleta_agente(dados: dict = Body(...), db: Session = Depends(get_db)):

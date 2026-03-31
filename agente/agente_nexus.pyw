@@ -23,7 +23,7 @@ HEADERS_AUTH = {
 }
 
 LINK_ROTEADOR = "https://gist.githubusercontent.com/MDougsM/883aefc8a4cb0fe4dc1bc2e8eaf61d6e/raw/nexus_router.txt"
-VERSAO_DESTE_AGENTE = "5.0"
+VERSAO_DESTE_AGENTE = "5.5"
 ARQUIVO_CACHE_LINK = os.path.join(os.environ.get('SystemDrive', 'C:'), '\\Nexus.inv', 'nexus_link_cache.txt')
 
 def obter_url_backend():
@@ -50,6 +50,12 @@ VERSAO_URL = f"{BASE_URL}/api/inventario/agente/versao"
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
+def normalizar_versao(versao):
+    try:
+        return tuple(int(parte) for parte in str(versao).strip().split('.'))
+    except Exception:
+        return (0,)
+
 def auto_atualizar():
     """Baixa o instalador mais recente e atualiza de forma furtiva (Sem UAC se rodar como SYSTEM)"""
     try:
@@ -58,7 +64,7 @@ def auto_atualizar():
             dados = res.json()
             
             # Se a versão da API for maior que a versão escrita neste arquivo...
-            if str(dados.get("versao_atual", "0")) > VERSAO_DESTE_AGENTE:
+            if normalizar_versao(dados.get("versao_atual", "0")) > normalizar_versao(VERSAO_DESTE_AGENTE):
                 url_download = f"{BASE_URL}{dados.get('url_download')}"
                 pasta_temp = tempfile.gettempdir()
                 caminho_instalador = os.path.join(pasta_temp, "Nexus_Update_v_nova.exe")
