@@ -153,14 +153,24 @@ def deletar_ativos_lote(req: LoteDeleteRequest, db: Session = Depends(get_db)):
 def deletar_ativo(patrimonio_ou_id: str, usuario_acao: str = "Admin", motivo: str = "Sem motivo", db: Session = Depends(get_db)):
     ativo = db.query(Ativo).filter(or_(Ativo.patrimonio == patrimonio_ou_id, Ativo.id == (int(patrimonio_ou_id) if patrimonio_ou_id.isdigit() else -1))).first()
     if not ativo: raise HTTPException(status_code=404, detail="Ativo não encontrado")
+    
     try:
-        params = {"pat": ativo.patrimonio}
-        db.execute(text("DELETE FROM historicoleitura WHERE patrimonio = :pat"), params)
-        db.execute(text("DELETE FROM logauditoria WHERE identificador = :pat"), params)
-        db.execute(text("DELETE FROM registromanutencao WHERE patrimonio = :pat"), params)
+        # Importa o ComandoAgente para limpar o histórico do C2 também!
+        from app.models import ComandoAgente
+        
+        pat = ativo.patrimonio
+        
+        # Modo ORM Blindado: Ele descobre o nome certo das tabelas sozinho
+        db.query(HistoricoLeitura).filter(HistoricoLeitura.patrimonio == pat).delete(synchronize_session=False)
+        db.query(LogAuditoria).filter(LogAuditoria.identificador == pat).delete(synchronize_session=False)
+        db.query(RegistroManutencao).filter(RegistroManutencao.patrimonio == pat).delete(synchronize_session=False)
+        db.query(ComandoAgente).filter(ComandoAgente.patrimonio == pat).delete(synchronize_session=False)
+        
         db.delete(ativo)
-        db.add(LogAuditoria(usuario=usuario_acao, acao="EXCLUSAO", entidade="Ativo", identificador=ativo.patrimonio, detalhes=f"ALERTA: Registro apagado. Motivo: {motivo}"))
+        
+        db.add(LogAuditoria(usuario=usuario_acao, acao="EXCLUSAO", entidade="Ativo", identificador=pat, detalhes=f"ALERTA: Registro apagado. Motivo: {motivo}"))
         db.commit()
+        
         return {"message": "Equipamento excluído da base com sucesso!"}
     except Exception as e:
         db.rollback()

@@ -5,6 +5,7 @@ import pytz
 from datetime import datetime
 from typing import Optional
 from sqlalchemy import text
+from cryptography.hazmat.primitives import serialization
 
 # 🛡️ CORREÇÃO: Removido Flask (causador do erro) e corrigido imports do FastAPI
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Header
@@ -331,6 +332,38 @@ async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session =
 # ==========================================
 @app.post("/api/comandos/enviar")
 def enviar_comando(dados: ComandoCreate, db: Session = Depends(get_db)):
+    
+    # 1. Busca o usuário que está tentando enviar o comando
+    user = db.query(Usuario).filter(Usuario.username == dados.usuario_emissor).first()
+    if not user or not user.chave_publica_c2:
+        raise HTTPException(status_code=403, detail="Acesso negado. Você não possui uma chave C2 ativa.")
+
+    # 2. TENTA ABRIR A CHAVE PRIVADA COM A SENHA FORNECIDA
+    try:
+        chave_privada = serialization.load_pem_private_key(
+            dados.chave_privada_pem.encode('utf-8'),
+            password=dados.senha_chave.encode('utf-8')
+        )
+        
+        # 3. Extrai o cadeado (Pública) de dentro da chave
+        chave_publica_extraida = chave_privada.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        ).decode('utf-8')
+
+        # 4. Compara com a Fechadura do Banco de Dados
+        if chave_publica_extraida != user.chave_publica_c2:
+            raise ValueError("As chaves não coincidem")
+            
+    except ValueError as ve:
+        if "As chaves não coincidem" in str(ve):
+            raise HTTPException(status_code=403, detail="Acesso bloqueado: Este arquivo .PEM pertence a outro técnico.")
+        else:
+            raise HTTPException(status_code=403, detail="Acesso bloqueado: Senha da chave incorreta.")
+    except Exception as e:
+        raise HTTPException(status_code=403, detail="Acesso bloqueado: O arquivo .PEM enviado é inválido ou está corrompido.")
+
+    # 5. SE PASSOU PELA SEGURANÇA MILITAR, ENFILEIRA O COMANDO!
     novo_comando = ComandoAgente(
         patrimonio=dados.patrimonio,
         uuid_persistente=dados.uuid_persistente,
@@ -340,7 +373,7 @@ def enviar_comando(dados: ComandoCreate, db: Session = Depends(get_db)):
     )
     db.add(novo_comando)
     db.commit()
-    return {"message": "Comando enfileirado!", "comando_id": novo_comando.id}
+    return {"message": "Comando autenticado e enfileirado!", "comando_id": novo_comando.id}
 
 @app.get("/api/comandos/maquina/{patrimonio:path}")
 def listar_comandos(patrimonio: str, db: Session = Depends(get_db)):

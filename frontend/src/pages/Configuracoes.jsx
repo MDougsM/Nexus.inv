@@ -5,6 +5,7 @@ import GerenciamentoUsuarios from './ConfiguracoesComponents/GerenciamentoUsuari
 import AssistenteMigracao from './ConfiguracoesComponents/AssistenteMigracao';
 // 🚀 NOVA IMPORTAÇÃO
 import GerenciadorPatrimonios from './ConfiguracoesComponents/GerenciadorPatrimonios';
+import GerenciadorChavesC2 from './ConfiguracoesComponents/GerenciadorChavesC2';
 
 export default function Configuracoes() {
   const [abaAtiva, setAbaAtiva] = useState('usuarios'); 
@@ -39,7 +40,8 @@ export default function Configuracoes() {
         <button onClick={() => setAbaAtiva('usuarios')} className={`pb-4 text-sm font-black tracking-wide border-b-2 transition-all whitespace-nowrap ${abaAtiva === 'usuarios' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>👥 Equipe & Usuários</button>
         <button onClick={() => setAbaAtiva('relatorios')} className={`pb-4 text-sm font-black tracking-wide border-b-2 transition-all whitespace-nowrap ${abaAtiva === 'relatorios' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>🏢 Dados da Organização</button>
         <button onClick={() => setAbaAtiva('migracao')} className={`pb-4 text-sm font-black tracking-wide border-b-2 transition-all whitespace-nowrap ${abaAtiva === 'migracao' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>🚀 Importação de Dados</button>
-        
+        <button onClick={() => setAbaAtiva('seguranca')} className={`pb-4 text-sm font-black tracking-wide border-b-2 transition-all whitespace-nowrap ${abaAtiva === 'seguranca' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>🔐 Segurança C2</button>
+
         {/* 🚀 NOVA ABA AQUI */}
         <button onClick={() => setAbaAtiva('patrimonios')} className={`pb-4 text-sm font-black tracking-wide border-b-2 transition-all whitespace-nowrap ${abaAtiva === 'patrimonios' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>🏷️ Gestão de Etiquetas</button>
       </div>
@@ -73,6 +75,7 @@ export default function Configuracoes() {
       )}
 
       {abaAtiva === 'migracao' && <AssistenteMigracao usuarioAtual={usuarioAtual} />}
+      {abaAtiva === 'seguranca' && <GerenciadorChavesC2 usuarioAtual={usuarioAtual} />}
       
       {/* 🚀 RENDERIZANDO O NOVO COMPONENTE */}
       {abaAtiva === 'patrimonios' && <GerenciadorPatrimonios />}

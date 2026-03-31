@@ -2,13 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'react-toastify';
 import api from '../../api/api';
-import { FaTerminal, FaPlay, FaSync, FaTimes } from 'react-icons/fa';
+import { FaTerminal, FaPlay, FaSync, FaTimes, FaKey, FaLock } from 'react-icons/fa';
 
 export default function TerminalRemoto({ ativo, onClose, usuarioAtual }) {
   const [script, setScript] = useState('');
   const [historico, setHistorico] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingHist, setLoadingHist] = useState(true);
+  
+  // 🚀 NOVOS ESTADOS DA CHAVE C2
+  const [arquivoPem, setArquivoPem] = useState(null);
+  const [senhaPem, setSenhaPem] = useState('');
 
   const carregarHistorico = async () => {
     setLoadingHist(true);
@@ -24,29 +28,50 @@ export default function TerminalRemoto({ ativo, onClose, usuarioAtual }) {
 
   useEffect(() => {
     carregarHistorico();
-    // Auto-refresh a cada 10 segundos para ver se o comando terminou
     const interval = setInterval(carregarHistorico, 10000);
     return () => clearInterval(interval);
   }, [ativo.patrimonio]);
 
   const dispararComando = async () => {
     if (!script.trim()) return toast.warn("Digite um comando válido.");
+    if (!arquivoPem) return toast.warn("Você precisa anexar o seu arquivo de segurança .PEM!");
+    if (!senhaPem.trim()) return toast.warn("Digite a senha da sua chave .PEM!");
+
     setLoading(true);
-    try {
-      await api.post('/api/comandos/enviar', {
-        patrimonio: ativo.patrimonio,
-        uuid_persistente: ativo.uuid_persistente || ativo.specs?.serial || ativo.serial,
-        script_content: script,
-        usuario_emissor: usuarioAtual
-      });
-      toast.success("Comando enviado para a fila! 🚀");
-      setScript('');
-      carregarHistorico();
-    } catch (e) {
-      toast.error("Erro ao enfileirar comando.");
-    } finally {
-      setLoading(false);
-    }
+
+    // 🚀 LÊ O ARQUIVO COMO TEXTO ANTES DE ENVIAR
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        const pemContent = e.target.result;
+
+        try {
+          await api.post('/api/comandos/enviar', {
+            patrimonio: ativo.patrimonio,
+            uuid_persistente: ativo.uuid_persistente || ativo.specs?.serial || ativo.serial,
+            script_content: script,
+            usuario_emissor: usuarioAtual,
+            chave_privada_pem: pemContent,
+            senha_chave: senhaPem
+          });
+          
+          toast.success("Comando assinado e enfileirado! 🚀");
+          setScript('');
+          setSenhaPem('');
+          setArquivoPem(null);
+          document.getElementById('file-pem').value = ""; // Reseta o input de arquivo
+          carregarHistorico();
+          
+        } catch (err) {
+          if (err.response?.status === 403) {
+            toast.error(err.response.data.detail || "Falha na Autenticação RSA.");
+          } else {
+            toast.error("Erro ao enfileirar comando.");
+          }
+        } finally {
+          setLoading(false);
+        }
+    };
+    reader.readAsText(arquivoPem);
   };
 
   return createPortal(
@@ -98,28 +123,53 @@ export default function TerminalRemoto({ ativo, onClose, usuarioAtual }) {
           )}
         </div>
 
-        {/* INPUT DE COMANDO */}
-        <div className="p-4 bg-[#0f172a] border-t border-blue-900/50 shrink-0">
-          <label className="flex items-center gap-2 text-emerald-400 text-xs font-mono font-bold mb-2 uppercase tracking-widest">
-            <span>&gt;_</span> PowerShell / CMD Script
-          </label>
+        {/* INPUT DE COMANDO E AUTENTICAÇÃO */}
+        <div className="p-4 bg-[#0f172a] border-t border-blue-900/50 shrink-0 space-y-3">
+          
           <div className="flex gap-2">
             <textarea 
               value={script} 
               onChange={e => setScript(e.target.value)} 
-              placeholder="Ex: ipconfig /all"
+              placeholder="Ex: Get-Process | Select Name, CPU"
               className="flex-1 bg-[#020617] border border-blue-900/50 rounded p-3 text-emerald-400 font-mono text-sm focus:outline-none focus:border-emerald-500/50 transition-colors min-h-[60px]"
             />
+          </div>
+
+          {/* 🚀 BARRA DE BLINDAGEM RSA */}
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center bg-[#020617] p-3 rounded border border-red-900/30">
+            
+            <div className="flex-1 flex items-center gap-2">
+              <FaKey className="text-red-500/70" />
+              <input 
+                type="file" 
+                id="file-pem"
+                accept=".pem"
+                onChange={e => setArquivoPem(e.target.files[0])}
+                className="text-xs text-gray-400 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-black file:bg-red-500/10 file:text-red-500 hover:file:bg-red-500/20 cursor-pointer w-full"
+              />
+            </div>
+
+            <div className="flex-1 flex items-center gap-2">
+              <FaLock className="text-red-500/70" />
+              <input 
+                type="password" 
+                value={senhaPem}
+                onChange={e => setSenhaPem(e.target.value)}
+                placeholder="Senha do arquivo .PEM"
+                className="w-full bg-[#0f172a] border border-red-900/50 rounded p-2 text-red-400 font-mono text-xs focus:outline-none focus:border-red-500/50 transition-colors"
+              />
+            </div>
+
             <button 
               onClick={dispararComando} 
               disabled={loading}
-              className="w-16 bg-emerald-600 hover:bg-emerald-500 text-white rounded flex items-center justify-center shadow-lg shadow-emerald-900/50 transition-all disabled:opacity-50 active:scale-95"
+              className="px-6 py-2 bg-red-600 hover:bg-red-500 text-white rounded font-black tracking-widest uppercase text-xs flex items-center gap-2 shadow-lg shadow-red-900/50 transition-all disabled:opacity-50 active:scale-95 shrink-0"
             >
-              <FaPlay />
+              <FaPlay /> INJETAR C2
             </button>
           </div>
-        </div>
 
+        </div>
       </div>
     </div>
   , document.body);

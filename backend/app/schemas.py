@@ -57,6 +57,9 @@ class ComandoCreate(BaseModel):
     uuid_persistente: str
     script_content: str
     usuario_emissor: str
+    # 🚀 NOVOS CAMPOS DA BLINDAGEM RSA
+    chave_privada_pem: str
+    senha_chave: str
 
 class ComandoResultado(BaseModel):
     comando_id: int

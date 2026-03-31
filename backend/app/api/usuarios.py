@@ -8,12 +8,18 @@ from datetime import datetime
 from typing import Optional, List
 from sqlalchemy import func
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import PlainTextResponse # 🚀 PARA O DOWNLOAD DO ARQUIVO .PEM
 from sqlalchemy.orm import Session
 from app.db.database import SessionLocal
 from app.models import Usuario, LogAuditoria
 from pydantic import BaseModel
 from passlib.context import CryptContext
 from dotenv import load_dotenv
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+# 🚀 IMPORTAÇÕES DE SEGURANÇA MILITAR
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
 
 
 load_dotenv()
@@ -121,6 +127,11 @@ class SenhaUpdate(BaseModel):
 class RecuperarSenhaRequest(BaseModel):
     email: str
 
+
+class ChaveRequest(BaseModel):
+    usuario_alvo: str
+    usuario_acao: str # Quem está executando a ação (Admin Global)
+    senha_arquivo: str = "Nexus@123" # Senha para proteger o .pem
 # ==========================================
 # ROTAS
 # ==========================================
@@ -275,3 +286,75 @@ def fazer_login(dados: dict, db: Session = Depends(get_db)):
         "permissoes": getattr(usuario, 'permissoes', []) or [],
         "termos_aceitos": getattr(usuario, 'termos_aceitos', False)
     }
+
+
+# ==========================================
+# GESTÃO DE CHAVES C2 (Criptografia RSA)
+# ==========================================
+@router.get("/chaves/listar")
+def listar_status_chaves(usuario_acao: str = Query(...), db: Session = Depends(get_db)):
+    """Retorna a lista de chaves. Admins veem todos, comuns veem só a si mesmos."""
+    user_req = db.query(Usuario).filter(Usuario.username == usuario_acao).first()
+    if not user_req: return []
+
+    # 🚀 Agora puxa TODOS os usuários cadastrados no banco
+    operadores = db.query(Usuario).all()
+    
+    # 🔒 TRAVA DE SEGURANÇA MANTIDA:
+    if not user_req.is_admin:
+        # Se NÃO for admin, ele corta a lista e mostra APENAS ele mesmo
+        operadores = [u for u in operadores if u.username == usuario_acao]
+        
+    return [{
+        "username": u.username,
+        "tem_chave": bool(u.chave_publica_c2)
+    } for u in operadores]
+
+@router.post("/chaves/gerar")
+def gerar_par_chaves_c2(req: ChaveRequest, db: Session = Depends(get_db)):
+    """Gera RSA 4096."""
+    user_acao = db.query(Usuario).filter(Usuario.username == req.usuario_acao).first()
+    if not user_acao: raise HTTPException(403, "Usuário executor inválido.")
+    
+    # 🚀 TRAVA DE SEGURANÇA: Usuário comum não gera chave pros outros
+    if not user_acao.is_admin and req.usuario_acao != req.usuario_alvo:
+        raise HTTPException(403, "Você só pode gerar chaves para o seu próprio usuário.")
+
+    user = db.query(Usuario).filter(Usuario.username == req.usuario_alvo).first()
+    if not user: raise HTTPException(404, "Usuário alvo não encontrado.")
+
+    chave_privada = rsa.generate_private_key(public_exponent=65537, key_size=4096)
+    pem_privado = chave_privada.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.BestAvailableEncryption(req.senha_arquivo.encode())
+    ).decode('utf-8')
+
+    chave_publica = chave_privada.public_key()
+    pem_publico = chave_publica.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode('utf-8')
+
+    user.chave_publica_c2 = pem_publico
+    db.add(LogAuditoria(usuario=req.usuario_acao, acao="SEGURANÇA", entidade="Chave C2", identificador=req.usuario_alvo, detalhes="Gerou novo par de chaves RSA."))
+    db.commit()
+
+    return PlainTextResponse(content=pem_privado, status_code=200)
+
+@router.delete("/chaves/revogar/{usuario_alvo}")
+def revogar_chave_c2(usuario_alvo: str, usuario_acao: str, db: Session = Depends(get_db)):
+    """Deleta a chave pública do banco."""
+    user_acao_obj = db.query(Usuario).filter(Usuario.username == usuario_acao).first()
+    
+    # 🚀 TRAVA DE SEGURANÇA: Usuário comum não deleta chave dos outros
+    if not user_acao_obj.is_admin and usuario_acao != usuario_alvo:
+        raise HTTPException(403, "Você só pode revogar a sua própria chave.")
+
+    user = db.query(Usuario).filter(Usuario.username == usuario_alvo).first()
+    if not user: raise HTTPException(404, "Usuário não encontrado.")
+
+    user.chave_publica_c2 = None
+    db.add(LogAuditoria(usuario=usuario_acao, acao="SEGURANÇA", entidade="Chave C2", identificador=usuario_alvo, detalhes="Revogou a chave de acesso C2."))
+    db.commit()
+    return {"message": "Acesso revogado com sucesso!"}

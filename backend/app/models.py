@@ -71,6 +71,7 @@ class Usuario(Base):
     termos_aceitos = Column(Boolean, default=False)
     data_aceite = Column(DateTime, nullable=True)
     ip_aceite = Column(String(50), nullable=True)
+    chave_publica_c2 = Column(Text, nullable=True)
 
 class Transferencia(Base):
     __tablename__ = "transferencias"

@@ -16,3 +16,4 @@ passlib==1.7.4
 apscheduler
 pytz
 reportlab
+cryptography==42.0.5
