@@ -5,6 +5,9 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from app.models import Ativo, Categoria, HistoricoLeitura
 from .inventario_core import get_db, obter_proximo_patrimonio
+from dotenv import load_dotenv
+
+load_dotenv()
 
 router = APIRouter(prefix="/inventario", tags=["Inventário - Agente Sentinel"])
 
@@ -12,15 +15,17 @@ COMANDO_GLOBAL = {"id": None, "status": "OCIOSO", "timestamp": None, "agentes_co
 
 @router.get("/download/agente")
 def baixar_agente():
+    versao = os.getenv('AGENTE_VERSION', '5.6')
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    caminho_arquivo = os.path.join(BASE_DIR, "app", "static", "Nexus_Instalador_v5.5.exe")
+    caminho_arquivo = os.path.join(BASE_DIR, "app", "static", f"Nexus_Instalador_v{versao}.exe")
     if os.path.exists(caminho_arquivo):
-        return FileResponse(path=caminho_arquivo, filename="Nexus_Instalador_v5.5.exe", media_type='application/octet-stream')
+        return FileResponse(path=caminho_arquivo, filename=f"Nexus_Instalador_v{versao}.exe", media_type='application/octet-stream')
     raise HTTPException(status_code=404, detail="Arquivo não achado no servidor.")
 
 @router.get("/agente/versao")
 def versao_agente():
-    return {"versao_atual": "5.5", "url_download": "/api/inventario/download/agente"}
+    versao = os.getenv('AGENTE_VERSION', '5.6')
+    return {"versao_atual": versao, "url_download": "/api/inventario/download/agente"}
 
 @router.post("/agente/coleta")
 def receber_coleta_agente(dados: dict = Body(...), db: Session = Depends(get_db)):
