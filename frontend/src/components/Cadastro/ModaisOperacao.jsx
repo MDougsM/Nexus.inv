@@ -15,11 +15,6 @@ export default function ModaisOperacao({
   const [secSelecionadaId, setSecSelecionadaId] = useState('');
   const [setoresTransfer, setSetoresTransfer] = useState([]);
 
-  // 🚀 NOVOS STATES PARA O MODAL DE AUTENTICAÇÃO C2
-  const [modalC2Auth, setModalC2Auth] = useState({ aberto: false, ativo: null });
-  const [c2File, setC2File] = useState(null);
-  const [c2Password, setC2Password] = useState('');
-  
   // 🚀 NOVO STATE PARA CONTROLE DE LOADING DO BOTÃO VIP
   const [loadingSecurity, setLoadingSecurity] = useState(false);
 
@@ -138,63 +133,6 @@ export default function ModaisOperacao({
     } finally {
       setLoadingSecurity(false);
     }
-  };
-
-  // 🚀 APENAS ABRE O MODAL (Limpando dados anteriores)
-  const forcarAtualizacaoAgente = (ativo) => {
-    setModalC2Auth({ aberto: true, ativo: ativo });
-    setC2File(null);
-    setC2Password('');
-  };
-
-  // 🚀 LÊ O ARQUIVO E DISPARA O COMANDO C2 (Chamado pelo Modal Nativo)
-  const executarComandoC2 = async () => {
-    if (!c2File) return toast.warning("Por favor, anexe o arquivo .pem da sua Chave Privada.");
-    if (!c2Password) return toast.warning("A senha de descriptografia é obrigatória.");
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const pemContent = event.target.result;
-      const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
-
-      // Script PowerShell Mestre (Furtivo + Valida Tamanho + Anti-Travamento UAC)
-      const scriptC2 = `
-        $Url = "${baseUrl}/api/inventario/download/agente"
-        $Path = "$env:TEMP\\Nexus_Update.exe"
-        
-        Invoke-WebRequest -Uri $Url -OutFile $Path -UseBasicParsing -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        
-        $Tamanho = (Get-Item $Path).Length
-        if ($Tamanho -gt 1000000) {
-            Write-Output "Download validado ($Tamanho bytes). Acionando instalador..."
-            Start-Process -FilePath $Path -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/FORCECLOSEAPPLICATIONS", "/NORESTART"
-            Write-Output "Instalador acionado! Verifique a tela da maquina para autorizar o UAC (caso peca)."
-        } else {
-            $Conteudo = Get-Content $Path -TotalCount 1
-            Write-Output "ERRO: Arquivo invalido (Tamanho: $Tamanho bytes). Retorno: $Conteudo"
-        }
-      `;
-
-      try {
-        toast.info("Autenticando e enviando comando C2...");
-        setModalC2Auth({ aberto: false, ativo: null }); // Fecha o modal para dar fluidez
-        
-        const res = await api.post('/api/comandos/enviar', {
-          patrimonio: modalC2Auth.ativo.patrimonio,
-          uuid_persistente: modalC2Auth.ativo.uuid_persistente || modalC2Auth.ativo.dados_dinamicos?.serial || modalC2Auth.ativo.patrimonio,
-          script_content: scriptC2,
-          usuario_emissor: localStorage.getItem('usuario'),
-          chave_privada_pem: pemContent,
-          senha_chave: c2Password
-        });
-        
-        toast.success("🚀 Comando enviado! O Agente será atualizado.");
-      } catch (error) {
-        toast.error(error.response?.data?.detail || "Erro ao enviar comando C2. Verifique sua chave e senha.");
-        setModalC2Auth({ aberto: true, ativo: modalC2Auth.ativo }); // Reabre se errar a senha
-      }
-    };
-    reader.readAsText(c2File);
   };
 
   // 🚀 FUNÇÃO DE EXCLUSÃO CORRIGIDA
@@ -405,19 +343,6 @@ export default function ModaisOperacao({
                           ? "Bloqueia execução de scripts remotos por técnicos comuns. Apenas Admins podem agir via C2." 
                           : "Esta máquina aceita comandos C2 de qualquer técnico com chave RSA válida e autenticada."}
                       </p>
-                    </div>
-
-                    {/* 🚀 AÇÕES RÁPIDAS C2 */}
-                    <div className="pt-4 border-t" style={{ borderColor: 'var(--border-light)' }}>
-                       <span className="text-[9px] font-black opacity-50 uppercase tracking-widest block mb-3" style={{ color: 'var(--text-muted)' }}>
-                        Ações Rápidas (C2)
-                      </span>
-                      <button
-                        onClick={() => forcarAtualizacaoAgente(ativo)}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-md transition-all active:scale-95"
-                      >
-                        <span>🔄</span> Forçar Atualização do Agente
-                      </button>
                     </div>
                   </div>
 
@@ -654,70 +579,6 @@ export default function ModaisOperacao({
                 Confirmar Exclusão
               </button>
             </div>
-          </div>
-        </div>, document.body
-      )}
-
-      {/* 🚀 MODAL DE AUTENTICAÇÃO C2 (RSA) */}
-      {modalC2Auth.aberto && createPortal(
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in" onClick={() => setModalC2Auth({ aberto: false, ativo: null })}>
-          <div className="w-full max-w-md rounded-2xl shadow-2xl border p-8 flex flex-col gap-6" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }} onClick={e => e.stopPropagation()}>
-            
-            <div className="flex items-center gap-4 border-b pb-4" style={{ borderColor: 'var(--border-light)' }}>
-              <div className="w-12 h-12 rounded-2xl bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-500/30 text-2xl">
-                🔑
-              </div>
-              <div>
-                <h3 className="text-xl font-black tracking-tight" style={{ color: 'var(--text-main)' }}>Autenticação C2 RSA</h3>
-                <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 text-red-500">Alvo: {modalC2Auth.ativo?.patrimonio}</p>
-              </div>
-            </div>
-
-            <div className="space-y-5">
-              <div className="p-4 rounded-xl bg-red-50 border border-red-100 text-red-700 font-bold text-[11px] leading-relaxed">
-                ⚠️ Para injetar comandos de Nível SYSTEM na máquina, comprove sua identidade anexando sua Chave Privada.
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>1. Chave Privada (.PEM)</label>
-                <input
-                  type="file"
-                  accept=".pem"
-                  onChange={(e) => setC2File(e.target.files[0])}
-                  className="w-full text-sm font-bold file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-black file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer transition-all border p-1 rounded-xl"
-                  style={{ color: 'var(--text-main)', borderColor: 'var(--border-light)', backgroundColor: 'var(--bg-input)' }}
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>2. Senha de Descriptografia</label>
-                <input
-                  type="password"
-                  placeholder="••••••••••••"
-                  value={c2Password}
-                  onChange={(e) => setC2Password(e.target.value)}
-                  className="w-full p-3.5 rounded-xl border outline-none font-black tracking-[0.2em] focus:ring-2 focus:ring-red-500/20 transition-all"
-                  style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3 justify-end mt-2 pt-6 border-t" style={{ borderColor: 'var(--border-light)' }}>
-              <button 
-                onClick={() => setModalC2Auth({ aberto: false, ativo: null })} 
-                className="px-5 py-2.5 text-[11px] rounded-xl font-black uppercase tracking-widest opacity-60 hover:opacity-100 hover:bg-black/5 transition-all" 
-                style={{ color: 'var(--text-main)' }}
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={executarComandoC2} 
-                className="px-8 py-2.5 rounded-xl text-[11px] font-black text-white uppercase tracking-widest shadow-lg bg-red-600 hover:bg-red-700 transition-all active:scale-95"
-              >
-                🚀 Injetar C2
-              </button>
-            </div>
-
           </div>
         </div>, document.body
       )}
