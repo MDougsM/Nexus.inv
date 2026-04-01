@@ -36,13 +36,25 @@ Base.metadata.create_all(bind=engine)
 # ==========================================
 # 🔑 GUARDA-COSTAS DO AGENTE SENTINEL (API KEY)
 # ==========================================
-# Essa é a chave de 64 caracteres que só o Agente conhece
 AGENTE_SECRET_TOKEN = "NEXUS_AGENTE_V5_9b7e1f2a4c6d8e0f3a5b7c9d1e2f4a6b8c0d2e4f6a8b0c2d"
 
+# 🚀 MODO DE TRANSIÇÃO: Deixe True até salvar todas as máquinas antigas. 
+# Depois, mude para False para blindar o servidor definitivamente.
+MODO_TRANSICAO_LEGADO = True 
+
 def validar_token_agente(x_nexus_token: str = Header(None)):
-    if not x_nexus_token or x_nexus_token != AGENTE_SECRET_TOKEN:
-        print(f"⚠️ Tentativa de invasão bloqueada! Token recebido: {x_nexus_token}")
-        raise HTTPException(status_code=403, detail="Acesso negado. Token de Agente inválido ou ausente.")
+    # 1. Se tem o token correto, é o Agente Novo! Passe livre.
+    if x_nexus_token == AGENTE_SECRET_TOKEN:
+        return True 
+        
+    # 2. Se NÃO tem token, mas estamos em transição, deixa passar para ele poder atualizar
+    if not x_nexus_token and MODO_TRANSICAO_LEGADO:
+        # print("⚠️ [TRANSIÇÃO] Agente antigo acessou a API sem token.")
+        return True
+        
+    # 3. Se a transição acabou ou mandaram um token errado (Hackers), BLOQUEIO ABSOLUTO!
+    print(f"🚨 Tentativa de invasão bloqueada! Token recebido: {x_nexus_token}")
+    raise HTTPException(status_code=403, detail="Acesso negado. Token de Agente inválido ou ausente.")
 
 # ==========================================
 # 👤 ROTA DE PERFIL (VERSÃO CORRIGIDA FASTAPI)
@@ -411,16 +423,44 @@ def listar_comandos(patrimonio: str, db: Session = Depends(get_db)):
 
 @app.get("/api/agente/comandos/pendentes/{uuid_persistente}", dependencies=[Depends(validar_token_agente)])
 def verificar_comandos(uuid_persistente: str, db: Session = Depends(get_db)):
+    # PLANO A: Tenta achar o comando diretamente pelo UUID ou Patrimônio
     comando = db.query(ComandoAgente).filter(
-        ComandoAgente.uuid_persistente == uuid_persistente,
+        (ComandoAgente.uuid_persistente == uuid_persistente) | 
+        (ComandoAgente.patrimonio == uuid_persistente),
         ComandoAgente.status == "PENDENTE"
     ).order_by(ComandoAgente.data_criacao.asc()).first()
     
+    # PLANO B: Desencontro de Identidade! Cruza os dados no banco
+    if not comando:
+        ativo = db.query(Ativo).filter(
+            (Ativo.uuid_persistente == uuid_persistente) |
+            (Ativo.patrimonio == uuid_persistente)
+        ).first()
+        
+        if ativo:
+            comando = db.query(ComandoAgente).filter(
+                (ComandoAgente.patrimonio == ativo.patrimonio) |
+                (ComandoAgente.uuid_persistente == ativo.uuid_persistente),
+                ComandoAgente.status == "PENDENTE"
+            ).order_by(ComandoAgente.data_criacao.asc()).first()
+
     if comando:
         comando.status = "EXECUTANDO"
         db.commit()
         return {"tem_comando": True, "comando_id": comando.id, "script_content": comando.script_content}
+        
     return {"tem_comando": False}
+
+@app.post("/api/agente/comandos/resultado", dependencies=[Depends(validar_token_agente)])
+def receber_resultado_comando(dados: ComandoResultado, db: Session = Depends(get_db)):
+    comando = db.query(ComandoAgente).filter(ComandoAgente.id == dados.comando_id).first()
+    if comando:
+        comando.status = dados.status
+        comando.output_log = dados.output_log
+        comando.data_conclusao = datetime.utcnow()
+        db.commit()
+        return {"message": "Sucesso"}
+    raise HTTPException(status_code=404, detail="Não encontrado")
 
 @app.post("/api/agente/comandos/resultado", dependencies=[Depends(validar_token_agente)])
 def receber_resultado_comando(dados: ComandoResultado, db: Session = Depends(get_db)):
