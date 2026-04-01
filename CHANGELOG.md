@@ -1,7 +1,17 @@
 # Changelog - Nexus.inv
 
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
-Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
+
+## [v5.10.7.0] - 2026-04-01
+### 🚀 Adicionado (Added)
+- **Ações Rápidas C2 (Atualização Furtiva):** Adicionado botão "Forçar Atualização do Agente" diretamente no card de Segurança da Ficha do Ativo (`ModaisOperacao.jsx`).
+  - O comando exige autenticação rigorosa local, solicitando o arquivo da Chave Privada (`.pem`) e a senha do operador.
+  - Dispara um script PowerShell de execução remota que faz o download da versão mais recente e instala silenciosamente (`/VERYSILENT`) na máquina alvo sem interromper o usuário.
+
+### 🐛 Corrigido (Fixed)
+- **Controle de Segurança VIP (UI):** Corrigido o bug que ocultava os botões de ativar/revogar a Proteção C2 para os Administradores Globais. A validação visual foi reescrita para consumir a flag `isAdmin` diretamente da memória local (`localStorage`), blindando a interface contra perdas de contexto de estado do React.
+
+---
 
 ## [v5.10.5.0] - 2026-04-01
 ### 🚀 Adicionado (Added)

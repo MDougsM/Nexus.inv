@@ -135,6 +135,58 @@ export default function ModaisOperacao({
     }
   };
 
+  // 🚀 FUNÇÃO PARA FORÇAR ATUALIZAÇÃO VIA C2
+  const forcarAtualizacaoAgente = async (ativo) => {
+    // 1. Pede a senha da chave C2 do operador
+    const senha = prompt("🔑 Digite a senha da sua Chave RSA para autorizar o comando:");
+    if (!senha) return;
+
+    // 2. Abre a janela para o usuário selecionar o arquivo .pem
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.pem';
+    fileInput.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const pemContent = event.target.result;
+        
+        // Pega o IP/URL do seu servidor pelo .env
+        const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
+
+        // 3. Script PowerShell Mestre para Atualização Furtiva
+        const scriptC2 = `
+          $Url = "${baseUrl}/api/inventario/download/agente"
+          $Path = "$env:TEMP\\Nexus_Update.exe"
+          Invoke-WebRequest -Uri $Url -OutFile $Path
+          Start-Process -FilePath $Path -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -WindowStyle Hidden
+          Stop-Process -Name "Nexus_Sentinel*" -Force -ErrorAction SilentlyContinue
+          Write-Output "Comando de atualização recebido e disparado com sucesso!"
+        `;
+
+        try {
+          toast.info("Autenticando e enviando comando C2...");
+          const res = await api.post('/api/comandos/enviar', {
+            patrimonio: ativo.patrimonio,
+            uuid_persistente: ativo.uuid_persistente || ativo.dados_dinamicos?.serial || ativo.patrimonio,
+            script_content: scriptC2,
+            usuario_emissor: localStorage.getItem('usuario'),
+            chave_privada_pem: pemContent,
+            senha_chave: senha
+          });
+          
+          toast.success("🚀 Comando enviado! O Agente será atualizado em background.");
+        } catch (error) {
+          toast.error(error.response?.data?.detail || "Erro ao enviar comando C2. Verifique sua chave.");
+        }
+      };
+      reader.readAsText(file);
+    };
+    fileInput.click();
+  };
+
   // 🚀 FUNÇÃO DE EXCLUSÃO CORRIGIDA
   const deletarEquipamentoMassa = async () => {
     if (!motivoExclusao.trim()) return toast.warn("A justificativa é obrigatória.");
@@ -219,8 +271,8 @@ export default function ModaisOperacao({
         const dadosDin = parseJSONSeguro(ativo.dados_dinamicos);
         const isVIP = dadosDin?.protecao_c2 === true;
         
-        // Determina se o usuário atual é admin (Ajuste conforme a estrutura do seu objeto usuarioAtual)
-        const isUserAdmin = typeof usuarioAtual === 'object' && usuarioAtual.is_admin === true;
+        // Determina se o usuário atual é admin lendo da memória
+        const isUserAdmin = localStorage.getItem('isAdmin') === 'true' || localStorage.getItem('isAdmin') === true;
 
         return (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in print:bg-white print:p-0 print:block" onClick={() => setModalFicha({ aberto: false, dados: null })}>
@@ -304,16 +356,16 @@ export default function ModaisOperacao({
                     </div>
                   )}
 
-                  {/* 🚀 CARD DE SEGURANÇA / C2 (NOVO) */}
+                  {/* 🚀 CARD DE SEGURANÇA / C2 (ATUALIZADO) */}
                   <div className="p-6 rounded-3xl border shadow-sm print:hidden" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-                    <div className="flex items-center gap-2 mb-4">
+                    <div className="flex items-center gap-2 mb-4 border-b pb-3" style={{ borderColor: 'var(--border-light)' }}>
                       <span className="text-gray-500 text-lg">🛡️</span>
                       <h4 className="text-[11px] font-black uppercase tracking-widest" style={{ color: 'var(--text-main)' }}>
                         Segurança e C2
                       </h4>
                     </div>
 
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1 mb-5">
                       <span className="text-[9px] font-black opacity-50 uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
                         Status de Proteção
                       </span>
@@ -344,6 +396,19 @@ export default function ModaisOperacao({
                           ? "Bloqueia execução de scripts remotos por técnicos comuns. Apenas Admins podem agir via C2." 
                           : "Esta máquina aceita comandos C2 de qualquer técnico com chave RSA válida e autenticada."}
                       </p>
+                    </div>
+
+                    {/* 🚀 AÇÕES RÁPIDAS C2 */}
+                    <div className="pt-4 border-t" style={{ borderColor: 'var(--border-light)' }}>
+                       <span className="text-[9px] font-black opacity-50 uppercase tracking-widest block mb-3" style={{ color: 'var(--text-muted)' }}>
+                        Ações Rápidas (C2)
+                      </span>
+                      <button
+                        onClick={() => forcarAtualizacaoAgente(ativo)}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-md transition-all active:scale-95"
+                      >
+                        <span>🔄</span> Forçar Atualização do Agente
+                      </button>
                     </div>
                   </div>
 
