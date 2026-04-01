@@ -237,6 +237,13 @@ def download_backup():
         return FileResponse(path=db_path, filename="nexus_backup.db", media_type="application/octet-stream")
     return {"error": "Arquivo de banco de dados não encontrado."}
 
+@app.get("/api/inventario/download/sentinel")
+def baixar_sentinel():
+    caminho = os.path.join("app", "static", "Nexus_Sentinel_Instalador.exe")
+    if os.path.exists(caminho):
+        return FileResponse(caminho, filename="Nexus_Sentinel_Instalador.exe")
+    return {"erro": "Arquivo Sentinel não encontrado."}
+
 @app.get("/api/inventario/download/agente")
 def download_agente():
     # 1. Lê a versão do .env (Se não achar, usa '5.0' como segurança)
@@ -256,14 +263,6 @@ def download_agente():
         )
         
     return {"erro": f"Arquivo {nome_arquivo} não encontrado no servidor. Verifique a pasta static."}
-
-@app.get("/api/inventario/download/agente")
-def baixar_agente():
-    versao = os.getenv('AGENTE_VERSION', '5.7')
-    caminho = os.path.join("app", "static", f"Nexus_Instalador_v{versao}.exe")
-    if os.path.exists(caminho):
-        return FileResponse(caminho, filename=f"Nexus_Instalador_v{versao}.exe")
-    return {"erro": "Arquivo Agente não encontrado."}
 
 # ==========================================
 # 🤖 ROTAS DO AGENTE SENTINEL (TELEMETRIA)
