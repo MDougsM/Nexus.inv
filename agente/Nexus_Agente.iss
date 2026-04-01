@@ -1,10 +1,10 @@
 [Setup]
 AppName=Nexus Agente Auto Discovery
-AppVersion=5.5
+AppVersion=5.6
 AppPublisher=Nexus System
 DefaultDirName=C:\Nexus.inv
 DisableProgramGroupPage=yes
-OutputBaseFilename=Nexus_Instalador_v5.5
+OutputBaseFilename=Nexus_Instalador_v5.6
 Compression=lzma
 SolidCompression=yes
 PrivilegesRequired=admin
@@ -25,7 +25,7 @@ Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -WindowStyle Hi
 
 ; 2. 🚀 A MÁGICA DO AUTO-UPDATE: Cria a Tarefa Agendada rodando como SYSTEM (Deus)
 ; Isso garante que quando o agente atualizar em background, o Windows não peça permissão (UAC)
-Filename: "schtasks"; Parameters: "/Create /SC ONLOGON /TN ""NexusWatchdog"" /TR ""'{app}\Nexus_Agente.exe' --silent"" /RU ""SYSTEM"" /RL HIGHEST /F"; Flags: runhidden
+Filename: "schtasks"; Parameters: "/Create /SC ONLOGON /TN ""NexusWatchdog"" /TR ""\""{app}\Nexus_Agente.exe\"" --silent"" /RU ""SYSTEM"" /RL HIGHEST /F"; Flags: runhidden
 
 ; 3. Inicia o agente NORMALMENTE (Com a tela visual) para o técnico fazer a primeira vinculação
 Filename: "{app}\Nexus_Agente.exe"; Description: "Abrir Nexus Agente para Cadastro"; Flags: nowait postinstall skipifsilent

@@ -11,6 +11,11 @@ import time
 import tempfile
 import subprocess
 import tkinter.messagebox as mb
+import winreg
+from dotenv import load_dotenv
+
+# Carregar variáveis do .env
+load_dotenv()
 
 # ==========================================
 # CONFIGURAÇÕES DO AGENTE E ROTEAMENTO
@@ -23,8 +28,47 @@ HEADERS_AUTH = {
 }
 
 LINK_ROTEADOR = "https://gist.githubusercontent.com/MDougsM/883aefc8a4cb0fe4dc1bc2e8eaf61d6e/raw/nexus_router.txt"
-VERSAO_DESTE_AGENTE = "5.5"
+VERSAO_DESTE_AGENTE = os.getenv('AGENTE_VERSION', '5.6')
 ARQUIVO_CACHE_LINK = os.path.join(os.environ.get('SystemDrive', 'C:'), '\\Nexus.inv', 'nexus_link_cache.txt')
+
+def configurar_inicializacao_automatica():
+    """Grava o Agente no Registro do Windows para iniciar com o sistema."""
+    nome_servico = "Nexus_Sentinel_Agent"
+    
+    # Descobre o caminho exato de onde o Agente está rodando agora
+    # Isso funciona tanto se for um script .pyw quanto um .exe compilado
+    if getattr(sys, 'frozen', False):
+        caminho_agente = sys.executable
+    else:
+        caminho_agente = os.path.abspath(sys.argv[0])
+
+    try:
+        # Caminho do Registro do Windows onde ficam os programas que iniciam com o PC
+        caminho_registro = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        
+        # Abre a chave do registro
+        chave = winreg.OpenKey(winreg.HKEY_CURRENT_USER, caminho_registro, 0, winreg.KEY_ALL_ACCESS)
+        
+        # Verifica se já está configurado para não regravar à toa
+        try:
+            valor_atual, _ = winreg.QueryValueEx(chave, nome_servico)
+            if valor_atual == caminho_agente:
+                winreg.CloseKey(chave)
+                return  # Já está configurado perfeitamente!
+        except FileNotFoundError:
+            pass # Se der erro, é porque não existe. Segue o jogo para criar.
+
+        # Grava o caminho do nosso Agente lá!
+        winreg.SetValueEx(chave, nome_servico, 0, winreg.REG_SZ, caminho_agente)
+        winreg.CloseKey(chave)
+        print("✅ Persistência configurada! O Nexus Agente agora inicia com o Windows.")
+        
+    except Exception as e:
+        print(f"❌ Erro ao configurar auto-start: {e}")
+
+# 🚀 CHAME A FUNÇÃO AQUI, ANTES DO LOOP PRINCIPAL DO AGENTE INICIAR
+configurar_inicializacao_automatica()
+
 
 def obter_url_backend():
     try:
