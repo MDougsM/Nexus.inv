@@ -126,6 +126,29 @@ export default function TerminalRemoto({ ativo, onClose, usuarioAtual }) {
         {/* INPUT DE COMANDO E AUTENTICAÇÃO */}
         <div className="p-4 bg-[#0f172a] border-t border-blue-900/50 shrink-0 space-y-3">
           
+          {/* 🚀 BOTÕES DE AÇÃO RÁPIDA (NOVO) */}
+          <div className="flex gap-2 mb-2">
+            <span className="text-emerald-500/50 text-[10px] uppercase font-bold self-center mr-2">Ações Rápidas:</span>
+            
+            <button 
+              onClick={() => {
+                // Pega a URL pública do seu servidor para o cliente conseguir baixar
+                const serverUrl = import.meta.env.VITE_API_URL || window.location.origin;
+                setScript(`$url = "${serverUrl}/api/inventario/download/agente"\n$destino = "$env:TEMP\\Nexus_Instalador.exe"\nInvoke-WebRequest -Uri $url -OutFile $destino\nStart-Process -FilePath $destino -ArgumentList "/S"`);
+              }}
+              className="px-3 py-1 bg-blue-900/30 hover:bg-blue-600/50 text-blue-400 border border-blue-800/50 rounded text-[10px] font-mono transition-colors"
+            >
+              🔄 Forçar Update + Coleta
+            </button>
+
+            <button 
+              onClick={() => setScript("Get-Process | Sort-Object CPU -Descending | Select-Object -First 5 Name, CPU")}
+              className="px-3 py-1 bg-gray-900/50 hover:bg-gray-700 text-gray-400 border border-gray-700/50 rounded text-[10px] font-mono transition-colors"
+            >
+              📊 Checar CPU
+            </button>
+          </div>
+          
           <div className="flex gap-2">
             <textarea 
               value={script} 

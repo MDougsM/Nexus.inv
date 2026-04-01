@@ -15,7 +15,7 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
   
   // Estados do Perfil puxados do banco
-  const [nomeUsuario, setNomeUsuario] = useState(usuarioAtual);
+  const [nomeUsuario, setNomeUsuario] = useState(usuarioAtual ? usuarioAtual.nome : '');
   const [avatarUsuario, setAvatarUsuario] = useState('letras');
 
   const borderStrong = theme === 'light' ? '1.5px solid #b8c5d6' : '1.5px solid #475569';
@@ -29,13 +29,13 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
   const versaoCurta = import.meta.env.VITE_VERSAO_SISTEMA ? import.meta.env.VITE_VERSAO_SISTEMA.split('.')[0] + ".0" : "0.0";
 
   const carregarPerfil = async () => {
-    if (!usuarioAtual) return;
+    if (!usuarioAtual || !usuarioAtual.nome) return;
     try {
       const res = await api.get('/api/usuarios/');
-      const meuUser = res.data.find(u => u.username === usuarioAtual);
+      const meuUser = res.data.find(u => u.username === usuarioAtual.nome);
       
       if (meuUser) {
-        setNomeUsuario(meuUser.nome_exibicao || usuarioAtual);
+        setNomeUsuario(meuUser.nome_exibicao || usuarioAtual.nome);
         setAvatarUsuario(meuUser.avatar || 'letras');
         
         // Uma dupla checagem caso o usuário logado perca o Admin no meio da sessão

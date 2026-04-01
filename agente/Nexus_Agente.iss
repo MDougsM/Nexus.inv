@@ -1,10 +1,10 @@
 [Setup]
 AppName=Nexus Agente Auto Discovery
-AppVersion=5.6
+AppVersion=5.7
 AppPublisher=Nexus System
 DefaultDirName=C:\Nexus.inv
 DisableProgramGroupPage=yes
-OutputBaseFilename=Nexus_Instalador_v5.6
+OutputBaseFilename=Nexus_Instalador_v5.7
 Compression=lzma
 SolidCompression=yes
 PrivilegesRequired=admin

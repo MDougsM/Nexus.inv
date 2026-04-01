@@ -160,12 +160,14 @@ def listar_usuarios(db: Session = Depends(get_db)):
     return [{
         "id": u.id, 
         "username": u.username, 
-        "email": u.email,  # 🚀 SE ISSO FALTAR, O REACT LIMPA A TELA NO F5!
+        "email": u.email,  
         "is_admin": u.is_admin,
         "permissoes": getattr(u, 'permissoes', []) or [], 
         "nome_exibicao": getattr(u, 'nome_exibicao', u.username) or u.username,
         "avatar": getattr(u, 'avatar', 'letras') or 'letras',
-        "termos_aceitos": getattr(u, 'termos_aceitos', False) 
+        "termos_aceitos": getattr(u, 'termos_aceitos', False),
+        # 🚀 A MÁGICA ACONTECE AQUI: Devolvemos o último acesso formatado pro React!
+        "ultimo_acesso": u.ultimo_acesso.isoformat() + "Z" if getattr(u, 'ultimo_acesso', None) else None
     } for u in usuarios]
 
 @router.post("/")

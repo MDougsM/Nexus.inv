@@ -50,7 +50,11 @@ export default function GerenciamentoUsuarios({ usuarioAtual }) {
     const permissoesFinais = novoUser.is_admin ? MODULOS.map(m => m.id) : novoUser.permissoes;
 
     try { 
-      await api.post('/api/usuarios/', { ...novoUser, permissoes: permissoesFinais, usuario_acao: usuarioAtual }); 
+      await api.post('/api/usuarios/', { 
+        ...novoUser, 
+        permissoes: permissoesFinais, 
+        usuario_acao: typeof usuarioAtual === 'object' ? usuarioAtual.nome : usuarioAtual 
+      });
       toast.success("Usuário criado com sucesso! 👤"); 
       setNovoUser({ username: '', password: '', is_admin: false, permissoes: [] }); 
       carregarUsuarios(); 
@@ -67,9 +71,9 @@ export default function GerenciamentoUsuarios({ usuarioAtual }) {
         password: modalEdit.password, 
         is_admin: modalEdit.is_admin, 
         permissoes: permissoesFinais,
-        usuario_acao: usuarioAtual, 
+        usuario_acao: typeof usuarioAtual === 'object' ? usuarioAtual.nome : usuarioAtual, 
         motivo 
-      }); 
+      });
       toast.success("Privilégios atualizados! 🛡️"); 
       setModalEdit({ aberto: false, id: null, username: '', password: '', is_admin: false, permissoes: [], avatar: 'letras' }); 
       setMotivo(''); 
@@ -80,7 +84,12 @@ export default function GerenciamentoUsuarios({ usuarioAtual }) {
   const confirmarExclusao = async () => {
     if (!motivo) return toast.warn("O motivo é obrigatório.");
     try { 
-      await api.delete(`/api/usuarios/${modalExclusao.id}`, { data: { usuario: usuarioAtual, motivo } }); 
+      await api.delete(`/api/usuarios/${modalExclusao.id}`, { 
+        data: { 
+            usuario: typeof usuarioAtual === 'object' ? usuarioAtual.nome : usuarioAtual, 
+            motivo 
+        } 
+      });
       toast.success("Acesso revogado!"); 
       setModalExclusao({ aberto: false, id: null, username: '' }); 
       setMotivo(''); 
@@ -174,18 +183,44 @@ export default function GerenciamentoUsuarios({ usuarioAtual }) {
                   {usuarios.map(user => {
                     const avatar = user.avatar || 'letras';
                     const nomeExibicao = user.nome_exibicao || user.username;
-                    // Garante que se permissoes vier nulo, vira array vazio
                     const perms = Array.isArray(user.permissoes) ? user.permissoes : []; 
+                    
+                    // 🚀 LÓGICA DE ONLINE/OFFLINE
+                    // Se o último acesso foi a menos de 2 minutos (120000 ms), está ONLINE.
+                    let isOnline = false;
+                      if (user.ultimo_acesso) {
+                        // Garante que o JS entenda que a data do servidor é UTC adicionando o 'Z'
+                        const dataAcesso = new Date(user.ultimo_acesso.endsWith('Z') ? user.ultimo_acesso : user.ultimo_acesso + 'Z');
+                        const agora = new Date();
+                        
+                        // Calcula a diferença em milissegundos
+                        const diferencaMs = agora - dataAcesso;
+                        
+                        // Se a diferença for menor que 2 minutos (120000 ms), está online!
+                        isOnline = diferencaMs < 120000;
+                      }
                     
                     return (
                       <tr key={user.id} className="border-b last:border-0 transition-all duration-300 hover:bg-gray-500/5 relative" style={{ borderColor: 'var(--border-light)' }}>
                         <td className="p-4">
                           <div className="flex items-center gap-4">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black shadow-md ${avatar === 'letras' ? 'bg-gray-900 text-white text-xs uppercase' : 'bg-transparent text-2xl'}`}>
-                              {avatar === 'letras' ? user.username.substring(0, 2).toUpperCase() : avatar}
+                            
+                            {/* 🚀 AVATAR COM A BOLINHA DE STATUS INJETADA */}
+                            <div className="relative">
+                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black shadow-md ${avatar === 'letras' ? 'bg-gray-900 text-white text-xs uppercase' : 'bg-transparent text-2xl'}`}>
+                                {avatar === 'letras' ? user.username.substring(0, 2).toUpperCase() : avatar}
+                              </div>
+                              {/* Bolinha Verde/Vermelha */}
+                              <div 
+                                className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-[#080d16] transition-all duration-500 ${isOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-red-500/50'}`}
+                                title={isOnline ? 'Online agora' : 'Offline'}
+                              ></div>
                             </div>
+
                             <div>
-                              <div className="font-black text-sm capitalize" style={{ color: 'var(--text-main)' }}>{nomeExibicao}</div>
+                              <div className="font-black text-sm capitalize flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
+                                {nomeExibicao}
+                              </div>
                               <div className="text-[9px] font-bold uppercase tracking-widest opacity-50 mt-0.5" style={{ color: 'var(--text-main)' }}>@{user.username}</div>
                             </div>
                           </div>

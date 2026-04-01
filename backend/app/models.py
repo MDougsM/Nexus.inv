@@ -72,6 +72,7 @@ class Usuario(Base):
     data_aceite = Column(DateTime, nullable=True)
     ip_aceite = Column(String(50), nullable=True)
     chave_publica_c2 = Column(Text, nullable=True)
+    ultimo_acesso = Column(DateTime, nullable=True)
 
 class Transferencia(Base):
     __tablename__ = "transferencias"

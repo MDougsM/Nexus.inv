@@ -203,6 +203,17 @@ app.add_middleware(
 # ==========================================
 # 📥 ROTAS DE UTILITÁRIOS
 # ==========================================
+class PingRequest(BaseModel):
+    username: str
+
+@app.post("/api/usuarios/ping")
+def ping_usuario(dados: PingRequest, db: Session = Depends(get_db)):
+    usuario = db.query(Usuario).filter(Usuario.username == dados.username).first()
+    if usuario:
+        usuario.ultimo_acesso = datetime.utcnow()
+        db.commit()
+    return {"status": "ok"}
+
 @app.get("/api/usuarios/me")
 def get_me():
     return {"username": "Operador Nexus", "is_admin": True}
@@ -338,20 +349,38 @@ def enviar_comando(dados: ComandoCreate, db: Session = Depends(get_db)):
     if not user or not user.chave_publica_c2:
         raise HTTPException(status_code=403, detail="Acesso negado. Você não possui uma chave C2 ativa.")
 
-    # 2. TENTA ABRIR A CHAVE PRIVADA COM A SENHA FORNECIDA
+    # 🚀 A NOVA TRAVA: VERIFICA SE A MÁQUINA ESTÁ NA LISTA DE PROTEÇÃO MÁXIMA
+    ativo_alvo = db.query(Ativo).filter(Ativo.patrimonio == dados.patrimonio).first()
+    if not ativo_alvo:
+        raise HTTPException(status_code=404, detail="Máquina alvo não encontrada no banco.")
+
+    # Puxa os dados dinâmicos com segurança para ver se a flag existe
+    dados_din = ativo_alvo.dados_dinamicos or {}
+    if isinstance(dados_din, str):
+        import json
+        try: dados_din = json.loads(dados_din.replace("'", '"').replace("None", "null"))
+        except: dados_din = {}
+    
+    is_protegida = dados_din.get("protecao_c2", False)
+
+    # A REGRA DE OURO: Se a máquina é VIP e o usuário NÃO é admin global -> BLOQUEIA!
+    if is_protegida and not user.is_admin:
+        raise HTTPException(
+            status_code=403, 
+            detail="⚠️ OPERAÇÃO BLOQUEADA: Esta máquina está sob Proteção Nível Máximo (Diretoria/Servidor). Apenas Administradores Globais podem injetar comandos nela."
+        )
+
+    # 2. TENTA ABRIR A CHAVE PRIVADA COM A SENHA FORNECIDA (Sua lógica RSA original continua aqui)
+    from cryptography.hazmat.primitives import serialization
     try:
         chave_privada = serialization.load_pem_private_key(
             dados.chave_privada_pem.encode('utf-8'),
             password=dados.senha_chave.encode('utf-8')
         )
-        
-        # 3. Extrai o cadeado (Pública) de dentro da chave
         chave_publica_extraida = chave_privada.public_key().public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
+            encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo
         ).decode('utf-8')
 
-        # 4. Compara com a Fechadura do Banco de Dados
         if chave_publica_extraida != user.chave_publica_c2:
             raise ValueError("As chaves não coincidem")
             
@@ -363,7 +392,7 @@ def enviar_comando(dados: ComandoCreate, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=403, detail="Acesso bloqueado: O arquivo .PEM enviado é inválido ou está corrompido.")
 
-    # 5. SE PASSOU PELA SEGURANÇA MILITAR, ENFILEIRA O COMANDO!
+    # 3. SE PASSOU POR TODA A SEGURANÇA, ENFILEIRA O COMANDO!
     novo_comando = ComandoAgente(
         patrimonio=dados.patrimonio,
         uuid_persistente=dados.uuid_persistente,

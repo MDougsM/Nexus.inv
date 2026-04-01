@@ -14,6 +14,9 @@ export default function ModaisOperacao({
 }) {
   const [secSelecionadaId, setSecSelecionadaId] = useState('');
   const [setoresTransfer, setSetoresTransfer] = useState([]);
+  
+  // 🚀 NOVO STATE PARA CONTROLE DE LOADING DO BOTÃO VIP
+  const [loadingSecurity, setLoadingSecurity] = useState(false);
 
   // 🚀 TRADUTORES PARA O TELETRANSPORTE NÃO BUGAR A TELA
   const parseJSONSeguro = (dado) => {
@@ -59,7 +62,6 @@ export default function ModaisOperacao({
             const histRes = await api.get(`/api/inventario/ficha/detalhes/${encodeURIComponent(ativoEncontrado.patrimonio)}`);
             let payload = histRes.data;
 
-            // 🚀 A MÁGICA DA CORREÇÃO AQUI: Traduz os dados antes de jogar na tela
             if (payload.ativo) {
                 let din = parseJSONSeguro(payload.ativo.dados_dinamicos);
                 payload.ativo.dados_dinamicos = normalizarDinamicosParaModais(din, payload.ativo.uuid_persistente, payload.ativo.modelo);
@@ -85,6 +87,54 @@ export default function ModaisOperacao({
     window.open(`http://${ip.trim()}`, '_blank');
   };
 
+  // 🚀 NOVA LÓGICA DE PROTEÇÃO VIP (C2)
+  const toggleProtecaoC2 = async (ativoAtual) => {
+    const dadosDin = parseJSONSeguro(ativoAtual.dados_dinamicos);
+    const isVIP = dadosDin?.protecao_c2 === true;
+
+    if (!window.confirm(`Deseja ${isVIP ? 'REMOVER' : 'ATIVAR'} a Proteção Máxima C2 para esta máquina?`)) return;
+
+    setLoadingSecurity(true);
+    try {
+      const payload = {
+        usuario_acao: usuarioAtual?.nome || usuarioAtual || "Admin",
+        motivo: isVIP ? "Remoção de Proteção C2 via Painel" : "Ativação de Proteção C2 (VIP) via Painel",
+        dados_dinamicos: {
+          ...dadosDin,
+          protecao_c2: !isVIP 
+        }
+      };
+
+      const response = await api.put(`/api/inventario/ficha/editar/${ativoAtual.patrimonio}`, payload);
+
+      if (response.status === 200) {
+        toast.success(`Proteção C2 ${!isVIP ? 'ATIVADA' : 'REMOVIDA'} com sucesso!`);
+        
+        // Atualiza o modal instantaneamente sem precisar fechar e abrir
+        setModalFicha(prev => {
+           if(!prev.dados || !prev.dados.ativo) return prev;
+           return {
+               ...prev,
+               dados: {
+                   ...prev.dados,
+                   ativo: {
+                       ...prev.dados.ativo,
+                       dados_dinamicos: payload.dados_dinamicos
+                   }
+               }
+           }
+        });
+        
+        if(carregarDados) carregarDados(); // Opcional: atualiza a lista no background
+      }
+    } catch (error) {
+      console.error("Erro ao alterar proteção C2:", error);
+      toast.error("Erro ao comunicar com o servidor para alterar proteção.");
+    } finally {
+      setLoadingSecurity(false);
+    }
+  };
+
   // 🚀 FUNÇÃO DE EXCLUSÃO CORRIGIDA
   const deletarEquipamentoMassa = async () => {
     if (!motivoExclusao.trim()) return toast.warn("A justificativa é obrigatória.");
@@ -92,7 +142,7 @@ export default function ModaisOperacao({
       const promises = modalExcluir.ativos.map(ativo => {
           return api.delete(`/api/inventario/${ativo.patrimonio}`, { 
               params: { 
-                  usuario_acao: usuarioAtual, 
+                  usuario_acao: typeof usuarioAtual === 'object' ? usuarioAtual.nome : usuarioAtual, 
                   motivo: motivoExclusao 
               } 
           });
@@ -115,7 +165,7 @@ export default function ModaisOperacao({
     if (!formStatus.motivo) return toast.warn("Motivo é obrigatório.");
     if (formStatus.novo_status === 'SUCATA' && !formStatus.destino) return toast.warn("Informe o destino.");
     try {
-      const promises = modalStatus.ativos.map(ativo => api.post('/api/manutencao/alterar-status', { patrimonio: ativo.patrimonio, novo_status: formStatus.novo_status, os_referencia: formStatus.os_referencia, motivo: formStatus.motivo, destino: formStatus.destino, usuario_acao: usuarioAtual }));
+      const promises = modalStatus.ativos.map(ativo => api.post('/api/manutencao/alterar-status', { patrimonio: ativo.patrimonio, novo_status: formStatus.novo_status, os_referencia: formStatus.os_referencia, motivo: formStatus.motivo, destino: formStatus.destino, usuario_acao: typeof usuarioAtual === 'object' ? usuarioAtual.nome : usuarioAtual }));
       await Promise.all(promises); toast.success(`Status atualizado!`); setModalStatus({ aberto: false, ativos: [] }); setFormStatus({ novo_status: 'MANUTENÇÃO', os_referencia: '', motivo: '', destino: '' }); setSelecionados([]); carregarDados();
     } catch (e) { toast.error("Erro ao alterar status."); }
   };
@@ -137,7 +187,7 @@ export default function ModaisOperacao({
             nova_secretaria: formTransfer.nova_secretaria, 
             novo_setor: formTransfer.novo_setor, 
             motivo: formTransfer.motivo, 
-            usuario_acao: usuarioAtual 
+            usuario_acao: typeof usuarioAtual === 'object' ? usuarioAtual.nome : usuarioAtual 
         });
       });
       
@@ -164,6 +214,14 @@ export default function ModaisOperacao({
       {modalFicha.aberto && modalFicha.dados && createPortal((() => { 
         const { ativo, historico } = modalFicha.dados;
         const camposPermitidos = parseCamposDinamicos(categorias.find(c => c.id === ativo.categoria_id));
+        
+        // Verifica status VIP na renderização atual
+        const dadosDin = parseJSONSeguro(ativo.dados_dinamicos);
+        const isVIP = dadosDin?.protecao_c2 === true;
+        
+        // Determina se o usuário atual é admin (Ajuste conforme a estrutura do seu objeto usuarioAtual)
+        const isUserAdmin = typeof usuarioAtual === 'object' && usuarioAtual.is_admin === true;
+
         return (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in print:bg-white print:p-0 print:block" onClick={() => setModalFicha({ aberto: false, dados: null })}>
             <div className="w-full max-w-5xl max-h-[95vh] rounded-3xl shadow-2xl border overflow-hidden flex flex-col print:border-none print:shadow-none print:max-h-none print:h-auto" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }} onClick={e => e.stopPropagation()}>
@@ -245,6 +303,50 @@ export default function ModaisOperacao({
                       </div>
                     </div>
                   )}
+
+                  {/* 🚀 CARD DE SEGURANÇA / C2 (NOVO) */}
+                  <div className="p-6 rounded-3xl border shadow-sm print:hidden" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="text-gray-500 text-lg">🛡️</span>
+                      <h4 className="text-[11px] font-black uppercase tracking-widest" style={{ color: 'var(--text-main)' }}>
+                        Segurança e C2
+                      </h4>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[9px] font-black opacity-50 uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+                        Status de Proteção
+                      </span>
+                      
+                      <div className="flex items-center justify-between mt-1">
+                        <span className={`text-sm font-black ${isVIP ? 'text-amber-600' : 'text-emerald-600'}`}>
+                          {isVIP ? '🔒 MÁXIMA (VIP)' : '🔓 PADRÃO'}
+                        </span>
+
+                        {/* Botão de Toggle visível apenas para Admins */}
+                        {isUserAdmin && (
+                          <button
+                            onClick={() => toggleProtecaoC2(ativo)}
+                            disabled={loadingSecurity}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all shadow-sm ${
+                              isVIP 
+                                ? 'bg-red-100 text-red-700 hover:bg-red-200 border border-red-200' 
+                                : 'bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-200'
+                            } disabled:opacity-50`}
+                          >
+                            {loadingSecurity ? '...' : (isVIP ? 'Revogar VIP' : 'Tornar VIP')}
+                          </button>
+                        )}
+                      </div>
+                      
+                      <p className="text-[10px] mt-3 leading-relaxed opacity-70" style={{ color: 'var(--text-muted)' }}>
+                        {isVIP 
+                          ? "Bloqueia execução de scripts remotos por técnicos comuns. Apenas Admins podem agir via C2." 
+                          : "Esta máquina aceita comandos C2 de qualquer técnico com chave RSA válida e autenticada."}
+                      </p>
+                    </div>
+                  </div>
+
                 </div>
 
                 <div className="lg:col-span-8 p-8 rounded-3xl border shadow-sm print:border-none print:shadow-none print:p-0" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
@@ -276,6 +378,8 @@ export default function ModaisOperacao({
           </div> 
         );
       })(), document.body)}
+
+      {/* OUTROS MODAIS EXISTENTES ABAIXO (MANTIDOS INTACTOS) ... */}
 
       {/* MODAL QR INDIVIDUAL */}
       {modalQR.aberto && createPortal(

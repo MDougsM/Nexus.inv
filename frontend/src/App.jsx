@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-
+import api from './api/api';
 
 import ConsultaPublica from './pages/ConsultaPublica';
 import Layout from './components/Layout';
@@ -24,13 +24,24 @@ const RotaProtegida = ({ children }) => {
   // Usamos um state para que a rota mude assim que o localStorage mudar
   const [isBloqueado, setIsBloqueado] = React.useState(localStorage.getItem('nexus_bloqueado') === 'true');
 
+  // 🚀 SISTEMA DE HEARTBEAT (ONLINE/OFFLINE)
   React.useEffect(() => {
-    const checkLock = () => {
-      setIsBloqueado(localStorage.getItem('nexus_bloqueado') === 'true');
+    const enviarPing = async () => {
+      const nomeUsuario = localStorage.getItem('usuario');
+      if (nomeUsuario) {
+        try {
+          // Usando o seu axios já configurado em vez de fetch nativo
+          await api.post('/api/usuarios/ping', { username: nomeUsuario });
+        } catch (e) { 
+          // Se falhar, não queremos que mostre erro na tela do usuário
+          console.error("Falha ao enviar ping de presença:", e); 
+        }
+      }
     };
-    // Escuta o evento que criamos para saber quando desbloquear
-    window.addEventListener('statusTermosAlterado', checkLock);
-    return () => window.removeEventListener('statusTermosAlterado', checkLock);
+
+    setTimeout(enviarPing, 3000);
+    const intervalo = setInterval(enviarPing, 60000);
+    return () => clearInterval(intervalo);
   }, []);
 
   if (!logado) return <Navigate to="/login" replace />;
@@ -45,49 +56,94 @@ const RotaProtegida = ({ children }) => {
 
 export default function App() {
   
-  // Função central de Logout (Passada para o Layout)
   const handleLogout = () => {
     if (window.confirm("Deseja realmente sair do sistema?")) {
-      localStorage.clear(); // Limpa a sessão
-      window.location.href = '/login'; // O href força um reload total, limpando a memória RAM do app
+      localStorage.clear(); 
+      window.location.href = '/login'; 
     }
   };
 
+  // 🚀 NOVA LÓGICA: Reconstrói o objeto do utilizador com todos os dados!
+  const getUsuarioLogado = () => {
+    const nome = localStorage.getItem('usuario');
+    if (!nome) return null;
+    
+    return {
+      nome: nome,
+      // Como o localStorage guarda tudo como texto, fazemos a conversão para boolean
+      is_admin: localStorage.getItem('isAdmin') === 'true',
+      permissoes: JSON.parse(localStorage.getItem('permissoes') || '[]')
+    };
+  };
+
+  const usuarioAtualObj = getUsuarioLogado();
+
   return (
     <Router>
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        theme="colored"
-        newestOnTop
-        toastStyle={{ zIndex: 2147483647 }}
-      />
+      <ToastContainer position="top-right" autoClose={3000} theme="colored" newestOnTop toastStyle={{ zIndex: 2147483647 }} />
       
       <Routes>
-        {/* ROTA PÚBLICA (Fora do Layout, ou seja, sem Menu Lateral) */}
         <Route path="/login" element={<Login />} />
         <Route path="/consulta/*" element={<ConsultaPublica />} />
 
-        {/* TODAS AS ROTAS PRIVADAS FICAM AQUI DENTRO */}
-        <Route path="/*" element={
+        <Route path="/" element={
           <RotaProtegida>
-            <Layout onLogout={handleLogout} usuarioAtual={localStorage.getItem('usuario')}>
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/cadastro" element={<Cadastro />} />
-                <Route path="/auditoria" element={<Auditoria />} />
-                <Route path="/cadastros-base" element={<CadastrosBase />} />
-                <Route path="/config" element={<Configuracoes />} />
-                <Route path="/ajuda" element={<Ajuda />} />
-                <Route path="/perfil" element={<MeuPerfil usuarioAtual={localStorage.getItem('usuario')} />} />
-                <Route path="/nexus-print" element={<NexusPrint />} />
-                
-                {/* Rota de fallback: Digitou algo errado? Volta pro Dashboard */}
-                <Route path="*" element={<Navigate to="/" />} />
-              </Routes>
+            <Layout onLogout={handleLogout} usuarioAtual={usuarioAtualObj}>
+              <Dashboard />
             </Layout>
           </RotaProtegida>
         } />
+        <Route path="/cadastro" element={
+          <RotaProtegida>
+            <Layout onLogout={handleLogout} usuarioAtual={usuarioAtualObj}>
+              <Cadastro />
+            </Layout>
+          </RotaProtegida>
+        } />
+        <Route path="/auditoria" element={
+          <RotaProtegida>
+            <Layout onLogout={handleLogout} usuarioAtual={usuarioAtualObj}>
+              <Auditoria />
+            </Layout>
+          </RotaProtegida>
+        } />
+        <Route path="/cadastros-base" element={
+          <RotaProtegida>
+            <Layout onLogout={handleLogout} usuarioAtual={usuarioAtualObj}>
+              <CadastrosBase />
+            </Layout>
+          </RotaProtegida>
+        } />
+        <Route path="/config" element={
+          <RotaProtegida>
+            <Layout onLogout={handleLogout} usuarioAtual={usuarioAtualObj}>
+              <Configuracoes />
+            </Layout>
+          </RotaProtegida>
+        } />
+        <Route path="/ajuda" element={
+          <RotaProtegida>
+            <Layout onLogout={handleLogout} usuarioAtual={usuarioAtualObj}>
+              <Ajuda />
+            </Layout>
+          </RotaProtegida>
+        } />
+        <Route path="/perfil" element={
+          <RotaProtegida>
+            <Layout onLogout={handleLogout} usuarioAtual={usuarioAtualObj}>
+              <MeuPerfil usuarioAtual={usuarioAtualObj} />
+            </Layout>
+          </RotaProtegida>
+        } />
+        <Route path="/nexus-print" element={
+          <RotaProtegida>
+            <Layout onLogout={handleLogout} usuarioAtual={usuarioAtualObj}>
+              <NexusPrint />
+            </Layout>
+          </RotaProtegida>
+        } />
+        
+        <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>
   );

@@ -3,6 +3,25 @@
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 
+## [v5.10.5.0] - 2026-04-01
+### 🚀 Adicionado (Added)
+- **Proteção C2 Nível Máximo (VIP):** Implementada trava de segurança híbrida (Backend/Frontend) para servidores e máquinas de diretoria.
+  - Máquinas marcadas com "Proteção C2" agora rejeitam comandos de técnicos comuns, exigindo estritamente privilégios de Administrador Global.
+  - Adicionado card de controle de segurança visual na Ficha do Ativo (`ModaisOperacao.jsx`).
+- **Ações Rápidas de Terminal (C2):** Adicionados botões de atalho no Terminal Remoto para injeção de scripts instantâneos, facilitando rotinas como Forçar Auto-Update e Coleta Silenciosa.
+- **Persistência Nível Militar (SYSTEM) no Agente:** O agente agora se instala via Inno Setup criando uma Tarefa Agendada oculta no Windows. Ele roda em background com privilégios máximos antes mesmo do login do usuário, evitando o bloqueio do UAC.
+- **Interface Responsiva do Agente:** O painel visual do Agente Sentinel em Python foi reescrito utilizando `CTkScrollableFrame`, criando barras de rolagem automáticas para garantir acessibilidade em monitores com resoluções menores (ex: 1366x768).
+- **Compilação Furtiva:** O executável do Agente agora roda de forma 100% invisível ao usuário através da flag `--noconsole` do PyInstaller.
+- **Sistema de Heartbeat (Online/Offline):** Implementado "ping" de telemetria humana em tempo real entre o Frontend e o Backend.
+  - A tela "Equipe Nexus" agora exibe uma bolinha indicadora verde pulsante para operadores online, e vermelha para inativos (> 2 minutos) baseando-se na nova coluna `ultimo_acesso`.
+
+### 🐛 Corrigido (Fixed)
+- **Tela Branca (Crash) no React:** Corrigido um erro fatal de renderização no frontend causado pela injeção de um objeto complexo na propriedade `usuarioAtual` do componente `Layout`. A arquitetura foi revertida para passar `strings` seguras, lendo os privilégios (`isAdmin`) diretamente do `localStorage`.
+- **Censura de Dados na API (FastAPI):** Corrigida a formatação de retorno da rota de listagem de usuários no arquivo `usuarios.py`. A nova coluna `ultimo_acesso` agora é enviada nativamente no formato UTC (`.isoformat() + "Z"`) para que o Javascript calcule o fuso horário com precisão.
+- **Conflito de Auto-Start Duplo:** Removido o código legado de persistência via Registro do Windows (`winreg`) no script fonte do Agente. A inicialização automática agora é responsabilidade exclusiva do instalador (`.iss`), prevenindo a abertura duplicada do processo.
+
+---
+
 ## [v5.8.3.0] - 2026-03-27
 ### 🚀 Adicionado (Added)
 - **Recuperação de Senha Automática:** Implementado um fluxo completo de "Esqueci a Senha" na tela de Login.
