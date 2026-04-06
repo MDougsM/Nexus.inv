@@ -104,8 +104,12 @@ def editar_ativo_por_id(ativo_id: int, dados: dict, db: Session = Depends(get_db
 
 @router.put("/ficha/editar/{identificador:path}")
 def editar_ficha_ativo(identificador: str, dados: dict, db: Session = Depends(get_db)):
-    ativo = db.query(Ativo).filter(or_(Ativo.id == (int(identificador) if identificador.isdigit() else -1), Ativo.patrimonio == identificador)).first()
-    if not ativo: raise HTTPException(status_code=404, detail="Ativo não encontrado")
+    
+    # 🚀 CORREÇÃO DO BUG CRÍTICO: Busca SOMENTE pelo patrimônio exato como texto (String)!
+    ativo = db.query(Ativo).filter(Ativo.patrimonio == identificador).first()
+    
+    if not ativo: 
+        raise HTTPException(status_code=404, detail="Ativo não encontrado")
 
     usuario_acao = dados.get("usuario_acao", "Sistema")
     motivo = dados.get("motivo", "Edição de dados via painel")
@@ -119,12 +123,16 @@ def editar_ficha_ativo(identificador: str, dados: dict, db: Session = Depends(ge
     if "setor" in dados: ativo.setor = dados["setor"]
     if "nome_personalizado" in dados: ativo.nome_personalizado = dados["nome_personalizado"]
 
+    # 🚀 Salvando a tag de Domínio Próprio do Toggle
+    if "dominio_proprio" in dados: 
+        ativo.dominio_proprio = dados["dominio_proprio"]
+
     novos_dinamicos = dados.get("dados_dinamicos", {})
     if isinstance(novos_dinamicos, str):
         try: novos_dinamicos = json.loads(novos_dinamicos)
         except: novos_dinamicos = {}
             
-    # 🚀 A CORREÇÃO DE HOJE ESTÁ AQUI
+    # Atualiza os dados dinâmicos
     dict_atual = dict(ativo.dados_dinamicos or {})
     dict_atual.update(novos_dinamicos)
     ativo.dados_dinamicos = dict_atual
@@ -175,3 +183,20 @@ def deletar_ativo(patrimonio_ou_id: str, usuario_acao: str = "Admin", motivo: st
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/ficha/{patrimonio}/dominio")
+def alternar_dominio_proprio(patrimonio: str, db: Session = Depends(get_db)):
+    """Liga ou desliga a tag de Domínio Próprio de um ativo"""
+    ativo = db.query(Ativo).filter(Ativo.patrimonio == patrimonio).first()
+    if not ativo:
+        raise HTTPException(status_code=404, detail="Máquina não encontrada")
+
+    # Inverte o valor (se é True vira False, se é False vira True)
+    ativo.dominio_proprio = not ativo.dominio_proprio
+    db.commit()
+
+    return {
+        "status": "success", 
+        "mensagem": "Status de domínio atualizado!", 
+        "dominio_proprio": ativo.dominio_proprio
+    }

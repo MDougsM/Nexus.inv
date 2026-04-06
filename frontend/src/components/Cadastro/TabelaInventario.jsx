@@ -68,25 +68,33 @@ export default function TabelaInventario({
                   <input type="checkbox" className="w-4 h-4 rounded cursor-pointer" checked={selecionados.includes(ativo.patrimonio)} onChange={(e) => handleSelectOne(e, ativo.patrimonio)} />
                 </td>
 
-                {/* PATRIMÔNIO */}
+                {/* PATRIMÔNIO E TAG DE DOMÍNIO */}
                 <td className="p-4">
                   <div className="flex items-center gap-2">
                     <div className="font-mono font-black" style={{ color: 'var(--color-blue)' }}>{ativo.patrimonio}</div>
-                    
-                    {/* Bolinha Verde (Online) ou Cinza (Offline) */}
-                    <div className="group relative flex items-center justify-center">
-                      <span className="relative flex h-3 w-3">
+
+                    {/* 1º VEM A BOLINHA DE STATUS (Online/Offline) */}
+                    <div className="group relative flex items-center justify-center ml-1">
+                      <span className="relative flex h-2.5 w-2.5">
                         {isOnline(ativo.ultima_comunicacao) && (
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                         )}
-                        <span className={`relative inline-flex rounded-full h-3 w-3 ${isOnline(ativo.ultima_comunicacao) ? 'bg-emerald-500' : 'bg-gray-400/50'}`}></span>
+                        <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isOnline(ativo.ultima_comunicacao) ? 'bg-emerald-500' : 'bg-gray-400/50'}`}></span>
                       </span>
                       
-                      {/* Tooltip Hover (Opcional, mas legal) */}
+                      {/* Tooltip Hover */}
                       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-max bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded-lg z-50">
                         {isOnline(ativo.ultima_comunicacao) ? '🟢 Agente Online' : '⚪ Agente Offline'}
                       </div>
                     </div>
+
+                    {/* 2º VEM A TAG DE DOMÍNIO PRÓPRIO (Agora na frente) */}
+                    {ativo.dominio_proprio && (
+                      <span className="flex items-center justify-center text-[15px]" title="🔖 Equipamento de Domínio Próprio">
+                         🔖
+                      </span>
+                    )}
+
                   </div>
                 </td>
                 
@@ -124,7 +132,10 @@ export default function TabelaInventario({
                     {dropdownAberto === ativo.id && (
                        <div className="absolute right-0 mt-2 w-48 rounded-xl shadow-2xl border z-50 overflow-hidden animate-scale-up" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
                           <button onClick={() => { setAtivoClonado(ativo); setAbaAtiva('novo'); setDropdownAberto(null); }} className="w-full text-left px-4 py-2.5 text-sm transition-all hover:bg-blue-500/10 font-black tracking-wide border-b" style={{ color: 'var(--color-blue)', borderColor: 'var(--border-light)' }}>📋 Clonar Máquina</button>
+                          
+                          {/* 🚀 A edição comum envia agora o toggle de propriedade junto! */}
                           <button onClick={() => {abrirEdicao(ativo); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-gray-500/10 font-medium" style={{ color: 'var(--text-main)' }}>✏️ Editar Cadastro</button>
+
                           <button onClick={() => {setModalTransferencia({ aberto: true, ativos: [ativo] }); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-gray-500/10 font-medium" style={{ color: 'var(--text-main)' }}>🚚 Transferir Local</button>
                           <button onClick={() => {setModalStatus({ aberto: true, ativos: [ativo] }); setFormStatus({...formStatus, novo_status: ativo.status === 'MANUTENÇÃO' ? 'ATIVO' : 'MANUTENÇÃO'}); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-gray-500/10 font-medium" style={{ color: 'var(--text-main)' }}>🛠️ Alterar Status</button>
                           <button onClick={() => { setModalTerminal({ aberto: true, ativo: ativo }); setDropdownAberto(null); }} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-emerald-500/10 font-bold" style={{ color: 'var(--color-green)' }}>&gt;_ Terminal Remoto</button>

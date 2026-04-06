@@ -14,7 +14,7 @@ class Ativo(Base):
     id = Column(Integer, primary_key=True, index=True)
     patrimonio = Column(String, unique=True, index=True)
     categoria_id = Column(Integer, ForeignKey("categorias.id"))
-    
+    dominio_proprio = Column(Boolean, default=False)
     # Campos Universais
     marca = Column(String, nullable=True)
     modelo = Column(String, nullable=True)
@@ -33,6 +33,7 @@ class Ativo(Base):
 
     uuid_persistente = Column(String, index=True, nullable=True)
     ultima_comunicacao = Column(DateTime, default=datetime.utcnow)
+    dados_avancados = Column(JSON, nullable=True)
 
 class LogAuditoria(Base):
     __tablename__ = "logs_auditoria"

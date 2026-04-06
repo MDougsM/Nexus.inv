@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict, Any
 
 class LoginRequest(BaseModel):
     usuario: str
@@ -48,6 +48,9 @@ class AgenteColeta(BaseModel):
     setor: str
     patrimonio_manual: Optional[str] = ""
     override_patrimonio: Optional[bool] = False
+    
+    # 🚀 AQUI ESTÁ A PISTA DE POUSO NO LUGAR CERTO:
+    dados_avancados: Optional[Dict[str, Any]] = None
 
 # ==========================================
 # SCHEMAS DO TERMINAL REMOTO (C2)
@@ -57,7 +60,6 @@ class ComandoCreate(BaseModel):
     uuid_persistente: str
     script_content: str
     usuario_emissor: str
-    # 🚀 NOVOS CAMPOS DA BLINDAGEM RSA
     chave_privada_pem: str
     senha_chave: str
 

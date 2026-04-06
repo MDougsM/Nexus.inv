@@ -8,16 +8,19 @@ import platform
 import sys
 import os
 import time
-import tempfile
 import subprocess
+import winreg
+import json
+import re
 import tkinter.messagebox as mb
+from datetime import datetime
 from dotenv import load_dotenv
 
 # Carregar variáveis do .env
 load_dotenv()
 
 # ==========================================
-# CONFIGURAÇÕES DO AGENTE E ROTEAMENTO
+# CONFIGURAÇÕES DO AGENTE DEV (LOCALHOST)
 # ==========================================
 TOKEN_AGENTE = "NEXUS_AGENTE_V5_9b7e1f2a4c6d8e0f3a5b7c9d1e2f4a6b8c0d2e4f6a8b0c2d"
 HEADERS_AUTH = {
@@ -25,67 +28,20 @@ HEADERS_AUTH = {
     "X-Nexus-Token": TOKEN_AGENTE
 }
 
-LINK_ROTEADOR = "https://gist.githubusercontent.com/MDougsM/883aefc8a4cb0fe4dc1bc2e8eaf61d6e/raw/nexus_router.txt"
-VERSAO_DESTE_AGENTE = os.getenv('AGENTE_VERSION', '5.7')
-ARQUIVO_CACHE_LINK = os.path.join(os.environ.get('SystemDrive', 'C:'), '\\Nexus.inv', 'nexus_link_cache.txt')
+# 🚀 VERSÃO ATUALIZADA PARA 5.8-DEV
+VERSAO_DESTE_AGENTE = "5.8-DEV" # Removido o getenv para evitar conflito com .env velho
 
-def obter_url_backend():
-    try:
-        res = requests.get(LINK_ROTEADOR, timeout=1.5)
-        if res.status_code == 200:
-            link_novo = res.text.strip()
-            if link_novo.endswith('/'): link_novo = link_novo[:-1]
-            os.makedirs(os.path.dirname(ARQUIVO_CACHE_LINK), exist_ok=True)
-            with open(ARQUIVO_CACHE_LINK, "w", encoding="utf-8") as f:
-                f.write(link_novo)
-            return link_novo
-    except: pass
-    
-    if os.path.exists(ARQUIVO_CACHE_LINK):
-        with open(ARQUIVO_CACHE_LINK, "r", encoding="utf-8") as f:
-            return f.read().strip()
-    return "https://catalogue-vermont-united-reveal.trycloudflare.com"
-
-BASE_URL = obter_url_backend()
+BASE_URL = "http://localhost:8001" 
 COLETA_URL = f"{BASE_URL}/api/inventario/agente/coleta"
-VERSAO_URL = f"{BASE_URL}/api/inventario/agente/versao"
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
-def normalizar_versao(versao):
-    try:
-        return tuple(int(parte) for parte in str(versao).strip().split('.'))
-    except Exception:
-        return (0,)
-
-def auto_atualizar():
-    """Baixa o instalador mais recente e atualiza de forma furtiva (Sem UAC se rodar como SYSTEM)"""
-    try:
-        res = requests.get(VERSAO_URL, timeout=10)
-        if res.status_code == 200:
-            dados = res.json()
-            if normalizar_versao(dados.get("versao_atual", "0")) > normalizar_versao(VERSAO_DESTE_AGENTE):
-                url_download = f"{BASE_URL}{dados.get('url_download')}"
-                pasta_temp = tempfile.gettempdir()
-                caminho_instalador = os.path.join(pasta_temp, "Nexus_Update_v_nova.exe")
-                
-                resposta_arquivo = requests.get(url_download, stream=True, timeout=30)
-                if resposta_arquivo.status_code == 200:
-                    with open(caminho_instalador, 'wb') as f:
-                        for chunk in resposta_arquivo.iter_content(chunk_size=8192): 
-                            f.write(chunk)
-                    
-                    subprocess.Popen(
-                        [caminho_instalador, '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'],
-                        creationflags=subprocess.CREATE_NO_WINDOW
-                    )
-                    os._exit(0) 
-    except Exception as e:
-        pass
-
+# ==========================================
+# FUNÇÕES DE UTILITÁRIO
+# ==========================================
 def obter_id_persistente():
-    caminho_id = os.path.join(os.environ.get('SystemDrive', 'C:'), '\\Nexus.inv', 'nexus_dna.txt')
+    caminho_id = os.path.join(os.environ.get('SystemDrive', 'C:'), '\\NexusDev.inv', 'nexus_dna.txt')
     if os.path.exists(caminho_id):
         with open(caminho_id, 'r') as f: return f.read().strip()
     else:
@@ -97,427 +53,357 @@ def obter_id_persistente():
         except: pass
         return novo_id
 
+# ==========================================
+# COLETA PROFUNDA (LICENÇA E SOFTWARES)
+# ==========================================
+def obter_status_windows():
+    """Lê a licença de forma agressiva (PowerShell > VBS > Desconhecido)"""
+    try:
+        cmd = 'powershell "Get-CimInstance SoftwareLicensingProduct -Filter \'PartialProductKeyIsPresent=1\' | Select-Object LicenseStatus, Description | ConvertTo-Json"'
+        out = subprocess.check_output(cmd, shell=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW).strip()
+        if out:
+            data = json.loads(out)
+            if isinstance(data, list): data = data[0]
+            status_map = {0: "Não Licenciado", 1: "Licenciado (Ativo)", 2: "OOB Grace", 3: "OOT Grace", 4: "Não Genuíno", 5: "Notificação", "0": "Não Licenciado", "1": "Licenciado (Ativo)", "2": "OOB Grace", "3": "OOT Grace", "4": "Não Genuíno", "5": "Notificação"}
+            return {
+                "status": status_map.get(str(data.get("LicenseStatus")), "Desconhecido"), 
+                "tipo": data.get("Description", "N/A"), 
+                "expira": "Perpétua"
+            }
+    except: pass
+    
+    try:
+        cmd = 'cscript //nologo c:\\windows\\system32\\slmgr.vbs /dli'
+        out = subprocess.check_output(cmd, shell=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        status = "Desconhecido"
+        desc = "N/A"
+        for line in out.splitlines():
+            if "Nome:" in line or "Name:" in line: desc = line.split(":")[1].strip()
+            if "Status da licença:" in line or "License Status:" in line:
+                status_raw = line.split(":")[1].strip()
+                status = "Licenciado (Ativo)" if "Licenciado" in status_raw or "Licensed" in status_raw else status_raw
+        return {"status": status, "tipo": desc, "expira": "Perpétua"}
+    except: pass
+
+    return {"status": "Não Identificada", "tipo": "Bloqueado pelo Windows", "expira": "N/A"}
+
+def listar_softwares():
+    softwares = []
+    chaves_registro = [
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")
+    ]
+    for hive, path in chaves_registro:
+        try:
+            with winreg.OpenKey(hive, path) as key:
+                for i in range(winreg.QueryInfoKey(key)[0]):
+                    try:
+                        sub_path = winreg.EnumKey(key, i)
+                        with winreg.OpenKey(key, sub_path) as sub_key:
+                            nome = winreg.QueryValueEx(sub_key, "DisplayName")[0]
+                            try: versao = winreg.QueryValueEx(sub_key, "DisplayVersion")[0]
+                            except: versao = "N/A"
+                            try: fab = winreg.QueryValueEx(sub_key, "Publisher")[0]
+                            except: fab = "Desconhecido"
+                            
+                            if nome and nome not in [s['nome'] for s in softwares]:
+                                softwares.append({"nome": str(nome), "versao": str(versao), "fabricante": str(fab)})
+                    except EnvironmentError: continue
+        except EnvironmentError: continue
+    return softwares
+
+# ==========================================
+# MOTOR DE COLETA PRINCIPAL (WMI)
+# ==========================================
 def ler_hardware_maquina(secretaria="Ping Automático", setor="Background", patrimonio_manual="", override=False):
+    licenca_result = {"status": "Coletando...", "tipo": "N/A", "expira": "N/A"}
+    def coletar_licenca(): licenca_result.update(obter_status_windows())
+    
+    thread_licenca = threading.Thread(target=coletar_licenca, daemon=True)
+    thread_licenca.start()
+    
     pythoncom.CoInitialize()
     try:
         conexao = wmi.WMI()
         sistema = conexao.Win32_ComputerSystem()[0]
-        bios = conexao.Win32_BIOS()[0]
         cpu = conexao.Win32_Processor()[0]
         os_info = conexao.Win32_OperatingSystem()[0]
         chassis = conexao.Win32_SystemEnclosure()[0]
         
+        # --- REDE E IP ---
         ip_local = "Desconhecido"
+        mac_address = "Desconhecido"
+        redes_detalhes = []
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
             ip_local = s.getsockname()[0]
             s.close()
         except: pass
+        try:
+            for net in conexao.Win32_NetworkAdapterConfiguration(IPEnabled=True):
+                if mac_address == "Desconhecido" and net.MACAddress: mac_address = net.MACAddress
+                redes_detalhes.append({"descricao": net.Description, "ip": net.IPAddress[0] if net.IPAddress else "N/A", "mac": net.MACAddress})
+        except: pass
+        
+        # --- PLACA MÃE E SERIAL ---
+        serial = conexao.Win32_BIOS()[0].SerialNumber.strip()
+        placa_mae = "Desconhecida"
+        try: 
+            bb = conexao.Win32_BaseBoard()[0]
+            placa_mae = bb.Product.strip()
+            if not serial or serial in ["Default string", "O.E.M."]: serial = bb.SerialNumber.strip()
+        except: pass
 
-        mac_address = "Desconhecido"
-        for net in conexao.Win32_NetworkAdapterConfiguration(IPEnabled=True):
-            mac_address = net.MACAddress
-            break
-
-        serial = bios.SerialNumber.strip()
-        if not serial or serial in ["Default string", "O.E.M."]:
-            try: serial = conexao.Win32_BaseBoard()[0].SerialNumber.strip()
-            except: serial = "Não identificado"
-
-        discos = []
+        # --- DISCOS E S.M.A.R.T (NOVO SENSOR) ---
+        discos_resumo = []
         tipo_disco = "HD"
-        for d in conexao.Win32_DiskDrive():
-            if d.Size:
-                tamanho = round(int(d.Size) / (1024**3))
-                discos.append(f"{tamanho}GB")
-                if "SSD" in d.Model or "NVMe" in d.Model: tipo_disco = "SSD"
+        saude_armazenamento = "OK (Saudável)"
+        try:
+            status_ruins = 0
+            for d in conexao.Win32_DiskDrive():
+                if d.Size:
+                    discos_resumo.append(f"{round(int(d.Size) / (1024**3))}GB")
+                    if "SSD" in d.Model or "NVMe" in d.Model: tipo_disco = "SSD"
+                if d.Status and d.Status.upper() not in ["OK", "OKAY"]:
+                    status_ruins += 1
+            if status_ruins > 0: saude_armazenamento = "⚠️ Alerta S.M.A.R.T"
+        except: saude_armazenamento = "Não Suportado"
 
-        tipo_maq = "Notebook" if chassis.ChassisTypes[0] in [8, 9, 10, 11, 12, 14, 18, 21, 31, 32] else "Desktop"
+        discos_detalhes = []
+        try:
+            for d in conexao.Win32_LogicalDisk(DriveType=3): discos_detalhes.append({"drive": d.DeviceID, "tamanho_gb": round(int(d.Size or 0)/(1024**3), 1), "livre_gb": round(int(d.FreeSpace or 0)/(1024**3), 1)})
+        except: pass
+
+        # --- GPU, RAM, IMPRESSORAS E SERVIÇOS ---
+        gpus = []
+        try:
+            for gpu in conexao.Win32_VideoController(): gpus.append({"nome": gpu.Name, "vram_mb": round(abs(int(gpu.AdapterRAM or 0))/(1024**2)) if gpu.AdapterRAM else "N/A", "driver": gpu.DriverVersion})
+        except: pass
+
+        telemetria = {"cpu_percent": cpu.LoadPercentage, "ram_percent": 0}
+        try: telemetria["ram_percent"] = round(100 - ((int(os_info.FreePhysicalMemory) / int(os_info.TotalVisibleMemorySize)) * 100))
+        except: pass
+
+        slots_ram = []
+        try:
+            for mem in conexao.Win32_PhysicalMemory(): slots_ram.append({"capacidade_gb": round(int(mem.Capacity)/(1024**3)), "velocidade_mhz": mem.Speed or "N/A", "fabricante": mem.Manufacturer or "Desconhecido", "slot": mem.DeviceLocator or "Desconhecido"})
+        except: pass
+
+        impressoras = []
+        try: impressoras = [{"nome": i.Name, "porta": i.PortName or "N/A", "tipo": "Rede" if i.Network else "Local/USB", "padrao": i.Default} for i in conexao.Win32_Printer()]
+        except: pass
+
+        perifericos_imagem = []
+        try: perifericos_imagem = [p.Name for p in conexao.Win32_PnPEntity(PNPClass="Image") if p.Name]
+        except: pass
+
+        servicos_rodando = []
+        try:
+            for srv in conexao.Win32_Service():
+                if srv.State == "Running": servicos_rodando.append({"nome": srv.Name, "display": srv.DisplayName})
+        except: pass
+
+        # --- SEGURANÇA E UPTIME ---
+        lista_av = []
+        try:
+            for av in wmi.WMI(namespace="root\\SecurityCenter2").AntivirusProduct():
+                st = "Ativo" if (int(av.productState) & 0x1000) or (int(av.productState) & 0x0100) else "Desativado"
+                lista_av.append({"nome": av.displayName, "status": st})
+        except: lista_av.append({"nome": "Windows Defender", "status": "Ativo"})
+
+        status_bitlocker = "Desconhecido"
+        try:
+            bl_out = subprocess.check_output(['manage-bde', '-status', 'C:'], creationflags=subprocess.CREATE_NO_WINDOW, text=True)
+            status_bitlocker = "Ativo (Protegido)" if "Protection On" in bl_out or "Proteção Ativada" in bl_out else "Desativado"
+        except: status_bitlocker = "Sem Acesso Admin"
+
+        uptime_str = "N/A"
+        try:
+            boot_time = datetime.strptime(os_info.LastBootUpTime.split('.')[0], "%Y%m%d%H%M%S")
+            diff = datetime.now() - boot_time
+            uptime_str = f"{diff.days}d {diff.seconds//3600}h {(diff.seconds//60)%60}m"
+        except: pass
+
+        # --- MONITORES ---
+        monitores_brutos = []
+        try:
+            for mon in conexao.Win32_PnPEntity(Service="monitor"):
+                nome_raw = mon.Name or mon.Caption
+                if nome_raw:
+                    match = re.search(r'\((.*?)\)', nome_raw)
+                    nome_limpo = match.group(1).strip() if match else nome_raw.replace("Generic Monitor", "").replace("Monitor Genérico", "").replace("PnP", "").strip()
+                    if nome_limpo: monitores_brutos.append(nome_limpo)
+            
+            if not monitores_brutos:
+                for m in conexao.Win32_DesktopMonitor():
+                    if m.Caption:
+                        match = re.search(r'\((.*?)\)', m.Caption)
+                        nome_limpo = match.group(1).strip() if match else m.Caption.replace("Generic Monitor", "").replace("Monitor Genérico", "").replace("PnP", "").strip()
+                        if nome_limpo: monitores_brutos.append(nome_limpo)
+            
+            from collections import Counter
+            contagem = Counter(monitores_brutos)
+            monitores_conectados = [f"{qtd}x {nome}" if qtd > 1 else nome for nome, qtd in contagem.items()]
+        except: monitores_conectados = []
+
+        tipo_maq = "Notebook" if chassis.ChassisTypes[0] in [8, 9, 10, 11, 12, 14] else "Desktop"
+        boot_programs = []
+        try: boot_programs = [s.Name for s in conexao.Win32_StartupCommand() if s.Name]
+        except: pass
+
+        thread_licenca.join(timeout=8)
 
         return {
             "uuid_persistente": obter_id_persistente(), 
             "tipo": tipo_maq, 
-            "marca": sistema.Manufacturer.strip(), 
-            "modelo": sistema.Model.strip(),
-            "cpu": cpu.Name.strip(), 
-            "ram": f"{round(int(sistema.TotalPhysicalMemory) / (1024**3))}GB",
-            "os": os_info.Caption.strip(), 
-            "disco": " + ".join(discos), 
+            "marca": sistema.Manufacturer.strip() if sistema.Manufacturer else "Desconhecido", 
+            "modelo": sistema.Model.strip() if sistema.Model else "Desconhecido",
+            "cpu": cpu.Name.strip() if cpu.Name else "Desconhecido", 
+            "ram": f"{round(int(sistema.TotalPhysicalMemory or 0) / (1024**3))}GB",
+            "os": os_info.Caption.strip() if os_info.Caption else "Desconhecido", 
+            "disco": " + ".join(discos_resumo) if discos_resumo else "Desconhecido", 
             "tipo_disco": tipo_disco,
             "nome_pc": platform.node(), 
-            "usuario_pc": sistema.UserName if sistema.UserName else "Nenhum",
+            "usuario_pc": sistema.UserName or "Nenhum",
             "serial": serial, 
             "mac": mac_address, 
             "ip": ip_local,
             "secretaria": secretaria, 
             "setor": setor,
             "patrimonio_manual": patrimonio_manual, 
-            "override_patrimonio": override 
+            "override_patrimonio": override,
+            
+            "dados_avancados": {
+                "placa_mae": placa_mae,
+                "nucleos_cpu": cpu.NumberOfLogicalProcessors,
+                "telemetria": telemetria,
+                "gpu": gpus,
+                "discos_logicos": discos_detalhes,
+                "redes": redes_detalhes,
+                "softwares": listar_softwares(),
+                "servicos": servicos_rodando,
+                "memoria_ram_slots": slots_ram,
+                "impressoras": impressoras,
+                "scanners_e_webcams": perifericos_imagem,
+                "seguranca": {
+                    "antivirus": lista_av,
+                    "bitlocker": status_bitlocker,
+                    "licenca_windows": licenca_result
+                },
+                "saude": {
+                    "uptime": uptime_str,
+                    "armazenamento": saude_armazenamento # 🚀 NOVO SENSOR DE DISCO AQUI!
+                },
+                "inicializacao": boot_programs,
+                "perifericos": {
+                    "monitores": monitores_conectados
+                }
+            }
         }
     except Exception as e:
+        print(f"Erro na coleta: {e}")
         return None
     finally:
-        pythoncom.CoUninitialize() 
+        pythoncom.CoUninitialize()
 
 def enviar_para_servidor(payload):
     try:
-        res = requests.post(COLETA_URL, json=payload, headers=HEADERS_AUTH, timeout=15)
+        res = requests.post(COLETA_URL, json=payload, headers=HEADERS_AUTH, timeout=40)
         return res.status_code == 200, res.json() if res.status_code == 200 else res.text
     except Exception as e:
         return False, str(e)
 
 # ==========================================
-# INTERFACE GRÁFICA DO AGENTE (UI PREMIUM)
+# INTERFACE GRÁFICA (CUSTOMTKINTER)
 # ==========================================
 class NexusAgent(ctk.CTk):
-
     def __init__(self, base_url, meu_uuid):
         super().__init__()
         self.base_url = base_url
         self.meu_uuid = meu_uuid
         
-        self.title(f"Nexus Agent v{VERSAO_DESTE_AGENTE}")
-        self.geometry("450x800")
+        self.title(f"Nexus Agent [DEV] v{VERSAO_DESTE_AGENTE}")
+        self.geometry("450x750")
         
-        # 🚀 NOVO: Permite redimensionar, mas impede que a tela fique minúscula
-        self.resizable(True, True)
-        self.minsize(400, 500)
-        
-        self.secretarias_data = []
-        self.dados_hardware = None 
-        
-        self.construir_interface()
-        self.carregar_secretarias()
-        
+        self.frame = ctk.CTkFrame(self)
+        self.frame.pack(pady=10, padx=10, fill="both", expand=True)
+
+        ctk.CTkLabel(self.frame, text="Nexus Agent - Auditoria Avançada", font=("Arial", 16, "bold")).pack(pady=15)
+
+        ctk.CTkLabel(self.frame, text="Secretaria:").pack(anchor="w", padx=20)
+        self.combo_secretaria = ctk.CTkOptionMenu(self.frame, values=["Gabinete", "Saúde", "Educação", "Segurança", "Infraestrutura"])
+        self.combo_secretaria.pack(fill="x", padx=20, pady=5)
+
+        ctk.CTkLabel(self.frame, text="Setor:").pack(anchor="w", padx=20)
+        self.combo_setor = ctk.CTkOptionMenu(self.frame, values=["Padrão", "TI", "Administrativo", "Recepção"])
+        self.combo_setor.pack(fill="x", padx=20, pady=5)
+
+        ctk.CTkLabel(self.frame, text="Número de Patrimônio:").pack(anchor="w", padx=20)
+        self.entry_patrimonio = ctk.CTkEntry(self.frame, placeholder_text="Ex: 00131")
+        self.entry_patrimonio.pack(fill="x", padx=20, pady=5)
+
+        self.check_override = ctk.CTkCheckBox(self.frame, text="Forçar atualização de patrimônio no servidor")
+        self.check_override.pack(anchor="w", padx=20, pady=10)
+
+        self.btn_sync = ctk.CTkButton(self.frame, text="Sincronizar com Servidor", command=self.sincronizar_manual, 
+                                     fg_color="#2563eb", hover_color="#1d4ed8", font=("Arial", 13, "bold"), height=40)
+        self.btn_sync.pack(pady=20, padx=20, fill="x")
+
+        ctk.CTkLabel(self.frame, text="Atividades do Agente:").pack(anchor="w", padx=20)
+        self.textbox_log = ctk.CTkTextbox(self.frame, height=220, font=("Consolas", 11))
+        self.textbox_log.pack(fill="both", expand=True, padx=20, pady=10)
+        self.textbox_log.configure(state="disabled")
+
+        self.log(f"Agente iniciado. ID: {self.meu_uuid}")
         threading.Thread(target=self.escutar_comandos_c2, daemon=True).start()
-        threading.Thread(target=self.carregar_resumo_tela, daemon=True).start()
 
-    def ao_fechar_tela(self):
-        self.withdraw()
-        self.escrever_log("ℹ️ Tela minimizada. Operando em background.")
-        threading.Thread(target=self.loop_silencioso, daemon=True).start()
+    def log(self, mensagem):
+        self.textbox_log.configure(state="normal")
+        self.textbox_log.insert("end", f"[{time.strftime('%H:%M:%S')}] {mensagem}\n")
+        self.textbox_log.see("end")
+        self.textbox_log.configure(state="disabled")
 
-    def loop_silencioso(self):
-        while True:
-            try:
-                payload_bg = ler_hardware_maquina("Ping Automático", "Background")
-                if payload_bg:
-                    enviar_para_servidor(payload_bg)
-            except: pass
-            time.sleep(3600)
-
-    def escrever_log(self, mensagem):
-        try:
-            agora = time.strftime("%H:%M:%S")
-            linha = f"[{agora}] {mensagem}\n"
-            print(linha.strip())
-            
-            def atualizar_ui():
-                self.textbox_logs.configure(state="normal")
-                self.textbox_logs.insert("end", linha)
-                self.textbox_logs.see("end")
-                self.textbox_logs.configure(state="disabled")
-                
-            self.after(0, atualizar_ui)
-        except: pass
-
-    def popup_moderno(self, titulo, mensagem, cor_destaque="#10B981"):
-        pop = ctk.CTkToplevel(self)
-        pop.title(titulo)
-        x = self.winfo_x() + (self.winfo_width() // 2) - (350 // 2)
-        y = self.winfo_y() + (self.winfo_height() // 2) - (220 // 2)
-        pop.geometry(f"350x220+{x}+{y}")
-        pop.attributes("-topmost", True)
-        pop.resizable(False, False)
-        pop.grab_set() 
-        ctk.CTkLabel(pop, text=titulo.upper(), font=ctk.CTkFont(size=14, weight="bold"), text_color=cor_destaque).pack(pady=(20, 10))
-        ctk.CTkLabel(pop, text=mensagem, wraplength=300, justify="center").pack(pady=10)
-        ctk.CTkButton(pop, text="OK", command=pop.destroy, fg_color=cor_destaque, hover_color="#059669").pack(pady=15)
-
-    def criar_card_info(self, pai, icone, titulo, valor, row, col):
-        frame = ctk.CTkFrame(pai, fg_color="#18181B", corner_radius=10)
-        frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
-        ctk.CTkLabel(frame, text=icone, font=ctk.CTkFont(size=20)).pack(side="left", padx=(10, 5), pady=10)
-        info_frame = ctk.CTkFrame(frame, fg_color="transparent")
-        info_frame.pack(side="left", fill="x", expand=True, padx=(0, 10), pady=5)
-        ctk.CTkLabel(info_frame, text=titulo.upper(), font=ctk.CTkFont(size=9, weight="bold"), text_color="#3B82F6", anchor="w").pack(fill="x")
+    def sincronizar_manual(self):
+        self.log("📦 Iniciando coleta profunda de dados...")
+        self.btn_sync.configure(state="disabled", text="Coletando...")
         
-        if len(valor) > 18: valor = valor[:15] + "..."
-        ctk.CTkLabel(info_frame, text=valor, font=ctk.CTkFont(size=12, weight="bold"), text_color="#F8FAFC", anchor="w").pack(fill="x")
+        def tarefa():
+            sec = self.combo_secretaria.get()
+            setor = self.combo_setor.get()
+            pat = self.entry_patrimonio.get()
+            override = (self.check_override.get() == 1)
 
-    def construir_interface(self):
-        # HEADER
-        frame_topo = ctk.CTkFrame(self, fg_color="#1E293B", corner_radius=0)
-        frame_topo.pack(fill="x", ipady=15)
-        ctk.CTkLabel(frame_topo, text="NEXUS AGENT", font=ctk.CTkFont(size=26, weight="bold"), text_color="#F8FAFC").pack(pady=(10, 0))
-        ctk.CTkLabel(frame_topo, text=f"TELEMETRIA E CONTROLE v{VERSAO_DESTE_AGENTE}", font=ctk.CTkFont(size=10, weight="bold"), text_color="#3B82F6").pack()
+            dados = ler_hardware_maquina(sec, setor, pat, override)
+            if not dados:
+                self.log("❌ Falha crítica na coleta de hardware.")
+                self.after(0, lambda: self.btn_sync.configure(state="normal", text="Sincronizar com Servidor"))
+                return
 
-        # TABS
-        self.tabview = ctk.CTkTabview(self, fg_color="transparent")
-        self.tabview.pack(fill="both", expand=True, padx=20, pady=10)
-        
-        tab_diag = self.tabview.add("Diagnóstico")
-        tab_logs = self.tabview.add("Terminal de Logs")
-
-        # ================= ABA 1: DIAGNÓSTICO (AGORA COM SCROLL!) =================
-        self.scroll_diag = ctk.CTkScrollableFrame(tab_diag, fg_color="transparent")
-        self.scroll_diag.pack(fill="both", expand=True)
-
-        ctk.CTkLabel(self.scroll_diag, text="Hardware Local", font=ctk.CTkFont(size=13, weight="bold"), text_color="#94A3B8").pack(anchor="w", pady=(5, 5))
-        
-        self.frame_hardware = ctk.CTkFrame(self.scroll_diag, fg_color="transparent")
-        self.frame_hardware.pack(fill="x", pady=(0, 10))
-        self.frame_hardware.grid_columnconfigure((0, 1), weight=1)
-        
-        self.lbl_loading = ctk.CTkLabel(self.frame_hardware, text="Lendo componentes... ⏳", text_color="#3B82F6", font=ctk.CTkFont(size=12, slant="italic"))
-        self.lbl_loading.grid(row=0, column=0, columnspan=2, pady=30)
-
-        ctk.CTkLabel(self.scroll_diag, text="Destino de Vinculação", font=ctk.CTkFont(size=13, weight="bold"), text_color="#94A3B8").pack(anchor="w", pady=(10, 5))
-        self.combo_sec = ctk.CTkComboBox(self.scroll_diag, values=["Carregando..."], command=self.ao_mudar_secretaria, height=35)
-        self.combo_sec.pack(fill="x", pady=(0, 10))
-
-        self.combo_setor = ctk.CTkComboBox(self.scroll_diag, values=["Aguardando secretaria..."], height=35, state="disabled")
-        self.combo_setor.pack(fill="x", pady=(0, 15))
-
-        ctk.CTkLabel(self.scroll_diag, text="Patrimônio (Opcional)", font=ctk.CTkFont(size=13, weight="bold"), text_color="#94A3B8").pack(anchor="w", pady=(5, 5))
-        self.entry_patrimonio = ctk.CTkEntry(self.scroll_diag, placeholder_text="Deixe em branco para auto-gerar...", height=35)
-        self.entry_patrimonio.pack(fill="x", pady=(0, 15))
-
-        self.progress_bar = ctk.CTkProgressBar(self.scroll_diag, height=6, progress_color="#10B981", fg_color="#1E293B")
-        self.progress_bar.set(0)
-        
-        self.btn_coletar = ctk.CTkButton(self.scroll_diag, text="⚡ Enviar para Nuvem", font=ctk.CTkFont(size=14, weight="bold"), height=45, command=self.iniciar_envio, state="disabled")
-        self.btn_coletar.pack(fill="x", side="bottom", pady=(5, 10))
-
-        # ================= ABA 2: LOGS DO C2 =================
-        self.textbox_logs = ctk.CTkTextbox(tab_logs, fg_color="#181A1B", text_color="#4CAF50", font=ctk.CTkFont(family="Consolas", size=11), wrap="word")
-        self.textbox_logs.pack(fill="both", expand=True, pady=5)
-        self.textbox_logs.insert("end", "> Console de Eventos Nexus Iniciado.\n> Aguardando instruções remotas...\n\n")
-        self.textbox_logs.configure(state="disabled")
-
-    def atualizar_caixa_resumo(self):
-        self.lbl_loading.destroy()
-        if self.dados_hardware:
-            self.criar_card_info(self.frame_hardware, "💻", "Máquina", self.dados_hardware['nome_pc'], 0, 0)
-            self.criar_card_info(self.frame_hardware, "⚙️", "Sistema", self.dados_hardware['os'].replace("Microsoft", "").strip(), 0, 1)
-            self.criar_card_info(self.frame_hardware, "🧠", "CPU", self.dados_hardware['cpu'].replace("(R)", "").replace("(TM)", ""), 1, 0)
-            self.criar_card_info(self.frame_hardware, "💾", "Armaz.", f"{self.dados_hardware['ram']} / {self.dados_hardware['disco']}", 1, 1)
-            self.btn_coletar.configure(state="normal") 
-            self.escrever_log("✅ Hardware lido com sucesso.")
-        else:
-            ctk.CTkLabel(self.frame_hardware, text="❌ Falha na leitura WMI.", text_color="#EF4444").grid(row=0, column=0, columnspan=2)
-
-    def carregar_resumo_tela(self):
-        self.dados_hardware = ler_hardware_maquina()
-        self.after(0, self.atualizar_caixa_resumo)
-
-    def carregar_secretarias(self):
-        def fetch():
-            try:
-                self.escrever_log("🔄 Baixando tabela de secretarias...")
-                res = requests.get(f"{self.base_url}/api/unidades/secretarias", timeout=10)
-                if res.status_code == 200:
-                    self.secretarias_data = res.json()
-                    nomes = [s["nome"] for s in self.secretarias_data]
-                    self.after(0, lambda: self.combo_sec.configure(values=nomes))
-                    if nomes: 
-                        self.after(0, lambda: self.combo_sec.set(nomes[0]))
-                        self.ao_mudar_secretaria(nomes[0])
-                else: 
-                    self.after(0, lambda: self.combo_sec.set("Erro no servidor"))
-            except Exception as e:
-                self.after(0, lambda: self.combo_sec.set("Falha de Conexão"))
-                self.escrever_log(f"❌ Erro ao buscar secretarias: {str(e)[:40]}")
-        threading.Thread(target=fetch, daemon=True).start()
-
-    def ao_mudar_secretaria(self, nome_sec):
-        self.combo_setor.configure(state="normal", values=["Carregando..."]); self.combo_setor.set("Carregando...")
-        sec_id = next((s["id"] for s in self.secretarias_data if s["nome"] == nome_sec), None)
-        if not sec_id: return
-        def fetch_setores():
-            try:
-                res = requests.get(f"{self.base_url}/api/unidades/secretarias/{sec_id}/setores", timeout=10)
-                if res.status_code == 200:
-                    self.setores_data = res.json()
-                    nomes_setores = [s["nome"] for s in self.setores_data]
-                    if nomes_setores: 
-                        self.after(0, lambda: self.combo_setor.configure(values=nomes_setores))
-                        self.after(0, lambda: self.combo_setor.set(nomes_setores[0]))
-                    else: 
-                        self.after(0, lambda: self.combo_setor.configure(values=["Nenhum setor"]))
-                        self.after(0, lambda: self.combo_setor.set("Nenhum setor"))
-            except: 
-                self.after(0, lambda: self.combo_setor.set("Erro ao carregar"))
-        threading.Thread(target=fetch_setores, daemon=True).start()
-
-    def iniciar_envio(self):
-        sec = self.combo_sec.get()
-        setor = self.combo_setor.get()
-        patrimonio_digitado = self.entry_patrimonio.get().strip()
-        
-        if not sec or not setor or setor == "Carregando...": return
-        if not self.dados_hardware: return 
-        
-        self.btn_coletar.configure(state="disabled", fg_color="#F59E0B", text_color="#000000")
-        self.progress_bar.pack(fill="x", pady=(10, 0), before=self.btn_coletar)
-        self.progress_bar.set(0)
-        
-        self.dados_hardware["secretaria"] = sec
-        self.dados_hardware["setor"] = setor
-        self.dados_hardware["patrimonio_manual"] = patrimonio_digitado
-        self.dados_hardware["override_patrimonio"] = False
-        
-        def processar_resposta(sucesso, resposta, override_enviado):
-            self.progress_bar.set(1.0)
-            self.after(500, self.progress_bar.pack_forget)
-            self.btn_coletar.configure(state="normal", fg_color=["#3a7ebf", "#1f538d"], text_color=["#DCE4EE", "#DCE4EE"], text="⚡ Enviar para Nuvem")
+            self.log("📡 Enviando dados para a nuvem Nexus...")
+            sucesso, resposta = enviar_para_servidor(dados)
             
             if sucesso:
-                status = resposta.get("status")
-                if status == "conflict":
-                    if mb.askyesno("Aviso de Duplicidade", resposta.get("message")):
-                        threading.Thread(target=run, args=(True,), daemon=True).start()
-                elif status == "error":
-                    self.popup_moderno("Erro de Cadastro", resposta.get("message"), "#EF4444")
-                else:
-                    pat = resposta.get('patrimonio')
-                    self.escrever_log(f"✅ Sincronizado com sucesso! ID: {pat}")
-                    self.popup_moderno("Concluído", f"Registrado na nuvem.\nPatrimônio: {pat}", "#10B981")
-                    self.entry_patrimonio.delete(0, 'end') 
+                self.log("✅ Sincronização concluída com sucesso!")
+                self.after(0, lambda: mb.showinfo("Sucesso", "Inventário e auditoria atualizados!"))
             else:
-                self.escrever_log("❌ Falha na conexão de envio.")
-                self.popup_moderno("Erro de Conexão", f"Falha ao comunicar com a Nuvem:\n{resposta}", "#EF4444")
+                self.log(f"⚠️ Erro no servidor: {resposta}")
+                self.after(0, lambda: mb.showerror("Erro", f"Falha na comunicação: {resposta}"))
+            
+            self.after(0, lambda: self.btn_sync.configure(state="normal", text="Sincronizar com Servidor"))
 
-        def run(override=False):
-            self.escrever_log("📦 Enviando inventário para a nuvem...")
-            self.after(0, lambda: self.btn_coletar.configure(text="📦 Enviando Dados..."))
-            self.after(0, lambda: self.progress_bar.set(0.5))
-            time.sleep(0.5)
-            
-            self.dados_hardware["override_patrimonio"] = override
-            sucesso, dados = enviar_para_servidor(self.dados_hardware)
-            self.after(0, lambda: processar_resposta(sucesso, dados, override))
-            
-        threading.Thread(target=run, daemon=True).start()
+        threading.Thread(target=tarefa, daemon=True).start()
 
     def escutar_comandos_c2(self):
-        self.escrever_log("🎧 Terminal Remoto (C2) ativado.")
+        self.log("🛡️ Escuta de comandos remotos ativa.")
         while True:
-            try:
-                url_check = f"{self.base_url}/api/agente/comandos/pendentes/{self.meu_uuid}"
-                res = requests.get(url_check, headers=HEADERS_AUTH, timeout=10)
-                
-                if res.status_code == 200:
-                    dados = res.json()
-                    if dados.get("tem_comando"):
-                        comando_id = dados.get("comando_id")
-                        script_content = dados.get("script_content")
-                        
-                        self.escrever_log(f"🔥 Comando recebido (ID: {comando_id})")
-                        self.escrever_log(f"⚙️ Executando script no background...")
-                        
-                        try:
-                            processo = subprocess.run(
-                                ["powershell", "-NoProfile", "-Command", script_content],
-                                capture_output=True, text=True, errors="replace", 
-                                creationflags=subprocess.CREATE_NO_WINDOW
-                            )
-                            saida = processo.stdout.strip() if processo.stdout else ""
-                            erro = processo.stderr.strip() if processo.stderr else ""
-                            status_final = "CONCLUIDO" if processo.returncode == 0 else "ERRO"
-                            
-                            log_final = saida
-                            if erro:
-                                log_final += f"\n[ERROS DO WINDOWS]:\n{erro}"
-                                
-                            if not log_final.strip():
-                                log_final = "> Comando executado com sucesso (Sem retorno de texto no terminal)."
-                                
-                            resumo = log_final[:40].replace('\n', ' ') + "..." if len(log_final) > 40 else log_final
-                            self.escrever_log(f"✅ Retorno: {resumo}")
-                            
-                        except Exception as e:
-                            status_final = "ERRO"
-                            log_final = f"Falha fatal ao rodar script: {str(e)}"
-                            self.escrever_log(f"❌ Erro crítico: {str(e)}")
-                        
-                        url_resultado = f"{self.base_url}/api/agente/comandos/resultado"
-                        requests.post(url_resultado, json={
-                            "comando_id": comando_id, "status": status_final, "output_log": log_final
-                        }, headers=HEADERS_AUTH, timeout=15)
-                        
-                        self.escrever_log("📡 Log devolvido ao servidor.")
-            except Exception as e:
-                pass
-            
             time.sleep(60)
 
-# ==========================================
-# CÓDIGO CORE BACKGROUND (SEM TELA)
-# ==========================================
-def escutar_comandos_silencioso(base_url, uuid_pc):
-    """Usado apenas quando o Windows inicia o agente em modo invisível."""
-    while True:
-        try:
-            url_check = f"{base_url}/api/agente/comandos/pendentes/{uuid_pc}"
-            res = requests.get(url_check, headers=HEADERS_AUTH, timeout=10)
-            
-            if res.status_code == 200 and res.json().get("tem_comando"):
-                dados = res.json()
-                comando_id = dados.get("comando_id")
-                script_content = dados.get("script_content")
-                
-                try:
-                    processo = subprocess.run(
-                        ["powershell", "-NoProfile", "-Command", script_content],
-                        capture_output=True, text=True, errors="replace",
-                        creationflags=subprocess.CREATE_NO_WINDOW
-                    )
-                    saida = processo.stdout.strip() if processo.stdout else ""
-                    erro = processo.stderr.strip() if processo.stderr else ""
-                    
-                    status_final = "CONCLUIDO" if processo.returncode == 0 else "ERRO"
-                    log_final = saida
-                    if erro: 
-                        log_final += f"\n[ERROS DO WINDOWS]:\n{erro}"
-                        
-                    if not log_final.strip():
-                        log_final = "> Comando executado com sucesso (Sem retorno de texto no terminal)."
-                        
-                except Exception as e:
-                    status_final, log_final = "ERRO", str(e)
-                
-                requests.post(f"{base_url}/api/agente/comandos/resultado", json={
-                    "comando_id": comando_id, "status": status_final, "output_log": log_final
-                }, headers=HEADERS_AUTH, timeout=15)
-        except: pass
-        time.sleep(60)
-
-# ==========================================
-# INICIALIZAÇÃO DO AGENTE (A LÓGICA MESTRA)
-# ==========================================
 if __name__ == "__main__":
-    base_url = obter_url_backend()
-    meu_uuid = obter_id_persistente()
-
-    # MODO BACKGROUND - INICIADO PELO WATCHDOG (O INVISÍVEL)
-    if "--silent" in sys.argv:
-        threading.Thread(target=escutar_comandos_silencioso, args=(base_url, meu_uuid), daemon=True).start()
-        
-        while True:
-            try:
-                auto_atualizar() 
-                
-                payload_bg = ler_hardware_maquina("Ping Automático", "Background")
-                if payload_bg:
-                    enviar_para_servidor(payload_bg)
-            except: pass
-            
-            time.sleep(3600) 
-            
-    # MODO TÉCNICO - INICIADO POR CLIQUE DUPLO (Com Interface)
-    else:
-        app = NexusAgent(base_url, meu_uuid)
-        app.protocol("WM_DELETE_WINDOW", app.ao_fechar_tela)
+    try:
+        uuid_maquina = obter_id_persistente()
+        app = NexusAgent(BASE_URL, uuid_maquina)
         app.mainloop()
+    except Exception as e:
+        print(f"Erro ao iniciar aplicação: {e}")

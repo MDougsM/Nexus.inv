@@ -37,7 +37,6 @@ export default function ModaisEdicao({
     }
 
     try {
-        // 🚀 CORREÇÃO: Voltando a enviar o objeto puro, sem o stringify, para o FastAPI aceitar!
         await api.put(`/api/inventario/ficha/editar/${modalEdicao.ativo.patrimonio}`, {
             ...modalEdicao.form,
             usuario_acao: usuarioAtual,
@@ -70,7 +69,7 @@ export default function ModaisEdicao({
           ...ativo,
           marca: formEdicaoMassa.marca || ativo.marca,
           modelo: formEdicaoMassa.modelo || ativo.modelo,
-          dados_dinamicos: novosDinamicos, // 🚀 CORREÇÃO: Objeto puro aqui também
+          dados_dinamicos: novosDinamicos,
           usuario_acao: usuarioAtual
         });
       });
@@ -95,12 +94,29 @@ export default function ModaisEdicao({
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in" onClick={() => setModalEdicao({ aberto: false, form: {dados_dinamicos:{}} })}>
           <div className="w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden border border-white/10 animate-scale-up flex flex-col max-h-[90vh]" style={{backgroundColor: 'var(--bg-card)'}} onClick={e => e.stopPropagation()}>
             
-            <div className="p-6 border-b flex items-center gap-3 shrink-0" style={{ borderColor: 'var(--border-light)', background: 'linear-gradient(to right, rgba(59, 130, 246, 0.05), transparent)' }}>
-              <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">✏️</div>
-              <div>
-                <h3 className="text-xl font-black tracking-tight" style={{color: 'var(--text-main)'}}>Editar Ativo</h3>
-                <p className="text-xs font-bold opacity-50 uppercase tracking-widest" style={{color: 'var(--text-muted)'}}>Correção de dados cadastrais</p>
+            <div className="p-6 border-b flex items-center justify-between shrink-0" style={{ borderColor: 'var(--border-light)', background: 'linear-gradient(to right, rgba(59, 130, 246, 0.05), transparent)' }}>
+              <div className="flex items-center gap-3">
+                 <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">✏️</div>
+                 <div>
+                   <h3 className="text-xl font-black tracking-tight" style={{color: 'var(--text-main)'}}>Editar Ativo</h3>
+                   <p className="text-xs font-bold opacity-50 uppercase tracking-widest" style={{color: 'var(--text-muted)'}}>Correção de dados cadastrais</p>
+                 </div>
               </div>
+              
+              {/* 🚀 TOGGLE DE DOMÍNIO PRÓPRIO ADICIONADO AQUI NO CABEÇALHO */}
+              <div className="flex items-center gap-3 bg-indigo-50 px-4 py-2 rounded-xl border border-indigo-100">
+                <span className="text-[10px] font-black uppercase text-indigo-700 tracking-widest">🔖 Equipamento Próprio?</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="sr-only peer" 
+                    checked={modalEdicao.form.dominio_proprio || false}
+                    onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, dominio_proprio: e.target.checked}})}
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </label>
+              </div>
+
             </div>
 
             <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
@@ -179,6 +195,7 @@ export default function ModaisEdicao({
                       <option value="Correção de Especificações">Correção de Especificações</option>
                       <option value="Upgrade de Hardware">Upgrade de Hardware</option>
                       <option value="Correção de Digitação">Correção de Digitação</option>
+                      <option value="Atualização de Domínio Próprio">Atualização de Domínio Próprio</option>
                     </select>
                   </div>
                   <textarea className="w-full p-3 rounded-xl border font-medium outline-none focus:ring-2 focus:ring-blue-500/20 min-h-[80px] transition-all" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} placeholder="Selecione uma resposta rápida acima ou digite o motivo aqui..." value={motivoEdicao} onChange={e => setMotivoEdicao(e.target.value)} />

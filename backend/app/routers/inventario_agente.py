@@ -3,6 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Body
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified # 🚀 A BALA DE PRATA CONTRA O BUG DO SQLALCHEMY
 from app.models import Ativo, Categoria, HistoricoLeitura
 from .inventario_core import get_db, obter_proximo_patrimonio
 from dotenv import load_dotenv
@@ -15,7 +16,7 @@ COMANDO_GLOBAL = {"id": None, "status": "OCIOSO", "timestamp": None, "agentes_co
 
 @router.get("/download/agente")
 def baixar_agente():
-    versao = os.getenv('AGENTE_VERSION', '5.6')
+    versao = os.getenv('AGENTE_VERSION', '5.7')
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     caminho_arquivo = os.path.join(BASE_DIR, "app", "static", f"Nexus_Instalador_v{versao}.exe")
     if os.path.exists(caminho_arquivo):
@@ -24,16 +25,25 @@ def baixar_agente():
 
 @router.get("/agente/versao")
 def versao_agente():
-    versao = os.getenv('AGENTE_VERSION', '5.6')
+    versao = os.getenv('AGENTE_VERSION', '5.7')
     return {"versao_atual": versao, "url_download": "/api/inventario/download/agente"}
 
 @router.post("/agente/coleta")
 def receber_coleta_agente(dados: dict = Body(...), db: Session = Depends(get_db)):
+
+    print("\n" + "="*50)
+    print("CHEGOU COLETA DO PATRIMONIO:", dados.get("patrimonio_manual"))
+    print("DADOS AVANÇADOS QUE O BACKEND RECEBEU:")
+    print(json.dumps(dados.get("dados_avancados", {}), indent=2))
+    print("="*50 + "\n")
+
     mac_recebido = dados.get("mac", "Desconhecido")
     serial_recebido = dados.get("serial", "Desconhecido")
     patrimonio_manual = str(dados.get("patrimonio_manual", "")).strip()
     override = dados.get("override_patrimonio", False)
     uuid_persistente = dados.get("uuid_persistente")
+    
+    dados_avancados = dados.get("dados_avancados", {})
 
     ativo_existente = db.query(Ativo).filter(Ativo.uuid_persistente == uuid_persistente).first() if uuid_persistente else None
 
@@ -61,15 +71,32 @@ def receber_coleta_agente(dados: dict = Body(...), db: Session = Depends(get_db)
             "Endereço IP": dados.get("ip", "Desconhecido"), f"Disco Rígido [{dados.get('tipo_disco', 'HD')}]": dados.get("disco")
         }
 
+    # Mescla os dados avançados na raiz
+    if dados_avancados:
+        hardwares.update(dados_avancados)
+
     paginas = hardwares.get("Páginas Impressas") or hardwares.get("paginas_totais") or hardwares.get("Paginas")
 
     if ativo_existente:
         if patrimonio_manual and patrimonio_manual != ativo_existente.patrimonio and dados.get("secretaria") != "Ping Automático":
-            if not override: return {"status": "conflict", "message": "Patrimônio em uso"}
-            else: ativo_existente.patrimonio = patrimonio_manual
+            outro = db.query(Ativo).filter(Ativo.patrimonio == patrimonio_manual).first()
+            if outro and outro.id != ativo_existente.id:
+                if not override: return {"status": "conflict", "message": "Patrimônio em uso"}
+            ativo_existente.patrimonio = patrimonio_manual
 
         ativo_existente.ultima_comunicacao = datetime.utcnow()
-        ativo_existente.dados_dinamicos = hardwares
+        
+        # 🚀 AQUI NÓS FORÇAMOS O BANCO A ENTENDER QUE O JSON MUDOU
+        dict_atual = dict(ativo_existente.dados_dinamicos or {})
+        if isinstance(dict_atual, str):
+            try: dict_atual = json.loads(dict_atual)
+            except: dict_atual = {}
+        
+        dict_atual.update(hardwares)
+        
+        ativo_existente.dados_dinamicos = dict_atual
+        flag_modified(ativo_existente, "dados_dinamicos") # 🚀 FORÇA O UPDATE DO SQLALCHEMY!
+        
         ativo_existente.marca = dados.get("marca") or ativo_existente.marca
         ativo_existente.modelo = dados.get("modelo") or ativo_existente.modelo
         
@@ -93,7 +120,9 @@ def receber_coleta_agente(dados: dict = Body(...), db: Session = Depends(get_db)
         novo_ativo = Ativo(
             patrimonio=novo_patrimonio, categoria_id=cat.id, uuid_persistente=uuid_persistente, 
             marca=dados.get("marca", ""), modelo=dados.get("modelo", ""), secretaria=dados.get("secretaria", "A Definir"), 
-            setor=dados.get("setor", "A Definir"), tecnico="Nexus Agente", status="ATIVO", dados_dinamicos=hardwares, ultima_comunicacao=datetime.utcnow()
+            setor=dados.get("setor", "A Definir"), tecnico="Nexus Agente", status="ATIVO", 
+            dados_dinamicos=hardwares,
+            ultima_comunicacao=datetime.utcnow()
         )
         db.add(novo_ativo); db.flush() 
         
@@ -104,6 +133,7 @@ def receber_coleta_agente(dados: dict = Body(...), db: Session = Depends(get_db)
         db.commit()
         return {"status": "success", "patrimonio": novo_patrimonio}
 
+# ================= RESTO DO ARQUIVO MANTIDO INTACTO ================= 
 @router.post("/solicitar_coleta")
 def solicitar_coleta():
     COMANDO_GLOBAL["id"] = str(uuid.uuid4()); COMANDO_GLOBAL["status"] = "BROADCASTING"; COMANDO_GLOBAL["timestamp"] = datetime.utcnow(); COMANDO_GLOBAL["agentes_concluidos"] = 0
@@ -133,3 +163,21 @@ def status_comando_global():
         if COMANDO_GLOBAL["status"] == "BROADCASTING" and segundos >= 60: COMANDO_GLOBAL["status"] = "CONCLUIDO"
         elif segundos > 120: COMANDO_GLOBAL["status"] = "OCIOSO"
     return {"status": COMANDO_GLOBAL["status"], "agentes_concluidos": COMANDO_GLOBAL.get("agentes_concluidos", 0)}
+
+CAMINHO_TOPOLOGIA = os.path.join(os.path.dirname(__file__), "..", "..", "data", "topologia.json")
+
+@router.post("/topologia")
+def salvar_topologia(payload: dict = Body(...)):
+    """Salva o mapa atual desenhado no React Flow"""
+    os.makedirs(os.path.dirname(CAMINHO_TOPOLOGIA), exist_ok=True)
+    with open(CAMINHO_TOPOLOGIA, "w", encoding="utf-8") as f:
+        json.dump(payload, f)
+    return {"status": "success", "message": "Topologia salva com sucesso!"}
+
+@router.get("/topologia")
+def ler_topologia():
+    """Carrega o mapa para todos os usuários"""
+    if os.path.exists(CAMINHO_TOPOLOGIA):
+        with open(CAMINHO_TOPOLOGIA, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"nodes": [], "edges": []}

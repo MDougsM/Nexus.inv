@@ -1,10 +1,11 @@
 [Setup]
 AppName=Nexus Agente Auto Discovery
-AppVersion=5.7
+AppVersion=6.0
 AppPublisher=Nexus System
-DefaultDirName=C:\Nexus.inv
+; 🚀 MUDANÇA 1: Instalando na ProgramData (Pasta Oculta e Protegida do Windows)
+DefaultDirName={commonappdata}\Nexus_Agent
 DisableProgramGroupPage=yes
-OutputBaseFilename=Nexus_Instalador_v5.7
+OutputBaseFilename=Nexus_Instalador_v6.0
 Compression=lzma
 SolidCompression=yes
 PrivilegesRequired=admin
@@ -16,18 +17,21 @@ CloseApplications=force
 Source: "C:\NexusInv\agente\dist\Nexus_Agente.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
+; Mantém um atalho no Menu Iniciar apenas para o técnico abrir se precisar reconfigurar
 Name: "{commonprograms}\Nexus Agente"; Filename: "{app}\Nexus_Agente.exe"
-; A linha do commonstartup foi removida para evitar conflito com o Watchdog
 
 [Run]
 ; 1. Libera o Windows Defender para não bloquear a automação de C2
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -WindowStyle Hidden -Command ""Add-MpPreference -ExclusionPath '{app}'"""; Flags: runhidden waituntilterminated
 
-; 2. 🚀 A MÁGICA DO AUTO-UPDATE: Cria a Tarefa Agendada rodando como SYSTEM (Deus)
-; Isso garante que quando o agente atualizar em background, o Windows não peça permissão (UAC)
-Filename: "schtasks"; Parameters: "/Create /SC ONLOGON /TN ""NexusWatchdog"" /TR ""\""{app}\Nexus_Agente.exe\"" --silent"" /RU ""SYSTEM"" /RL HIGHEST /F"; Flags: runhidden
+; 2. 🚀 A MÁGICA DO MILVUS: Cria a Tarefa Agendada no BOOT (ONSTART) rodando como SYSTEM (Deus)
+; Isso faz o agente iniciar invisível assim que o PC liga, sem precisar de login de usuário!
+Filename: "schtasks"; Parameters: "/Create /SC ONSTART /TN ""NexusWatchdog"" /TR ""\""{app}\Nexus_Agente.exe\"""" /RU ""SYSTEM"" /RL HIGHEST /F"; Flags: runhidden
 
-; 3. Inicia o agente NORMALMENTE (Com a tela visual) para o técnico fazer a primeira vinculação
+; 3. 🚀 DISPARO IMEDIATO: Se a instalação for furtiva (pelo nosso painel web), ele já inicia a tarefa em background na hora
+Filename: "schtasks"; Parameters: "/Run /TN ""NexusWatchdog"""; Flags: runhidden
+
+; 4. Inicia a interface gráfica para o técnico APENAS se a instalação for manual (2 cliques do mouse)
 Filename: "{app}\Nexus_Agente.exe"; Description: "Abrir Nexus Agente para Cadastro"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]

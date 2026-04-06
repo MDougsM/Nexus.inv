@@ -11,7 +11,8 @@ import { getNomeTipoEquipamento, getStatusBadge } from '../utils/helpers';
 import BarraPesquisa from '../components/Cadastro/BarraPesquisa';
 import BarraAcoesLote from '../components/Cadastro/BarraAcoesLote';
 import TabelaInventario from '../components/Cadastro/TabelaInventario';
-import TerminalRemoto from '../components/Cadastro/TerminalRemoto'; // 🚀 IMPORTAÇÃO
+import TerminalRemoto from '../components/Cadastro/TerminalRemoto';
+import MapaRede from '../components/MapaRede';
 
 export default function Cadastro() {
   const [abaAtiva, setAbaAtiva] = useState('lista'); 
@@ -230,6 +231,7 @@ export default function Cadastro() {
         <button onClick={() => setAbaAtiva('lista')} className={`pb-3 text-sm font-bold border-b-2 transition-colors ${abaAtiva === 'lista' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><span>🔍</span> Busca e Gestão</button>
         <button onClick={() => setAbaAtiva('novo')} className={`pb-3 text-sm font-bold border-b-2 transition-colors ${abaAtiva === 'novo' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><span>➕</span> Novo Cadastro</button>
         <button onClick={() => setAbaAtiva('manutencao')} className={`pb-3 text-sm font-bold border-b-2 transition-colors ${abaAtiva === 'manutencao' ? 'border-red-500 text-red-500' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><span>📜</span> Histórico & Descartes</button>
+        <button onClick={() => setAbaAtiva('mapa')} className={`pb-3 text-sm font-bold border-b-2 transition-colors ${abaAtiva === 'mapa' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><span>🕸️</span> Topologia de Rede</button>
       </div>
 
       {abaAtiva === 'lista' && (
@@ -306,6 +308,11 @@ export default function Cadastro() {
 
       {abaAtiva === 'novo' && <AbaNovoCadastro categorias={categorias} secretarias={secretarias} usuarioAtual={usuarioAtual} carregarDados={carregarDados} setAbaAtiva={setAbaAtiva} ativoClonado={ativoClonado} setAtivoClonado={setAtivoClonado} ativos={ativos} />}
       {abaAtiva === 'manutencao' && <AbaManutencao historicoManut={historicoManut} carregarDados={carregarDados} />}
+      {abaAtiva === 'mapa' && (
+        <div className="mt-4 animate-fade-in">
+           <MapaRede ativos={ativos} />
+        </div>
+      )}
 
       {/* COMPONENTES DE MODAIS EXECUTANDO EM SEGUNDO PLANO */}
       <ModaisEdicao modalEdicao={modalEdicao} setModalEdicao={setModalEdicao} modalEdicaoMassa={modalEdicaoMassa} setModalEdicaoMassa={setModalEdicaoMassa} categorias={categorias} secretarias={secretarias} usuarioAtual={usuarioAtual} carregarDados={carregarDados} setSelecionados={setSelecionados} ativos={ativos} />
