@@ -73,48 +73,56 @@ export default function Cadastro() {
   }, [location]); // Agora ele monitora a URL (location)
 
   const ativosFiltrados = ativos.filter(a => {
-    const termos = buscaGeral.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-    const tipoNome = getNomeTipoEquipamento(a, categorias)?.toLowerCase() || '';
-    
-    // 🚀 EXTRAÇÃO SEGURA: Abre o pacote de dados do SNMP (IP, Hostname, SN)
-    let din = {};
-    try {
-      din = typeof a.dados_dinamicos === 'string' ? JSON.parse(a.dados_dinamicos) : (a.dados_dinamicos || {});
-    } catch(e){}
-
-    // Mapeia os campos ocultos, convertendo tudo para minúsculo para a busca não falhar
-    const ipBusca = (din.ip || din.IP || '').toLowerCase();
-    const snBusca = (a.uuid_persistente || din.serial || din.Serial || '').toLowerCase();
-    const hostBusca = (din.hostname || din.Hostname || din.Modelo || a.nome_personalizado || '').toLowerCase();
-
-    // 🚀 A NOVA BUSCA SUPER PODEROSA
-    const matchBusca = termos.length === 0 || termos.some(termo => 
-      (a.patrimonio || '').toLowerCase().includes(termo) || 
-      (a.marca || '').toLowerCase().includes(termo) || 
-      (a.modelo || '').toLowerCase().includes(termo) || 
-      tipoNome.includes(termo) ||
-      (a.secretaria || '').toLowerCase().includes(termo) || 
-      (a.setor || '').toLowerCase().includes(termo) ||
-      ipBusca.includes(termo) ||   // Busca por IP
-      snBusca.includes(termo) ||   // Busca por SN
-      hostBusca.includes(termo)    // Busca por Nome/Hostname
-    );
-    
-    // 🧠 LÓGICA DE FILTRO STATUS (Mantida intacta)
+    // 🧠 1. LÓGICA DE FILTRO STATUS (Mantida sua lógica dos 3 dias)
     let matchStatus = true;
     if (filtroStatus === 'ONLINE' || filtroStatus === 'OFFLINE') {
       let isOnline = false;
       if (a.ultima_comunicacao) {
         const dataCom = new Date(a.ultima_comunicacao + 'Z');
         const diffDias = (new Date() - dataCom) / (1000 * 60 * 60 * 24);
-        isOnline = diffDias < 3; // Regra dos 3 dias
+        isOnline = diffDias < 3; 
       }
       matchStatus = (filtroStatus === 'ONLINE') ? isOnline : !isOnline;
     } else if (filtroStatus) {
       matchStatus = a.status?.toUpperCase() === filtroStatus.toUpperCase();
     }
 
-    return matchBusca && matchStatus;
+    // Se a máquina já não passou no filtro de status, descarta imediatamente
+    if (!matchStatus) return false;
+
+    // 🚀 2. A NOVA BUSCA SUPER PODEROSA (ONISCIENTE)
+    if (buscaGeral) {
+      const termos = buscaGeral.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+      const tipoNome = getNomeTipoEquipamento(a, categorias)?.toLowerCase() || '';
+      
+      // Extrai os dados e limpa aspas para não quebrar a leitura
+      let dinamicos = {};
+      try { 
+        dinamicos = typeof a.dados_dinamicos === 'string' 
+          ? JSON.parse(a.dados_dinamicos.replace(/'/g, '"').replace(/None/g, 'null')) 
+          : (a.dados_dinamicos || {}); 
+      } catch(e){}
+
+      // 💥 A MÁGICA: Junta TODOS os dados dinâmicos da máquina em um texto só (IP, MAC, RAM, Chave, etc)
+      const stringDinamica = Object.values(dinamicos).join(' ').toLowerCase();
+
+      // Verifica se o termo digitado bate com QUALQUER coisa da máquina
+      const matchBusca = termos.length === 0 || termos.some(termo => 
+        (a.patrimonio || '').toLowerCase().includes(termo) || 
+        (a.marca || '').toLowerCase().includes(termo) || 
+        (a.modelo || '').toLowerCase().includes(termo) || 
+        (a.nome_personalizado || '').toLowerCase().includes(termo) || // Busca pelo Apelido
+        tipoNome.includes(termo) ||
+        (a.secretaria || '').toLowerCase().includes(termo) || 
+        (a.setor || '').toLowerCase().includes(termo) ||
+        stringDinamica.includes(termo) // 🚀 Busca dentro de TODA a telemetria
+      );
+
+      return matchBusca;
+    }
+
+    // Se não tem pesquisa de texto, e passou no filtro de status, mostra a máquina
+    return true;
   });
 
   const totalPaginas = Math.ceil(ativosFiltrados.length / itensPorPagina);

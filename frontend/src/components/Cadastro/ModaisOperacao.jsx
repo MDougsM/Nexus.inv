@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'react-toastify';
 import api from '../../api/api';
+import ModalDashboardAvancado from './ModalDashboardAvancado'; // 🚀 IMPORTA O COMPONENTE NOVO
 import { QRCodeSVG } from 'qrcode.react';
 import { parseCamposDinamicos, getNomeTipoEquipamento, getStatusBadge } from '../../utils/helpers';
 
@@ -135,7 +136,7 @@ export default function ModaisOperacao({
 
   return (
     <>
-      {/* 🌟 O NOVO "RG" DA MÁQUINA (FICHA TÉCNICA PREMIUM) */}
+      {/* 🌟 A FICHA TÉCNICA (RG DA MÁQUINA) */}
       {modalFicha.aberto && modalFicha.dados && createPortal((() => { 
         const { ativo, historico } = modalFicha.dados;
         const camposPermitidos = parseCamposDinamicos(categorias.find(c => c.id === ativo.categoria_id));
@@ -262,329 +263,20 @@ export default function ModaisOperacao({
                     ))}
                   </div>
                 </div>
-
               </div>
             </div>
           </div> 
         );
       })(), document.body)}
 
-      {/* 🚀 NOVA TELA: DADOS AVANÇADOS (MILVUS STYLE) */}
-      {modalAvancado && modalFicha?.dados?.ativo && createPortal((() => {
-         const dadosDin = parseJSONSeguro(modalFicha.dados.ativo.dados_dinamicos);
-         
-         let advAntigo = dadosDin?.dados_avancados || {};
-         if (typeof advAntigo === 'string') advAntigo = parseJSONSeguro(advAntigo);
-         const adv = { ...advAntigo, ...dadosDin };
-
-         const placaMae = adv.placa_mae || 'N/A';
-         const nucleos = adv.nucleos_cpu || 'N/A';
-         const telemetria = adv.telemetria || { cpu_percent: 0, ram_percent: 0 };
-         const discos = Array.isArray(adv.discos_logicos) ? adv.discos_logicos : [];
-         const redes = Array.isArray(adv.redes) ? adv.redes : [];
-         const gpus = Array.isArray(adv.gpu) ? adv.gpu : [];
-         const softwares = Array.isArray(adv.softwares) ? adv.softwares : [];
-         const servicos = Array.isArray(adv.servicos) ? adv.servicos : [];
-         const slotsRam = Array.isArray(adv.memoria_ram_slots) ? adv.memoria_ram_slots : [];
-         const impressoras = Array.isArray(adv.impressoras) ? adv.impressoras : [];
-         const scanners = Array.isArray(adv.scanners_e_webcams) ? adv.scanners_e_webcams : [];
-
-         return (
-            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-fade-in print:hidden" onClick={() => setModalAvancado(false)}>
-              <div className="w-full max-w-7xl h-[95vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-light)' }} onClick={e => e.stopPropagation()}>
-                
-                <div className="p-8 border-b flex justify-between items-center bg-gradient-to-r from-gray-900 to-gray-800 text-white shadow-md">
-                   <div>
-                     <h2 className="text-3xl font-black flex items-center gap-3 tracking-tight">
-                        <span className="bg-blue-600 p-2 rounded-xl">💻</span> Inventário Profundo
-                     </h2>
-                     <p className="text-sm text-blue-200 mt-2 font-mono uppercase tracking-widest font-bold">
-                        {modalFicha.dados.ativo.patrimonio} • {modalFicha.dados.ativo.hostname || 'Desconhecido'}
-                     </p>
-                   </div>
-                   <button onClick={() => setModalAvancado(false)} className="w-12 h-12 bg-white/10 hover:bg-red-500 rounded-2xl flex items-center justify-center text-2xl transition-all border border-white/10 hover:scale-105 active:scale-95">&times;</button>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-black/5">
-                  <div className="space-y-10">
-
-                    {/* BLOCO 1: NÚCLEO DO SISTEMA */}
-                    <section>
-                      <h3 className="text-lg font-black uppercase tracking-widest mb-4 flex items-center gap-2 opacity-80" style={{ color: 'var(--text-main)' }}>⚙️ Núcleo do Sistema</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                         <div className="p-5 rounded-2xl bg-white shadow-sm border hover:shadow-md transition-all" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-                            <p className="text-[10px] font-black uppercase opacity-50 mb-1" style={{ color: 'var(--text-muted)' }}>Placa Mãe</p>
-                            <p className="text-xl font-black truncate" title={placaMae} style={{ color: 'var(--text-main)' }}>{placaMae}</p>
-                         </div>
-                         <div className="p-5 rounded-2xl bg-white shadow-sm border hover:shadow-md transition-all" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-                            <p className="text-[10px] font-black uppercase opacity-50 mb-1" style={{ color: 'var(--text-muted)' }}>Processamento</p>
-                            <p className="text-xl font-black" style={{ color: 'var(--text-main)' }}>{nucleos} Threads</p>
-                         </div>
-                         <div className="p-5 rounded-2xl bg-white shadow-sm border hover:shadow-md transition-all lg:col-span-2" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-                            <p className="text-[10px] font-black uppercase opacity-50 mb-1" style={{ color: 'var(--text-muted)' }}>Esforço Atual (Telemetria)</p>
-                            <div className="flex gap-4 mt-1">
-                               <div className="flex-1 bg-blue-500/10 rounded-lg p-2 flex items-center justify-between border border-blue-500/20">
-                                  <span className="text-xs font-bold text-blue-600 uppercase">CPU</span>
-                                  <span className="text-lg font-black text-blue-600">{telemetria.cpu_percent}%</span>
-                               </div>
-                               <div className="flex-1 bg-purple-500/10 rounded-lg p-2 flex items-center justify-between border border-purple-500/20">
-                                  <span className="text-xs font-bold text-purple-600 uppercase">RAM</span>
-                                  <span className="text-lg font-black text-purple-600">{telemetria.ram_percent}%</span>
-                               </div>
-                            </div>
-                         </div>
-                      </div>
-                    </section>
-
-                    {/* BLOCO 2: MEMÓRIA RAM POR SLOT */}
-                    <section>
-                      <h3 className="text-lg font-black uppercase tracking-widest mb-4 flex items-center gap-2 opacity-80" style={{ color: 'var(--text-main)' }}>🧠 Módulos de Memória (Slots)</h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                        {slotsRam.length === 0 ? <p className="text-sm opacity-50 col-span-full">Nenhum módulo detalhado encontrado.</p> : slotsRam.map((ram, i) => (
-                           <div key={i} className="p-5 rounded-2xl shadow-sm border relative overflow-hidden hover:scale-[1.02] transition-all" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-                              <div className="absolute -right-4 -top-4 text-6xl opacity-5">🧠</div>
-                              <p className="text-[10px] font-black uppercase tracking-widest opacity-50 mb-2" style={{ color: 'var(--text-muted)' }}>{ram.slot}</p>
-                              <p className="text-2xl font-black text-purple-600">{ram.capacidade_gb} GB</p>
-                              <div className="flex justify-between items-end mt-3">
-                                 <p className="text-xs font-bold truncate w-2/3" style={{ color: 'var(--text-main)' }} title={ram.fabricante}>{ram.fabricante}</p>
-                                 <p className="text-xs font-mono font-bold px-2 py-1 bg-black/5 rounded-md" style={{ color: 'var(--text-muted)' }}>{ram.velocidade_mhz} MHz</p>
-                              </div>
-                           </div>
-                        ))}
-                      </div>
-                    </section>
-
-                    {/* BLOCO 3: REDE E ARMAZENAMENTO */}
-                    <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                       <div>
-                         <h3 className="text-lg font-black uppercase tracking-widest mb-4 flex items-center gap-2 opacity-80" style={{ color: 'var(--text-main)' }}>💾 Armazenamento Lógico</h3>
-                         <div className="space-y-3">
-                           {discos.length === 0 ? <p className="text-sm opacity-50">Nenhum disco detectado.</p> : discos.map((d, i) => (
-                             <div key={i} className="p-4 rounded-xl border flex justify-between items-center bg-white hover:shadow-md transition-all" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
-                                <div className="flex items-center gap-3">
-                                  <span className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-lg">💿</span>
-                                  <span className="font-black text-xl" style={{ color: 'var(--text-main)' }}>{d.drive}</span>
-                                </div>
-                                <div className="text-right flex flex-col items-end">
-                                  <p className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 mb-1">Livre: {d.livre_gb}GB</p>
-                                  <p className="text-[10px] font-black uppercase opacity-50" style={{ color: 'var(--text-muted)' }}>Total: {d.tamanho_gb}GB</p>
-                                </div>
-                             </div>
-                           ))}
-                         </div>
-                       </div>
-
-                       <div>
-                         <h3 className="text-lg font-black uppercase tracking-widest mb-4 flex items-center gap-2 opacity-80" style={{ color: 'var(--text-main)' }}>🌐 Interfaces de Rede</h3>
-                         <div className="space-y-3">
-                           {redes.length === 0 ? <p className="text-sm opacity-50">Nenhuma rede detectada.</p> : redes.map((r, i) => (
-                             <div key={i} className="p-4 rounded-xl border bg-white hover:shadow-md transition-all" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
-                                <p className="font-bold text-sm truncate mb-3" style={{ color: 'var(--text-main)' }} title={r.descricao}>{r.descricao}</p>
-                                <div className="flex gap-3">
-                                  <span className="text-xs font-mono font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded">IP: {r.ip}</span>
-                                  <span className="text-xs font-mono font-bold bg-gray-100 px-2 py-1 rounded" style={{ color: 'var(--text-muted)' }}>MAC: {r.mac}</span>
-                                </div>
-                             </div>
-                           ))}
-                         </div>
-                       </div>
-                    </section>
-
-                    {/* BLOCO 4: PERIFÉRICOS (IMPRESSORAS, SCANNERS E GPUS) */}
-                    <section>
-                      <h3 className="text-lg font-black uppercase tracking-widest mb-4 flex items-center gap-2 opacity-80" style={{ color: 'var(--text-main)' }}>🖨️ Periféricos e Mapeamentos</h3>
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                         
-                         <div className="p-6 rounded-3xl border shadow-sm" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-                            <h4 className="text-[11px] font-black uppercase opacity-50 mb-4 tracking-widest" style={{ color: 'var(--text-muted)' }}>Fila de Impressão ({impressoras.length})</h4>
-                            <div className="space-y-3 max-h-64 overflow-y-auto custom-scrollbar pr-2">
-                               {impressoras.length === 0 ? <p className="text-sm opacity-50">Nenhuma impressora mapeada.</p> : impressoras.map((imp, i) => (
-                                  <div key={i} className="p-3 border rounded-xl flex items-center justify-between" style={{ borderColor: 'var(--border-light)', backgroundColor: 'var(--bg-card)' }}>
-                                     <div className="w-2/3">
-                                        <div className="flex items-center gap-2">
-                                           <p className="font-bold text-sm truncate" style={{ color: 'var(--text-main)' }} title={imp.nome}>{imp.nome}</p>
-                                           {imp.padrao && <span className="bg-amber-100 text-amber-700 text-[9px] font-black uppercase px-2 py-0.5 rounded">Padrão</span>}
-                                        </div>
-                                        <p className="text-[10px] font-mono mt-1 opacity-60" style={{ color: 'var(--text-muted)' }}>{imp.porta}</p>
-                                     </div>
-                                     <span className={`text-[10px] font-black uppercase px-2 py-1 rounded ${imp.tipo === 'Rede' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>
-                                        {imp.tipo}
-                                     </span>
-                                  </div>
-                               ))}
-                            </div>
-                         </div>
-
-                         <div className="space-y-6">
-                            <div className="p-6 rounded-3xl border shadow-sm" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-                               <h4 className="text-[11px] font-black uppercase opacity-50 mb-4 tracking-widest" style={{ color: 'var(--text-muted)' }}>Adaptadores de Vídeo ({gpus.length})</h4>
-                               <div className="space-y-3">
-                                  {gpus.length === 0 ? <p className="text-sm opacity-50">Sem GPU dedicada.</p> : gpus.map((g, i) => (
-                                     <div key={i} className="p-3 border rounded-xl flex justify-between items-center" style={{ borderColor: 'var(--border-light)', backgroundColor: 'var(--bg-card)' }}>
-                                        <div>
-                                          <p className="font-bold text-sm" style={{ color: 'var(--text-main)' }}>{g.nome}</p>
-                                          <p className="text-[10px] font-mono opacity-60 mt-1" style={{ color: 'var(--text-muted)' }}>Driver: {g.driver}</p>
-                                        </div>
-                                        <span className="text-xs font-black px-3 py-1 bg-black/5 rounded-lg" style={{ color: 'var(--text-main)' }}>{g.vram_mb} MB</span>
-                                     </div>
-                                  ))}
-                               </div>
-                            </div>
-
-                            <div className="p-6 rounded-3xl border shadow-sm" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-                               <h4 className="text-[11px] font-black uppercase opacity-50 mb-4 tracking-widest" style={{ color: 'var(--text-muted)' }}>Scanners e Imagem ({scanners.length})</h4>
-                               <div className="flex flex-wrap gap-2">
-                                  {scanners.length === 0 ? <p className="text-sm opacity-50">Nenhum scanner ou webcam detectado.</p> : scanners.map((scan, i) => (
-                                     <span key={i} className="text-xs font-bold px-3 py-1.5 rounded border shadow-sm flex items-center gap-2" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
-                                        📷 {scan}
-                                     </span>
-                                  ))}
-                               </div>
-                            </div>
-                         </div>
-
-                      </div>
-                    </section>
-
-                    {/* BLOCO 5: SOFTWARES E SERVIÇOS */}
-                    <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                      <div className="lg:col-span-2">
-                        <h3 className="text-lg font-black uppercase tracking-widest mb-4 flex items-center gap-2 opacity-80" style={{ color: 'var(--text-main)' }}>📦 Softwares Instalados ({softwares.length})</h3>
-                        <div className="rounded-2xl border overflow-hidden shadow-sm" style={{ borderColor: 'var(--border-light)' }}>
-                          <div className="max-h-96 overflow-y-auto custom-scrollbar">
-                            <table className="w-full text-left text-sm">
-                              <thead className="sticky top-0 z-10 text-[10px] uppercase font-black backdrop-blur-md bg-white/90" style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border-light)' }}>
-                                <tr>
-                                  <th className="p-4 border-r" style={{ borderColor: 'var(--border-light)' }}>Nome do Programa</th>
-                                  <th className="p-4 border-r hidden sm:table-cell" style={{ borderColor: 'var(--border-light)' }}>Fabricante</th>
-                                  <th className="p-4">Versão</th>
-                                </tr>
-                              </thead>
-                              <tbody style={{ backgroundColor: 'var(--bg-card)' }}>
-                                {softwares.length === 0 ? (
-                                  <tr><td colSpan="3" className="p-6 text-center font-bold opacity-50">Nenhum software listado.</td></tr>
-                                ) : softwares.map((s, i) => (
-                                  <tr key={i} className="border-b last:border-0 hover:bg-black/5 transition-all" style={{ borderColor: 'var(--border-light)' }}>
-                                    <td className="p-4 font-bold border-r" style={{ color: 'var(--text-main)', borderColor: 'var(--border-light)' }}>{s.nome}</td>
-                                    <td className="p-4 opacity-70 border-r hidden sm:table-cell" style={{ color: 'var(--text-main)', borderColor: 'var(--border-light)' }}>{s.fabricante}</td>
-                                    <td className="p-4 font-mono text-[10px] opacity-70 font-bold" style={{ color: 'var(--text-main)' }}>{s.versao}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-lg font-black uppercase tracking-widest mb-4 flex items-center gap-2 opacity-80" style={{ color: 'var(--text-main)' }}>⚙️ Serviços (Running)</h3>
-                        <div className="flex flex-wrap content-start gap-2 max-h-96 overflow-y-auto p-5 rounded-2xl border shadow-sm custom-scrollbar" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-                           {servicos.length === 0 ? <p className="text-sm opacity-50">Nenhum serviço listado.</p> : servicos.map((srv, i) => (
-                              <span key={i} title={srv.nome} className="text-[10px] font-bold px-2.5 py-1.5 rounded-md border shadow-sm hover:scale-105 transition-all cursor-default" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
-                                {srv.display || srv.nome}
-                              </span>
-                           ))}
-                        </div>
-                      </div>
-                    </section>
-
-                    {/* ========================================== */}
-                    {/* 🚀 BLOCO 6: AUDITORIA DE SEGURANÇA (ATUALIZADO S.M.A.R.T) */}
-                    {/* ========================================== */}
-                    <section className="mt-8 bg-red-500/5 p-6 rounded-3xl border border-red-500/20 shadow-sm relative overflow-hidden">
-                      <div className="absolute -right-10 -top-10 text-9xl opacity-5">🛡️</div>
-                      <h3 className="text-red-500 font-black uppercase tracking-widest mb-6 flex items-center gap-2 relative z-10">🛡️ Auditoria Ciber e Compliance</h3>
-                      
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 relative z-10">
-                        {/* Antivírus */}
-                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-red-500/10 hover:shadow-md transition-all">
-                            <p className="text-[10px] uppercase font-black text-gray-400 mb-1">Status do Antivírus</p>
-                            {adv.seguranca?.antivirus && adv.seguranca.antivirus.length > 0 ? (
-                               adv.seguranca.antivirus.map((av, i) => (
-                                 <div key={i} className="mb-2 last:mb-0">
-                                   <p className="font-black text-sm text-gray-800">{av.nome}</p>
-                                   <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase ${av.status === 'Ativo' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{av.status}</span>
-                                 </div>
-                               ))
-                            ) : (
-                               <p className="font-black text-sm text-red-600">⚠️ Desprotegido</p>
-                            )}
-                        </div>
-
-                        {/* BitLocker */}
-                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-red-500/10 hover:shadow-md transition-all">
-                            <p className="text-[10px] uppercase font-black text-gray-400 mb-1">BitLocker (Criptografia)</p>
-                            <p className={`font-black text-sm ${adv.seguranca?.bitlocker?.includes('Ativo') ? 'text-emerald-600' : 'text-red-600'}`}>
-                                {adv.seguranca?.bitlocker || 'Desativado / N/A'}
-                            </p>
-                        </div>
-
-                        {/* Uptime */}
-                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-red-500/10 hover:shadow-md transition-all">
-                            <p className="text-[10px] uppercase font-black text-gray-400 mb-1">Uptime (Ligado há)</p>
-                            <p className="font-black text-lg text-blue-600">
-                                {adv.saude?.uptime || 'Desconhecido'}
-                            </p>
-                            <p className="text-[9px] font-bold text-gray-400 mt-1 uppercase">Sem reiniciar</p>
-                        </div>
-
-                        {/* 🚀 Saúde do Disco S.M.A.R.T (Substituindo a Bateria) */}
-                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-red-500/10 hover:shadow-md transition-all">
-                            <p className="text-[10px] uppercase font-black text-gray-400 mb-1">Saúde do Armazenamento</p>
-                            <p className={`font-black text-sm ${adv.saude?.armazenamento?.includes('OK') ? 'text-emerald-600' : 'text-red-600'}`}>
-                                {adv.saude?.armazenamento?.includes('OK') ? '💾 ' : ''}{adv.saude?.armazenamento || 'Desconhecido'}
-                            </p>
-                        </div>
-                      </div>
-                      
-                      {/* Licenciamento Windows */}
-                      <div className="bg-white p-5 rounded-2xl shadow-sm border border-red-500/10 hover:shadow-md transition-all mt-4 relative z-10">
-                          <p className="text-[10px] uppercase font-black text-gray-400 mb-1">Licença do Windows</p>
-                          <p className={`font-black text-sm ${adv.seguranca?.licenca_windows?.status?.includes('Licenciado') ? 'text-emerald-600' : 'text-red-600'}`}>
-                              {adv.seguranca?.licenca_windows?.status || 'Não Verificado'}
-                          </p>
-                          <div className="text-[9px] mt-1 space-y-0.5">
-                              <p className="font-bold text-gray-500 truncate">{adv.seguranca?.licenca_windows?.tipo}</p>
-                              <p className="text-blue-500 font-black">Validade: {adv.seguranca?.licenca_windows?.expira}</p>
-                          </div>
-                      </div>
-                    </section>
-
-                    {/* BLOCO 7: SETUP FÍSICO E BOOT */}
-                    <section className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
-                       <div>
-                         <h3 className="text-lg font-black uppercase tracking-widest mb-4 flex items-center gap-2 opacity-80" style={{ color: 'var(--text-main)' }}>🖥️ Displays Conectados</h3>
-                         <div className="space-y-3">
-                           {adv.perifericos?.monitores?.length > 0 ? adv.perifericos.monitores.map((m, i) => (
-                             <div key={i} className="p-4 rounded-xl border bg-white flex items-center gap-3 shadow-sm hover:shadow-md transition-all" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
-                                <span className="text-2xl">📺</span>
-                                <span className="font-bold text-sm" style={{ color: 'var(--text-main)' }}>{m}</span>
-                             </div>
-                           )) : <p className="text-sm opacity-50">Nenhum monitor extra lido.</p>}
-                         </div>
-                       </div>
-
-                       <div>
-                         <h3 className="text-lg font-black uppercase tracking-widest mb-4 flex items-center gap-2 opacity-80" style={{ color: 'var(--text-main)' }}>🚀 Impacto de Inicialização</h3>
-                         <div className="p-5 rounded-2xl border shadow-sm max-h-64 overflow-y-auto custom-scrollbar" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-                            <p className="text-[10px] font-black uppercase opacity-50 mb-3" style={{ color: 'var(--text-muted)' }}>Programas que iniciam com o Windows</p>
-                            <div className="flex flex-wrap gap-2">
-                              {adv.inicializacao?.length > 0 ? adv.inicializacao.map((prog, i) => (
-                                <span key={i} className="text-[10px] font-bold px-2 py-1 rounded bg-black/5 border shadow-sm" style={{ color: 'var(--text-main)', borderColor: 'var(--border-light)' }}>
-                                  {prog}
-                                </span>
-                              )) : <p className="text-sm opacity-50">Leitura não disponível.</p>}
-                            </div>
-                         </div>
-                       </div>
-                    </section>
-
-                  </div>
-                </div>
-              </div>
-            </div>
-         );
-      })(), document.body)}
+      {/* 🚀 O NOVO DASHBOARD RENDERIZADO COMO COMPONENTE ISOLADO */}
+      {modalAvancado && modalFicha?.dados?.ativo && (
+         <ModalDashboardAvancado 
+            ativo={modalFicha.dados.ativo} 
+            onClose={() => setModalAvancado(false)} 
+            parseJSONSeguro={parseJSONSeguro}
+         />
+      )}
 
       {/* MODAIS (MANTIDOS INTACTOS) */}
       {modalQR.aberto && createPortal(

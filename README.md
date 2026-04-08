@@ -1,71 +1,77 @@
-Ôªø# Nexus.inv - Sistema de Invent√°rio e Agente CMD/C2 (v5.10.1.0)
+# Nexus.inv - Sistema de Invent·rio e Agente CMD/C2 (v6.0.0)
 
-Nexus.inv √© um sistema de invent√°rio de ativos de TI com backend FastAPI, frontend React/Vite, app Sentinel SNMP e um agente remoto (C2) com receptor de comandos CMD/PowerShell e auto-atualiza√ß√£o autom√°tica.
+Nexus.inv È um sistema de invent·rio de ativos de TI com backend FastAPI, frontend React/Vite, app Sentinel SNMP e um agente remoto (C2) com receptor de comandos CMD/PowerShell e **auto-atualizaÁ„o autom·tica**.
 
-## üî• Novidades da vers√£o atual (v5.10.1.0)
+## ?? Novidades da vers„o atual (v6.0.0)
 
-- **Auto-atualiza√ß√£o do Agente**: Agentes instalados detectam e instalam automaticamente novas vers√µes via API `/api/inventario/agente/versao`.
-- **Configura√ß√£o Centralizada de Vers√£o**: Campo `AGENTE_VERSION` no `.env` controla a vers√£o do agente em todo o sistema.
-- **Heartbeat Autom√°tico**: Agente envia sinais de presen√ßa (pings) a cada 1 hora para manter conectividade. Frontend tamb√©m envia heartbeat a cada 60 segundos via `/api/usuarios/ping`.
-- **Modo Background/Silent**: Agente roda invisivelmente como servi√ßo do Windows (SYSTEM) para opera√ß√µes furtivas.
-- **Sistema de Bloqueio por Termos**: Usu√°rios que n√£o aceitaram os termos s√£o bloqueados e redirecionados para `/perfil`.
-- **Recupera√ß√£o de Senha Segura**: Motor SMTP integrado para envio de credenciais tempor√°rias via e-mail.
-- **Identidade Protegida**: Novo campo de E-mail de Recupera√ß√£o integrado ao painel de Perfil do Usu√°rio.
-- Agente com **receptor de comandos via C2** (polling 30s): `api/agente/comandos/pendentes/{uuid_persistente}`
-- Suporte a execu√ß√µes remotas de **PowerShell + CMD** diretamente pela interface de cadastro
-- Endpoint de download do instalador atualizado dinamicamente: `/api/inventario/download/agente` retorna `Nexus_Instalador_v{versao}.exe`
+- **Auto-atualizaÁ„o Autom·tica do Agente**: Agentes instalados detectam e instalam automaticamente novas versıes via API /api/inventario/agente/versao a cada 1 hora.
+  - Download silencioso em background sem interromper o usu·rio.
+  - InstalaÁ„o furtiva com flags /VERYSILENT /SUPPRESSMSGBOXES /NORESTART.
+  - ReinÌcio autom·tico apÛs instalaÁ„o.
+- **ConfiguraÁ„o Centralizada de Vers„o**: Campo AGENTE_VERSION no .env controla a vers„o do agente em todo o sistema.
+- **Heartbeat Autom·tico**: Agente envia sinais de presenÁa (pings) a cada 1 hora para manter conectividade. Frontend tambÈm envia heartbeat a cada 60 segundos via /api/usuarios/ping.
+- **Modo Background/Silent**: Agente roda invisivelmente como serviÁo do Windows (SYSTEM) para operaÁıes furtivas.
+- **Sistema de Bloqueio por Termos**: Usu·rios que n„o aceitaram os termos s„o bloqueados e redirecionados para /perfil.
+- **RecuperaÁ„o de Senha Segura**: Motor SMTP integrado para envio de credenciais tempor·rias via e-mail.
+- **Identidade Protegida**: Novo campo de E-mail de RecuperaÁ„o integrado ao painel de Perfil do Usu·rio.
+- Agente com **receptor de comandos via C2** (polling 30s): pi/agente/comandos/pendentes/{uuid_persistente}
+- Suporte a execuÁıes remotas de **PowerShell + CMD** diretamente pela interface de cadastro
+- Endpoint de download do instalador atualizado dinamicamente: /api/inventario/download/agente retorna Nexus_Instalador_v{versao}.exe
 - Fluxo completo de enfileiramento / leitura / retorno de resultados de comandos
-- Hist√≥rico de execu√ß√£o com status e logs no frontend (`TerminalRemoto`)
+- HistÛrico de execuÁ„o com status e logs no frontend (TerminalRemoto)
 
-## üêõ √öltimas Corre√ß√µes (v5.10.1.0 - 01/04/2026)
+## ?? ⁄ltimas CorreÁıes (v6.0.0 - 08/04/2026)
 
-### ‚úÖ Corre√ß√µes Frontend (UI/UX)
-- **Modais e Pop-ups (React Portals)**: O bug da "faixa transparente" acima dos pop-ups foi erradicado. Todos os modais do sistema agora utilizam `createPortal` para sobrepor o Menu Lateral e o Cabe√ßalho com 100% de cobertura.
-- **MeuPerfil.jsx**: Adicionado formul√°rio inteligente para captura de e-mail e integra√ß√£o visual com os Termos de LGPD. Resolvido loop infinito ao aceitar termos.
-- Adicionada se√ß√£o "Gerenciamento de Termos" com bot√µes de Reler e Revogar Acesso.
+### ? CorreÁıes CrÌticas Backend
+- **Colis„o de Rotas (FastAPI)**: Resolvido o bug onde o main.py interceptava a atualizaÁ„o de perfil (email), ignorando o controlador usuarios.py.
+- InjeÁ„o segura da coluna email no banco de dados (SQLite) sem perda de dados existentes.
+- ValidaÁ„o robusta de 	ermos_aceitos no banco de dados.
+- **ConfiguraÁ„o de Vers„o Din‚mica**: Backend agora lÍ AGENTE_VERSION do .env para APIs de vers„o e download.
 
-### ‚úÖ Corre√ß√µes Cr√≠ticas Backend
-- **Colis√£o de Rotas (FastAPI)**: Resolvido o bug onde o `main.py` interceptava a atualiza√ß√£o de perfil (`email`), ignorando o controlador `usuarios.py`.
-- Inje√ß√£o segura da coluna `email` no banco de dados (SQLite) sem perda de dados existentes.
-- Valida√ß√£o robusta de `termos_aceitos` no banco de dados.
-- **Configura√ß√£o de Vers√£o Din√¢mica**: Backend agora l√™ `AGENTE_VERSION` do `.env` para APIs de vers√£o e download.
+## ?? Estrutura do repositÛrio
 
-## üìÅ Estrutura do reposit√≥rio
+- ackend/ - FastAPI + SQLAlchemy + DB
+- rontend/ - React 18 + Vite + Tailwind
+- Nexus_Print_Sentinel/ - App desktop SNMP
+- gente/ - Agente C2 com auto-atualizaÁ„o
+- ARQUITETURA_SISTEMA.md - documentaÁ„o arquitetural
+- CHANGELOG.md - histÛrico de versıes
 
-- `backend/` - FastAPI + SQLAlchemy + DB
-- `frontend/` - React 18 + Vite + Tailwind
-- `Nexus_Print_Sentinel/` - App desktop SNMP
-- `ARQUITETURA_SISTEMA.md` - documenta√ß√£o arquitetural
-- `CHANGELOG.md` - hist√≥rico de vers√µes
-
-## üß© Componentes principais
+## ?? Componentes principais
 
 ### Backend (FastAPI)
-- Rotas invent√°rio: `/api/inventario/*`
-- Auth: `/api/login`, `/api/usuarios`, `/api/usuarios/recuperar-senha`
-- **Heartbeat do Frontend**: `POST /api/usuarios/ping` atualiza √∫ltimo acesso do usu√°rio
+- Rotas invent·rio: /api/inventario/*
+- Auth: /api/login, /api/usuarios, /api/usuarios/recuperar-senha
+- **Heartbeat do Frontend**: POST /api/usuarios/ping atualiza ˙ltimo acesso do usu·rio
 - Agente C2 e terminal remoto:
-  - `POST /api/comandos/enviar`
-  - `GET /api/comandos/maquina/{patrimonio:path}`
-  - `GET /api/agente/comandos/pendentes/{uuid_persistente}`
-  - `POST /api/agente/comandos/resultado`
-- **Auto-atualiza√ß√£o do Agente**: `/api/inventario/agente/versao` retorna vers√£o atual e URL de download
-- Rota de instalador din√¢mico: `/api/inventario/download/agente` retorna `Nexus_Instalador_v{AGENTE_VERSION}.exe`
-- Rotas de comando global de coleta (legacy): `/api/inventario/agente/comando*`
+  - POST /api/comandos/enviar
+  - GET /api/comandos/maquina/{patrimonio:path}
+  - GET /api/agente/comandos/pendentes/{uuid_persistente}
+  - POST /api/agente/comandos/resultado
+- **Auto-atualizaÁ„o do Agente**: /api/inventario/agente/versao retorna vers„o atual e URL de download
+- Rota de instalador din‚mico: /api/inventario/download/agente retorna Nexus_Instalador_v{AGENTE_VERSION}.exe
+- Rotas de comando global de coleta (legacy): /api/inventario/agente/comando*
 
 ### Frontend (React)
-- Modal Global "Esqueci a Senha" na tela de autentica√ß√£o.
-- P√°gina de configura√ß√µes com bot√£o de download de instalador.
-- `components/Cadastro/TerminalRemoto.jsx` com formul√°rio de script e log.
-- Hist√≥rico de comandos no `ativo.patrimonio`.
+- Modal Global 'Esqueci a Senha' na tela de autenticaÁ„o.
+- P·gina de configuraÁıes com bot„o de download de instalador.
+- components/Cadastro/TerminalRemoto.jsx com formul·rio de script e log.
+- HistÛrico de comandos no tivo.patrimonio.
+
+### Agente (Python + PyInstaller)
+- gente_nexus.pyw - Interface gr·fica com CustomTkinter
+- **Auto-atualizaÁ„o**: Thread em background verifica vers„o a cada 1 hora e instala automaticamente
+- C2 Engine: Escuta comandos remotos via polling 30s
+- Coleta profunda: Hardware, software, licenÁas Windows, antivÌrus, etc.
+- PersistÍncia: ID ˙nico persistente em C:\ProgramData\NexusInv\nexus_dna.txt
 
 ### Sentinel (Desktop)
-- `Nexus_Print_Sentinel/sentinel_app.py` realiza coleta SNMP, status e auditoria.
-- Agente local (`agente_nexus.pyw`) com thread `escutar_comandos_c2(...)`.
+- Nexus_Print_Sentinel/sentinel_app.py realiza coleta SNMP, status e auditoria.
+- Agente local (gente_nexus.pyw) com thread escutar_comandos_c2(...).
 
-## üì¶ Instala√ß√£o
+##  InstalaÁ„o
 
-### Pr√©-requisitos
+### PrÈ-requisitos
 - Python 3.8+
 - Node.js 16+ (ou 20+)
 - Docker + Docker Compose (opcional)
@@ -73,177 +79,87 @@ Nexus.inv √© um sistema de invent√°rio de ativos de TI com backend FastAPI, fron
 
 ### Backend
 
-```ps1
+`ps1
 cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
-```
+`
 
 ### Frontend
 
-```bash
+`ash
 cd frontend
 npm install
 npm run dev
-```
+`
+
+### Agente
+`ps1
+cd agente
+python -m PyInstaller --noconfirm --onefile agente_nexus.pyw
+# Ou usar o spec: python -m PyInstaller agente_nexus.spec
+`
 
 ### Sentinel
 
-```bash
+`ash
 cd Nexus_Print_Sentinel
 pip install -r requirements.txt
 python sentinel_app.py
-```
+`
 
 ### Docker (recomendado)
 
-```bash
-docker-compose up -d --build
-```
+`ash
+docker-compose up --build
+`
 
-## üöÄ Fluxo do Agente C2 (CMD/PowerShell)
+##  Deploy do Agente
 
-1. O frontend chama `POST /api/comandos/enviar` com:
-   - `patrimonio`, `uuid_persistente`, `script_content`, `usuario_emissor`
-2. O backend grava em `comandos_agente` com `status='PENDENTE'`
-3. O agente periodicamente busca em `/api/agente/comandos/pendentes/{uuid}`:
-   - retorna `{tem_comando: true, comando_id, script_content}`
-   - marca `status='EXECUTANDO'`
-4. Agente executa script (cmd/powershell) e envia log para `/api/agente/comandos/resultado`
-5. Frontend atualiza hist√≥rico via `/api/comandos/maquina/{patrimonio}`
+1. **Compilar**: python -m PyInstaller --noconfirm --onefile agente_nexus.pyw
+2. **Empacotar**: Usar Nexus_Agente.iss com Inno Setup
+3. **Distribuir**: Upload do instalador para ackend/app/static/
+4. **Configurar**: Definir AGENTE_VERSION no .env do backend
+5. **Auto-Update**: Agentes instalados se atualizam automaticamente
 
-## üîÑ Auto-atualiza√ß√£o do Agente
+##  SeguranÁa
 
-1. Agente verifica vers√£o atual em `/api/inventario/agente/versao` a cada 1 hora (modo background) ou sob demanda.
-2. Se vers√£o da API > vers√£o local, baixa instalador de `/api/inventario/download/agente`.
-3. Executa instalador silenciosamente (`/VERYSILENT`) e encerra processo para permitir atualiza√ß√£o.
-4. Novo agente inicia automaticamente ap√≥s instala√ß√£o.
-5. Suporte a modo furtivo (sem UAC) quando rodando como SYSTEM via tarefa agendada.
+- **Token de Agente**: NEXUS_AGENTE_V5_9b7e1f2a4c6d8e0f3a5b7c9d1e2f4a6b8c0d2e4f6a8b0c2d
+- **ProteÁ„o C2 VIP**: M·quinas crÌticas rejeitam comandos de tÈcnicos comuns
+- **Chave Privada**: AutenticaÁ„o local para operaÁıes sensÌveis
+- **Logs de Auditoria**: Todas as aÁıes s„o registradas no banco
 
-- Instala√ß√£o do pacote: `backend/app/static/Nexus_Instalador_v{AGENTE_VERSION}.exe`
-- Rota de download no frontend e API aponta dinamicamente para o arquivo baseado em `AGENTE_VERSION` no `.env`
-- **Configura√ß√£o Centralizada**: Altere `AGENTE_VERSION=5.6` no `.env` para atualizar vers√£o em todo o sistema
-- Caso ainda use `Nexus_Instalador.exe`, atualize para a nova nomenclatura nos controllers e frontend.
+##  APIs Principais
 
-## üì° Integra√ß√£o SNMP (Sentinel)
+### Agente
+- POST /api/inventario/agente/coleta - Envio de dados de invent·rio
+- GET /api/inventario/agente/versao - VerificaÁ„o de vers„o
+- GET /api/inventario/download/agente - Download do instalador
 
-- Coleta autom√°tica de contador, toner, e status via SNMP
-- Grava alertas de queda, tempo de funcionamento e IP
-- Hist√≥rico de leituras em `historico_leituras`
+### C2
+- POST /api/comandos/enviar - Enviar comando para agente
+- GET /api/agente/comandos/pendentes/{uuid} - Buscar comandos pendentes
+- POST /api/agente/comandos/resultado - Retornar resultado do comando
 
-## ‚öôÔ∏è Banco de dados
+##  Troubleshooting
 
-Tabelas-chave:
-- `ativos`, `categorias`, `usuarios`, `logs_auditoria`
-- `comandos_agente` (C2)
-- `historico_leituras`
+### Agente n„o conecta
+- Verificar BASE_URL no cÛdigo
+- Checar token X-Nexus-Token
+- Validar conectividade de rede
 
-## üß™ Testes manuais
+### Auto-atualizaÁ„o falha
+- Verificar se AGENTE_VERSION est· definido no .env
+- Confirmar que o instalador est· em ackend/app/static/
+- Checar permissıes de escrita na pasta temp
 
-1. Registrar m√°quina e conferir invent√°rio.
-2. Abrir terminal remoto e enviar script `ipconfig /all` ou `Get-Process`.
-3. Confirmar retorno de log e status `CONCLUIDO` no hist√≥rico.
-4. Testar fluxo de recupera√ß√£o de senha com um e-mail v√°lido.
-5. Verificar rota de download do instalador em `/api/inventario/download/agente`.
-6. Testar bloqueio por termos: criar usu√°rio sem aceitar termos e verificar redirecionamento.
+### C2 n„o executa
+- Agente deve estar rodando como administrador
+- Verificar se a thread C2 est· ativa (logs)
+- Backend deve ter comandos na fila
 
-## üîí Sistema de Bloqueio por Termos de Uso
+---
 
-- Usu√°rios que n√£o aceitaram os termos s√£o automaticamente bloqueados no login.
-- Redirecionamento for√ßado para `/perfil` at√© aceitar os termos.
-- Verifica√ß√£o em tempo real no `Layout.jsx` via API `/api/usuarios/`.
-- Campo `termos_aceitos` no banco de dados controla o acesso.
-- Admin nasce com termos aceitos por padr√£o.
-
-## üìå Dicas de deploy
-
-- Mantenha o `.env` em produ√ß√£o com URLs e credenciais SMTP corretas:
-  - `VITE_API_URL` = URL do Backend
-  - `FRONTEND_URL` = URL do Frontend
-  - `AGENTE_VERSION` = Vers√£o atual do agente (ex.: 5.6) - controla auto-atualiza√ß√£o
-  - `SMTP_EMAIL` = logistica.newpc@gmail.com
-  - `SMTP_PASSWORD` = [SuaSenhaDeApp]
-- Evite sobrescrever `backend/data` e `.env` em updates.
-- Use `docker-compose down -v && docker-compose up -d --build` para limpar caches problem√°ticos.
-
-## üìù Changelog resumido
-- ‚úÖ **[v5.10.1.0]** Auto-atualiza√ß√£o autom√°tica do agente, configura√ß√£o centralizada de vers√£o via `.env`, heartbeat a cada 1 hora no agente e 60s no frontend, modo background/silent, sistema de bloqueio por termos de uso.
-- ‚úÖ **[v5.8.3.0]** Motor SMTP de e-mails, Corre√ß√£o de Z-Index/Modais (React Portals) e Colis√£o de Rotas no FastAPI.
-- ‚úÖ **[v5.8.2.0]** Corre√ß√µes cr√≠ticas no backend (main.py) e resolu√ß√£o do loop infinito de termos.
-- ‚úÖ Gerenciamento de Termos com releitura e revoga√ß√£o de acesso.
-- Terminal remoto C2 adicionado.
-
-Veja `CHANGELOG.md` para hist√≥rico completo e detalhado.
-
-### Exemplos de Payloads C2
-
-#### Enviar Comando (POST /api/comandos/enviar)
-```json
-{
-  "patrimonio": "PC001",
-  "uuid_persistente": "550e8400-e29b-41d4-a716-446655440000",
-  "script_content": "ipconfig /all",
-  "usuario_emissor": "admin"
-}
-```
-
-#### Verificar Comandos Pendentes (GET /api/agente/comandos/pendentes/{uuid})
-Resposta se h√° comando:
-```json
-{
-  "tem_comando": true,
-  "comando_id": 123,
-  "script_content": "Get-Process | Select Name, CPU"
-}
-```
-
-#### Verificar Vers√£o do Agente (GET /api/inventario/agente/versao)
-Resposta:
-```json
-{
-  "versao_atual": "5.6",
-  "url_download": "/api/inventario/download/agente"
-}
-```
-
-#### Heartbeat do Frontend (POST /api/usuarios/ping)
-Atualiza o campo `ultimo_acesso` do usu√°rio no banco.
-```json
-{
-  "username": "admin"
-}
-```
-
-### Schema da Tabela `comandos_agente`
-- `id` (PK)
-- `patrimonio` (string)
-- `uuid_persistente` (string)
-- `script_content` (text)
-- `status` (PENDENTE/EXECUTANDO/CONCLUIDO/ERRO)
-- `output_log` (text, nullable)
-- `usuario_emissor` (string)
-- `data_criacao`, `data_conclusao` (datetime)
-
-## üîß Troubleshooting
-
-### C2 n√£o executa comandos
-- Verifique se o agente est√° rodando com privil√©gios SYSTEM
-- Confirme UUID persistente no banco vs. agente
-- Logs do agente em `C:\Nexus\logs\`
-
-### Recupera√ß√£o de senha falha
-- Verifique se a Senha de App do Google foi inserida no `.env` sem espa√ßos.
-- Confirme se a porta 465 (SMTP SSL) n√£o est√° bloqueada no firewall.
-
-### Instalador n√£o baixa
-- Arquivo `Nexus_Instalador_v5.exe` deve estar em `backend/app/static/`
-- Verifique permiss√µes de leitura na pasta
-
-### Sentinel n√£o coleta SNMP
-- IPs das impressoras devem estar corretos
-- Porta SNMP 161 aberta no firewall
-
-## üìû Suporte
-- Link interno /poa/contato ou equipe de DevOps
+**Desenvolvido por Nexus Team** | **Vers„o 6.0.0** | **Data: 08/04/2026**

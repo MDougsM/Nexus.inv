@@ -2,6 +2,27 @@
 
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 
+## [v6.0.0] - 2026-04-08
+### 🚀 Adicionado (Added)
+- **Auto-atualização Automática do Agente**: Implementada funcionalidade completa de auto-atualização no `agente_nexus.pyw`.
+  - Thread em background `checar_atualizacoes_background()` verifica versão a cada 1 hora via `/api/inventario/agente/versao`.
+  - Download silencioso do instalador via `/api/inventario/download/agente` com stream para memória.
+  - Instalação furtiva usando `cmd.exe /c ping 127.0.0.1 -n 4 > nul && instalador.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART`.
+  - Verificação de integridade do arquivo baixado (cabeçalho MZ).
+  - Encerramento automático do processo atual (`os._exit(0)`) para permitir atualização.
+  - Ignora atualização quando rodando no VS Code (modo desenvolvimento).
+- **Versão Atualizada do Agente**: Versão hardcoded alterada de "5.8-DEV" para "6.0" em `VERSAO_DESTE_AGENTE`.
+- **Thread de Auto-atualização Iniciada**: Adicionada chamada `threading.Thread(target=self.checar_atualizacoes_background, daemon=True).start()` no `__init__` da classe `NexusAgent`.
+
+### 🐛 Corrigido (Fixed)
+- **README.md Refatorado**: Documentação completamente reescrita para refletir a versão 6.0.0 e funcionalidades atuais.
+  - Adicionada seção detalhada sobre auto-atualização automática.
+  - Incluído guia de deploy do agente com passos para compilação, empacotamento e distribuição.
+  - Seção de troubleshooting expandida com problemas comuns de auto-atualização e C2.
+  - Estrutura reorganizada com componentes principais e APIs documentadas.
+
+---
+
 ## [v5.10.7.0] - 2026-04-01
 ### 🚀 Adicionado (Added)
 - **Ações Rápidas C2 (Atualização Furtiva):** Adicionado botão "Forçar Atualização do Agente" diretamente no card de Segurança da Ficha do Ativo (`ModaisOperacao.jsx`).

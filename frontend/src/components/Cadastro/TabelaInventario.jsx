@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { getStatusBadge, getNomeTipoEquipamento } from '../../utils/helpers';
 
 export default function TabelaInventario({
@@ -22,29 +22,43 @@ export default function TabelaInventario({
   setMotivoExclusao,
   setModalTerminal
 }) {
+  const [linhaExpandida, setLinhaExpandida] = useState(null);
+
+  const toggleLinha = (id) => {
+    setLinhaExpandida(linhaExpandida === id ? null : id);
+  };
 
   const isOnline = (ultimaComunicacao) => {
     if (!ultimaComunicacao) return false;
-    
-    // Converte a data do banco (UTC) para o fuso do navegador
     const dataComunicacao = new Date(ultimaComunicacao + 'Z'); 
     const agora = new Date();
-    
-    // A diferença em milissegundos convertida para MINUTOS (para mais precisão)
     const diferencaMinutos = (agora - dataComunicacao) / (1000 * 60);
-    
-    // 3 dias = 4320 minutos. Se a última comunicação for MENOR que 4320 min, é online!
-    // E também garante que a diferença não é absurdamente negativa por erro de fuso horário.
     return diferencaMinutos >= 0 && diferencaMinutos < 4320; 
   };
-  
+
+  // Pega a data formatada para colocar no tooltip e na visão rápida
+  const formatarDataUltimoAcesso = (isoDate) => {
+    if (!isoDate) return 'Nunca sincronizado';
+    return new Date(isoDate + 'Z').toLocaleString('pt-BR', { 
+      day: '2-digit', month: '2-digit', year: 'numeric', 
+      hour: '2-digit', minute: '2-digit'
+    });
+  };
+
+  const parseJSONSeguro = (dado) => {
+      if (!dado) return {};
+      if (typeof dado === 'object') return dado;
+      try { return JSON.parse(dado.replace(/'/g, '"').replace(/None/g, 'null').replace(/False/g, 'false').replace(/True/g, 'true')); } 
+      catch(e) { return {}; }
+  };
+
   return (
     <div className="flex-1 overflow-x-auto mt-2 min-h-[350px] pb-20">
       <table className="w-full text-left text-sm">
         <thead style={{ backgroundColor: 'var(--bg-input)', borderBottom: '1px solid var(--border-light)' }}>
           <tr>
             <th className="p-4 w-10"><input type="checkbox" className="w-4 h-4 rounded cursor-pointer" checked={selecionados.length === ativosPaginaAtual.length && ativosPaginaAtual.length > 0} onChange={handleSelectAll} /></th>
-            <th className="p-4 text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-main)' }}>Patrimônio</th>
+            <th className="p-4 text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-main)' }}>Patrimônio / Máquina</th>
             <th className="p-4 text-[10px] font-black uppercase tracking-widest opacity-60 hidden sm:table-cell" style={{ color: 'var(--text-main)' }}>Status</th>
             <th className="p-4 text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-main)' }}>Equipamento</th>
             <th className="p-4 text-[10px] font-black uppercase tracking-widest opacity-60 hidden md:table-cell" style={{ color: 'var(--text-main)' }}>Localização</th>
@@ -56,97 +70,152 @@ export default function TabelaInventario({
             <tr>
               <td colSpan="6" className="p-12 text-center opacity-50 font-bold" style={{ color: 'var(--text-main)' }}>
                 <div className="text-4xl mb-4">📭</div>
-                Nenhum equipamento encontrado com estes filtros.
+                Nenhum equipamento encontrado.
               </td>
             </tr>
           ) : (
-            ativosPaginaAtual.map(ativo => (
-              <tr key={ativo.id} className="border-b last:border-0 transition-all duration-300 hover:shadow-md hover:bg-gray-500/5 relative cursor-pointer" style={{ borderColor: 'var(--border-light)', backgroundColor: selecionados.includes(ativo.patrimonio) ? 'rgba(85, 110, 230, 0.05)' : 'transparent' }}>
-                
-                {/* CHECKBOX */}
-                <td className="p-4 w-10">
-                  <input type="checkbox" className="w-4 h-4 rounded cursor-pointer" checked={selecionados.includes(ativo.patrimonio)} onChange={(e) => handleSelectOne(e, ativo.patrimonio)} />
-                </td>
+            ativosPaginaAtual.map(ativo => {
+              const din = parseJSONSeguro(ativo.dados_dinamicos);
+              const adv = typeof din.dados_avancados === 'string' ? parseJSONSeguro(din.dados_avancados) : (din.dados_avancados || {});
+              const online = isOnline(ativo.ultima_comunicacao);
 
-                {/* PATRIMÔNIO E TAG DE DOMÍNIO */}
-                <td className="p-4">
-                  <div className="flex items-center gap-2">
-                    <div className="font-mono font-black" style={{ color: 'var(--color-blue)' }}>{ativo.patrimonio}</div>
+              return (
+                <React.Fragment key={ativo.id}>
+                  {/* LINHA PRINCIPAL */}
+                  <tr 
+                    onClick={() => toggleLinha(ativo.id)} 
+                    className="border-b transition-all duration-300 hover:bg-black/5 relative cursor-pointer" 
+                    style={{ borderColor: 'var(--border-light)', backgroundColor: selecionados.includes(ativo.patrimonio) ? 'rgba(85, 110, 230, 0.05)' : (linhaExpandida === ativo.id ? 'var(--bg-input)' : 'transparent') }}
+                  >
+                    <td className="p-4 w-10" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" className="w-4 h-4 rounded cursor-pointer" checked={selecionados.includes(ativo.patrimonio)} onChange={(e) => handleSelectOne(e, ativo.patrimonio)} />
+                    </td>
 
-                    {/* 1º VEM A BOLINHA DE STATUS (Online/Offline) */}
-                    <div className="group relative flex items-center justify-center ml-1">
-                      <span className="relative flex h-2.5 w-2.5">
-                        {isOnline(ativo.ultima_comunicacao) && (
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        )}
-                        <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isOnline(ativo.ultima_comunicacao) ? 'bg-emerald-500' : 'bg-gray-400/50'}`}></span>
-                      </span>
-                      
-                      {/* Tooltip Hover */}
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-max bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded-lg z-50">
-                        {isOnline(ativo.ultima_comunicacao) ? '🟢 Agente Online' : '⚪ Agente Offline'}
-                      </div>
-                    </div>
+                    <td className="p-4">
+                      <div className="flex items-center gap-2">
+                        <div className="font-mono font-black" style={{ color: 'var(--color-blue)' }}>{ativo.patrimonio}</div>
 
-                    {/* 2º VEM A TAG DE DOMÍNIO PRÓPRIO (Agora na frente) */}
-                    {ativo.dominio_proprio && (
-                      <span className="flex items-center justify-center text-[15px]" title="🔖 Equipamento de Domínio Próprio">
-                         🔖
-                      </span>
-                    )}
-
-                  </div>
-                </td>
-                
-                {/* STATUS */}
-                <td className="p-4 hidden sm:table-cell">{getStatusBadge(ativo.status)}</td>
-                
-                {/* EQUIPAMENTO & MARCA */}
-                <td className="p-4">
-                  <div className="font-black text-xs md:text-sm" style={{color: 'var(--text-main)'}}>{getNomeTipoEquipamento(ativo, categorias) || '-'}</div>
-                  <div className="text-[10px] font-bold opacity-60 mt-0.5" style={{color:'var(--text-main)'}}>{ativo.marca} {ativo.modelo}</div>
-                  
-                  {/* VISÃO MOBILE ESPREMIDA */}
-                  <div className="block md:hidden mt-2 space-y-1">
-                     {getStatusBadge(ativo.status)}
-                     <div className="text-[9px] font-black uppercase text-gray-400">{ativo.secretaria}</div>
-                  </div>
-                </td>
-                
-                {/* LOCALIZAÇÃO (Oculta no celular) */}
-                <td className="p-4 hidden md:table-cell">
-                  <div className="font-black text-xs uppercase" style={{color: 'var(--text-main)'}}>{ativo.secretaria || 'N/A'}</div>
-                  <div className="text-[10px] font-bold opacity-60 mt-0.5" style={{color:'var(--text-main)'}}>{ativo.setor || 'N/A'}</div>
-                </td>
-                
-                {/* AÇÕES (👁️, 🖨️ e Opções) */}
-                <td className="p-4 flex justify-end items-center gap-2 relative">
-                  <button onClick={() => abrirFicha(ativo.patrimonio)} title="Ficha Completa" className="p-1.5 rounded transition-all hover:bg-gray-500/10 border" style={{ borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>👁️</button>
-                  <button onClick={() => setModalQR({ aberto: true, ativo })} title="Imprimir Etiqueta" className="p-1.5 rounded transition-all hover:bg-gray-500/10 border" style={{ borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>🖨️</button>
-                  
-                  <div>
-                    <button onClick={() => setDropdownAberto(dropdownAberto === ativo.id ? null : ativo.id)} className="flex items-center gap-1 px-3 py-1.5 rounded border text-xs font-bold transition-all hover:bg-gray-500/10" style={{ borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
-                      Opções ▾
-                    </button>
-                    
-                    {dropdownAberto === ativo.id && (
-                       <div className="absolute right-0 mt-2 w-48 rounded-xl shadow-2xl border z-50 overflow-hidden animate-scale-up" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
-                          <button onClick={() => { setAtivoClonado(ativo); setAbaAtiva('novo'); setDropdownAberto(null); }} className="w-full text-left px-4 py-2.5 text-sm transition-all hover:bg-blue-500/10 font-black tracking-wide border-b" style={{ color: 'var(--color-blue)', borderColor: 'var(--border-light)' }}>📋 Clonar Máquina</button>
+                        <div className="group relative flex items-center justify-center ml-1">
+                          <span className="relative flex h-2.5 w-2.5">
+                            {online && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
+                            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${online ? 'bg-emerald-500' : 'bg-gray-400/50'}`}></span>
+                          </span>
                           
-                          {/* 🚀 A edição comum envia agora o toggle de propriedade junto! */}
-                          <button onClick={() => {abrirEdicao(ativo); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-gray-500/10 font-medium" style={{ color: 'var(--text-main)' }}>✏️ Editar Cadastro</button>
+                          {/* 🚀 O TOOLTIP AGORA MOSTRA A ÚLTIMA VEZ QUE FOI VISTO */}
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-max bg-gray-900 text-white text-[10px] px-2 py-1.5 rounded-lg z-50">
+                            {online ? (
+                               <span className="font-bold text-emerald-400">🟢 Agente Online</span>
+                            ) : (
+                               <div className="flex flex-col items-center">
+                                  <span className="font-bold text-gray-300 mb-0.5">⚪ Agente Offline</span>
+                                  <span className="text-[9px] text-gray-400">Visto em: {formatarDataUltimoAcesso(ativo.ultima_comunicacao)}</span>
+                               </div>
+                            )}
+                          </div>
+                        </div>
 
-                          <button onClick={() => {setModalTransferencia({ aberto: true, ativos: [ativo] }); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-gray-500/10 font-medium" style={{ color: 'var(--text-main)' }}>🚚 Transferir Local</button>
-                          <button onClick={() => {setModalStatus({ aberto: true, ativos: [ativo] }); setFormStatus({...formStatus, novo_status: ativo.status === 'MANUTENÇÃO' ? 'ATIVO' : 'MANUTENÇÃO'}); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-gray-500/10 font-medium" style={{ color: 'var(--text-main)' }}>🛠️ Alterar Status</button>
-                          <button onClick={() => { setModalTerminal({ aberto: true, ativo: ativo }); setDropdownAberto(null); }} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-emerald-500/10 font-bold" style={{ color: 'var(--color-green)' }}>&gt;_ Terminal Remoto</button>
-                          <div className="border-t my-1" style={{ borderColor: 'var(--border-light)' }}></div>
-                          <button onClick={() => {setModalExcluir({ aberto: true, ativos: [ativo] }); setMotivoExclusao(''); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-red-500/10 font-bold" style={{ color: 'var(--color-red)' }}>🗑️ Excluir Definitivo</button>
-                       </div>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))
+                        {ativo.dominio_proprio && <span className="flex items-center justify-center text-[15px]" title="🔖 Equipamento Próprio">🔖</span>}
+                      </div>
+
+                      {ativo.nome_personalizado && (
+                        <div className="text-[10px] font-black uppercase mt-1 px-2 py-0.5 rounded inline-block truncate max-w-[150px]" style={{ backgroundColor: 'var(--border-light)', color: 'var(--text-muted)' }} title={ativo.nome_personalizado}>
+                           {ativo.nome_personalizado}
+                        </div>
+                      )}
+                    </td>
+                    
+                    <td className="p-4 hidden sm:table-cell">{getStatusBadge(ativo.status)}</td>
+                    
+                    <td className="p-4">
+                      <div className="font-black text-xs md:text-sm" style={{color: 'var(--text-main)'}}>{getNomeTipoEquipamento(ativo, categorias) || '-'}</div>
+                      <div className="text-[10px] font-bold opacity-60 mt-0.5" style={{color:'var(--text-main)'}}>{ativo.marca} {ativo.modelo}</div>
+                    </td>
+                    
+                    <td className="p-4 hidden md:table-cell">
+                      <div className="font-black text-xs uppercase" style={{color: 'var(--text-main)'}}>{ativo.secretaria || 'N/A'}</div>
+                      <div className="text-[10px] font-bold opacity-60 mt-0.5" style={{color:'var(--text-main)'}}>{ativo.setor || 'N/A'}</div>
+                    </td>
+                    
+                    <td className="p-4 flex justify-end items-center gap-2 relative" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => abrirFicha(ativo.patrimonio)} title="Ficha Completa" className="p-1.5 rounded transition-all hover:bg-gray-500/10 border shadow-sm hover:scale-105" style={{ borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>👁️</button>
+                      <button onClick={() => setModalQR({ aberto: true, ativo })} title="Imprimir Etiqueta" className="p-1.5 rounded transition-all hover:bg-gray-500/10 border shadow-sm hover:scale-105" style={{ borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>🖨️</button>
+                      
+                      <div>
+                        <button onClick={() => setDropdownAberto(dropdownAberto === ativo.id ? null : ativo.id)} className="flex items-center gap-1 px-3 py-1.5 rounded border text-xs font-bold transition-all hover:bg-gray-500/10 shadow-sm" style={{ borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>Opções ▾</button>
+                        
+                        {dropdownAberto === ativo.id && (
+                           <div className="absolute right-0 mt-2 w-48 rounded-xl shadow-2xl border z-50 overflow-hidden animate-scale-up" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
+                              <button onClick={() => { setAtivoClonado(ativo); setAbaAtiva('novo'); setDropdownAberto(null); }} className="w-full text-left px-4 py-2.5 text-sm transition-all hover:bg-blue-500/10 font-black border-b" style={{ color: 'var(--color-blue)', borderColor: 'var(--border-light)' }}>📋 Clonar Máquina</button>
+                              <button onClick={() => {abrirEdicao(ativo); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-gray-500/10 font-medium" style={{ color: 'var(--text-main)' }}>✏️ Editar Cadastro</button>
+                              <button onClick={() => {setModalTransferencia({ aberto: true, ativos: [ativo] }); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-gray-500/10 font-medium" style={{ color: 'var(--text-main)' }}>🚚 Transferir Local</button>
+                              <button onClick={() => {setModalStatus({ aberto: true, ativos: [ativo] }); setFormStatus({...formStatus, novo_status: ativo.status === 'MANUTENÇÃO' ? 'ATIVO' : 'MANUTENÇÃO'}); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-gray-500/10 font-medium" style={{ color: 'var(--text-main)' }}>🛠️ Alterar Status</button>
+                              <button onClick={() => { setModalTerminal({ aberto: true, ativo: ativo }); setDropdownAberto(null); }} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-emerald-500/10 font-bold" style={{ color: 'var(--color-green)' }}>&gt;_ Terminal Remoto</button>
+                              <div className="border-t my-1" style={{ borderColor: 'var(--border-light)' }}></div>
+                              <button onClick={() => {setModalExcluir({ aberto: true, ativos: [ativo] }); setMotivoExclusao(''); setDropdownAberto(null);}} className="w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-red-500/10 font-bold" style={{ color: 'var(--color-red)' }}>🗑️ Excluir Definitivo</button>
+                           </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+
+                  {/* 🚀 QUICK VIEW (VISÃO RÁPIDA) COM "ÚLTIMO LOGIN" E BOTÃO DO TERMINAL */}
+                  {linhaExpandida === ativo.id && (
+                    <tr className="border-b animate-fade-in" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
+                       <td colSpan="6" className="p-4 relative">
+                          <div className="flex flex-wrap gap-3 items-center">
+                             
+                             {/* Usuário */}
+                             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white" style={{ borderColor: 'var(--border-light)' }}>
+                                <span className="text-sm opacity-50">👤</span>
+                                <div>
+                                   <p className="text-[8px] font-black uppercase opacity-50" style={{ color: 'var(--text-main)' }}>Usuário Logado</p>
+                                   <p className="text-xs font-bold truncate max-w-[120px]" style={{ color: 'var(--color-blue)' }}>{din.usuario_pc || adv.usuario_pc || 'Não Logado'}</p>
+                                </div>
+                             </div>
+
+                             {/* Sincronização (Último Login) */}
+                             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white" style={{ borderColor: 'var(--border-light)' }}>
+                                <span className="text-sm opacity-50">⏳</span>
+                                <div>
+                                   <p className="text-[8px] font-black uppercase opacity-50" style={{ color: 'var(--text-main)' }}>Último Login / Sinc</p>
+                                   <p className={`text-xs font-bold ${online ? 'text-emerald-600' : 'text-amber-600'}`}>{formatarDataUltimoAcesso(ativo.ultima_comunicacao)}</p>
+                                </div>
+                             </div>
+
+                             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white" style={{ borderColor: 'var(--border-light)' }}>
+                                <span className="text-sm opacity-50">🌐</span>
+                                <div>
+                                   <p className="text-[8px] font-black uppercase opacity-50" style={{ color: 'var(--text-main)' }}>IP Local</p>
+                                   <p className="text-xs font-bold font-mono" style={{ color: 'var(--text-main)' }}>{din.ip || din.IP || 'N/A'}</p>
+                                </div>
+                             </div>
+
+                             {din.ram && (
+                               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white hidden md:flex" style={{ borderColor: 'var(--border-light)' }}>
+                                  <span className="text-sm opacity-50">⚡</span>
+                                  <div>
+                                     <p className="text-[8px] font-black uppercase opacity-50" style={{ color: 'var(--text-main)' }}>RAM</p>
+                                     <p className="text-xs font-bold" style={{ color: 'var(--text-main)' }}>{din.ram}</p>
+                                  </div>
+                               </div>
+                             )}
+
+                             {/* Botão de Terminal Direto (Somente se online para não criar falsa expectativa) */}
+                             {online && (
+                                <button 
+                                   onClick={(e) => { e.stopPropagation(); setModalTerminal({ aberto: true, ativo: ativo }); }}
+                                   className="ml-auto flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-md transition-all active:scale-95"
+                                >
+                                   <span className="font-mono font-black text-xs">&gt;_ Terminal</span>
+                                </button>
+                             )}
+                          </div>
+                       </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })
           )}
         </tbody>
       </table>

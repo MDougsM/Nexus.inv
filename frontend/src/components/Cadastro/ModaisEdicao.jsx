@@ -29,12 +29,8 @@ export default function ModaisEdicao({
   }, [modalEdicao.aberto]);
 
   const salvarEdicao = async () => {
-    if (!motivoEdicao.trim()) {
-      return toast.warning("O motivo da alteração é obrigatório.");
-    }
-    if (!modalEdicao.form.patrimonio || !modalEdicao.form.patrimonio.trim()) {
-      return toast.warning("O Patrimônio não pode ficar vazio.");
-    }
+    if (!motivoEdicao.trim()) return toast.warning("O motivo da alteração é obrigatório.");
+    if (!modalEdicao.form.patrimonio || !modalEdicao.form.patrimonio.trim()) return toast.warning("O Patrimônio não pode ficar vazio.");
 
     try {
         await api.put(`/api/inventario/ficha/editar/${modalEdicao.ativo.patrimonio}`, {
@@ -46,9 +42,7 @@ export default function ModaisEdicao({
         toast.success("Cadastro atualizado com sucesso!");
         setModalEdicao({ aberto: false, ativo: null, form: {dados_dinamicos:{}} });
         carregarDados();
-    } catch (e) {
-        toast.error("Erro ao salvar edição.");
-    }
+    } catch (e) { toast.error("Erro ao salvar edição."); }
   };
 
   const salvarLote = async () => {
@@ -60,9 +54,7 @@ export default function ModaisEdicao({
 
         const novosDinamicos = { ...dinAtuais };
         Object.keys(formEdicaoMassa.dados_dinamicos).forEach(k => {
-          if (formEdicaoMassa.dados_dinamicos[k]?.trim()) {
-            novosDinamicos[k] = formEdicaoMassa.dados_dinamicos[k];
-          }
+          if (formEdicaoMassa.dados_dinamicos[k]?.trim()) novosDinamicos[k] = formEdicaoMassa.dados_dinamicos[k];
         });
 
         return api.put(`/api/inventario/ficha/editar/${ativo.patrimonio}`, {
@@ -84,12 +76,10 @@ export default function ModaisEdicao({
   const catsSelecionadas = [...new Set(modalEdicaoMassa.ativos.map(a => a.categoria_id))];
   const categoriaMassa = catsSelecionadas.length === 1 ? categorias.find(c => c.id === catsSelecionadas[0]) : null;
   const camposMassa = parseCamposDinamicos(categoriaMassa);
-
   const camposBloqueados = ['IP', 'Hostname', 'Serial', 'Páginas Impressas', 'Toner', 'Drum', '% Toner', '% Drum'];
 
   return (
     <>
-      {/* MODAL INDIVIDUAL */}
       {modalEdicao.aberto && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in" onClick={() => setModalEdicao({ aberto: false, form: {dados_dinamicos:{}} })}>
           <div className="w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden border border-white/10 animate-scale-up flex flex-col max-h-[90vh]" style={{backgroundColor: 'var(--bg-card)'}} onClick={e => e.stopPropagation()}>
@@ -103,7 +93,6 @@ export default function ModaisEdicao({
                  </div>
               </div>
               
-              {/* 🚀 TOGGLE DE DOMÍNIO PRÓPRIO ADICIONADO AQUI NO CABEÇALHO */}
               <div className="flex items-center gap-3 bg-indigo-50 px-4 py-2 rounded-xl border border-indigo-100">
                 <span className="text-[10px] font-black uppercase text-indigo-700 tracking-widest">🔖 Equipamento Próprio?</span>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -116,11 +105,9 @@ export default function ModaisEdicao({
                   <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                 </label>
               </div>
-
             </div>
 
             <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
-              
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1" style={{ color: 'var(--text-main)' }}>Patrimônio</label>
@@ -134,9 +121,10 @@ export default function ModaisEdicao({
                 </div>
               </div>
 
+              {/* 🚀 O RÓTULO DO APELIDO AGORA É GLOBAL */}
               <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1 text-emerald-600">Nome da Impressora (Apelido)</label>
-                <input value={modalEdicao.form.nome_personalizado || ''} placeholder="Ex: Recepção Central" onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, nome_personalizado: e.target.value}})} className="w-full p-3 rounded-xl border outline-none font-bold focus:ring-2 focus:ring-emerald-500/20 transition-all" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} />
+                <label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1 text-emerald-600">Nome da Máquina / Apelido</label>
+                <input value={modalEdicao.form.nome_personalizado || ''} placeholder="Ex: Recepção Central, PC do Diretor..." onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, nome_personalizado: e.target.value}})} className="w-full p-3 rounded-xl border outline-none font-bold focus:ring-2 focus:ring-emerald-500/20 transition-all" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} />
               </div>
 
               <div className="grid grid-cols-2 gap-6">
@@ -160,22 +148,9 @@ export default function ModaisEdicao({
                         </label>
                         
                         {isObservacao ? (
-                            <textarea 
-                              className="w-full bg-transparent border-none p-0 text-sm font-bold outline-none focus:ring-0 min-h-[60px]" 
-                              style={{color: 'var(--text-main)'}} 
-                              value={modalEdicao.form.dados_dinamicos?.[c] || ''} 
-                              onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, dados_dinamicos: {...modalEdicao.form.dados_dinamicos, [c]: e.target.value}}})} 
-                              placeholder="Anotações e detalhes do equipamento..." 
-                            />
+                            <textarea className="w-full bg-transparent border-none p-0 text-sm font-bold outline-none focus:ring-0 min-h-[60px]" style={{color: 'var(--text-main)'}} value={modalEdicao.form.dados_dinamicos?.[c] || ''} onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, dados_dinamicos: {...modalEdicao.form.dados_dinamicos, [c]: e.target.value}}})} placeholder="Anotações e detalhes do equipamento..." />
                         ) : (
-                            <input 
-                              disabled={isBloqueado}
-                              className={`w-full bg-transparent border-none p-0 text-sm font-bold outline-none ${isBloqueado ? 'cursor-not-allowed' : 'focus:ring-0'}`} 
-                              style={{color: isBloqueado ? 'var(--text-muted)' : 'var(--text-main)'}} 
-                              value={modalEdicao.form.dados_dinamicos?.[c] || ''} 
-                              onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, dados_dinamicos: {...modalEdicao.form.dados_dinamicos, [c]: e.target.value}}})} 
-                              placeholder={isParVinculo ? 'Ex: PM-1234' : `Definir ${c}...`} 
-                            />
+                            <input disabled={isBloqueado} className={`w-full bg-transparent border-none p-0 text-sm font-bold outline-none ${isBloqueado ? 'cursor-not-allowed' : 'focus:ring-0'}`} style={{color: isBloqueado ? 'var(--text-muted)' : 'var(--text-main)'}} value={modalEdicao.form.dados_dinamicos?.[c] || ''} onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, dados_dinamicos: {...modalEdicao.form.dados_dinamicos, [c]: e.target.value}}})} placeholder={isParVinculo ? 'Ex: PM-1234' : `Definir ${c}...`} />
                         )}
                       </div>
                     );
@@ -216,6 +191,7 @@ export default function ModaisEdicao({
       {/* MODAL LOTE MANTIDO INTACTO */}
       {modalEdicaoMassa.aberto && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in" onClick={() => setModalEdicaoMassa({ aberto: false, ativos: [] })}>
+          {/* ... Código do modal de lote existente ... */}
           <div className="w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden border border-white/10" style={{backgroundColor: 'var(--bg-card)'}} onClick={e => e.stopPropagation()}>
             <div className="p-6 border-b flex items-center gap-3 bg-blue-600 text-white">
               <div className="text-2xl">⚡</div>
@@ -250,7 +226,7 @@ export default function ModaisEdicao({
                   <div className="text-5xl">⚠️</div>
                   <div className="max-w-xs mx-auto">
                     <h4 className="font-black text-lg" style={{color: 'var(--text-main)'}}>Mistura de Tipos</h4>
-                    <p className="text-sm opacity-70" style={{color: 'var(--text-main)'}}>Para editar especificações técnicas, selecione apenas itens do mesmo tipo (Ex: só Impressoras).</p>
+                    <p className="text-sm opacity-70" style={{color: 'var(--text-main)'}}>Para editar especificações técnicas, selecione apenas itens do mesmo tipo.</p>
                   </div>
                 </div>
               )}
