@@ -1,39 +1,66 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON, Boolean, Float, DateTime
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON, Boolean, Float
+from sqlalchemy.orm import relationship, backref
 from datetime import datetime
 from app.db.database import Base
 
 class Categoria(Base):
     __tablename__ = "categorias"
     id = Column(Integer, primary_key=True, index=True)
-    nome = Column(String, unique=True, index=True) # Ex: "Desktop", "Nobreak"
-    campos_config = Column(JSON, default=list) 
+    nome = Column(String, unique=True, index=True)
+    campos_config = Column(JSON, default=list)
+
+# 🚀 NOVA ESTRUTURA HIERÁRQUICA (Substitui Secretaria e Setor)
+class UnidadeAdministrativa(Base):
+    __tablename__ = "unidades_administrativas"
+    id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String, index=True)
+    tipo = Column(String) # SECRETARIA, DEPARTAMENTO, UNIDADE, SALA
+    
+    # Hierarquia Infinita (Parent-Child)
+    pai_id = Column(Integer, ForeignKey("unidades_administrativas.id"), nullable=True)
+    subunidades = relationship("UnidadeAdministrativa", 
+                               backref=backref('pai', remote_side=[id]),
+                               cascade="all, delete-orphan")
+    
+    # Metadados para Topologia e Plantas
+    planta_imagem = Column(String, nullable=True) 
+    coordenadas_json = Column(JSON, nullable=True) 
 
 class Ativo(Base):
     __tablename__ = "ativos"
     id = Column(Integer, primary_key=True, index=True)
     patrimonio = Column(String, unique=True, index=True)
     categoria_id = Column(Integer, ForeignKey("categorias.id"))
+    
+    # 🚀 Vínculo com a nova Hierarquia
+    unidade_id = Column(Integer, ForeignKey("unidades_administrativas.id"), nullable=True)
+    unidade = relationship("UnidadeAdministrativa")
+
+    # 🏛️ CAMPOS GOVERNAMENTAIS (LICITAÇÃO/GARANTIA)
+    numero_licitacao = Column(String, nullable=True)
+    data_vencimento_garantia = Column(DateTime, nullable=True)
+    responsavel_atual = Column(String, nullable=True)
+    termo_responsabilidade_url = Column(String, nullable=True)
+
+    # Mantemos para compatibilidade temporária
+    secretaria = Column(String, nullable=True)
+    setor = Column(String, nullable=True)
+    
+    # Outros campos originais
     dominio_proprio = Column(Boolean, default=False)
-    # Campos Universais
     marca = Column(String, nullable=True)
     modelo = Column(String, nullable=True)
-    secretaria = Column(String, nullable=True)
     local = Column(String, nullable=True)
     nome_personalizado = Column(String, nullable=True)
-    setor = Column(String, nullable=True)
     tecnico = Column(String, nullable=True)
     status = Column(String, default="Ativo")
-    
-    # O Segredo: Campos Dinâmicos!
     dados_dinamicos = Column(JSON, default=dict) 
     data_registro = Column(DateTime, default=datetime.utcnow)
-    
     categoria = relationship("Categoria")
-
     uuid_persistente = Column(String, index=True, nullable=True)
     ultima_comunicacao = Column(DateTime, default=datetime.utcnow)
     dados_avancados = Column(JSON, nullable=True)
+    deletado = Column(Boolean, default=False)
 
 class LogAuditoria(Base):
     __tablename__ = "logs_auditoria"
@@ -45,19 +72,6 @@ class LogAuditoria(Base):
     identificador = Column(String, nullable=True) 
     detalhes = Column(Text, nullable=True) 
     snapshot_item = Column(Text, nullable=True)
-
-class Secretaria(Base):
-    __tablename__ = "secretarias"
-    id = Column(Integer, primary_key=True, index=True)
-    nome = Column(String, unique=True, index=True)
-    setores = relationship("Setor", back_populates="secretaria", cascade="all, delete-orphan")
-
-class Setor(Base):
-    __tablename__ = "setores"
-    id = Column(Integer, primary_key=True, index=True)
-    nome = Column(String, index=True)
-    secretaria_id = Column(Integer, ForeignKey("secretarias.id"))
-    secretaria = relationship("Secretaria", back_populates="setores")
 
 class Usuario(Base):
     __tablename__ = "usuarios"
@@ -102,7 +116,7 @@ class RegistroManutencao(Base):
 class HistoricoLeitura(Base):
     __tablename__ = "historico_leituras"
     id = Column(Integer, primary_key=True, index=True)
-    patrimonio = Column(String, index=True) # Liga a leitura à impressora
+    patrimonio = Column(String, index=True)
     data_leitura = Column(DateTime, default=datetime.utcnow)
     paginas_totais = Column(Integer, default=0)
     toner_nivel = Column(String, nullable=True)
@@ -110,29 +124,24 @@ class HistoricoLeitura(Base):
 
 class ComandoAgente(Base):
     __tablename__ = "comandos_agente"
-    
     id = Column(Integer, primary_key=True, index=True)
-    patrimonio = Column(String, index=True) # Máquina alvo
-    uuid_persistente = Column(String, index=True) # O ID físico do PC para ele saber que é pra ele
-    script_content = Column(Text) # O código PowerShell/CMD a ser rodado
-    status = Column(String, default="PENDENTE") # PENDENTE, EXECUTANDO, CONCLUIDO, ERRO
-    output_log = Column(Text, nullable=True) # A resposta do terminal do cliente
-    usuario_emissor = Column(String) # Qual Admin mandou rodar
+    patrimonio = Column(String, index=True) 
+    uuid_persistente = Column(String, index=True) 
+    script_content = Column(Text) 
+    status = Column(String, default="PENDENTE") 
+    output_log = Column(Text, nullable=True) 
+    usuario_emissor = Column(String) 
     data_criacao = Column(DateTime, default=datetime.utcnow)
     data_conclusao = Column(DateTime, nullable=True)
 
 class AgendamentoRelatorio(Base):
     __tablename__ = "agendamentos_relatorio"
-    
     id = Column(Integer, primary_key=True, index=True)
     nome = Column(String, index=True) 
     secretarias = Column(JSON, default=list) 
     setores = Column(JSON, default=list)     
-    
-    # 🚀 NOVOS CAMPOS: Ciclo de Faturamento
     dia_inicio_ciclo = Column(Integer, default=1)
     dia_fim_ciclo = Column(Integer, default=30)
-    
     dia_do_mes = Column(Integer)      
     horario = Column(String)          
     emails_destino = Column(Text)     
@@ -141,7 +150,6 @@ class AgendamentoRelatorio(Base):
 
 class RelatorioGerado(Base):
     __tablename__ = "relatorios_gerados"
-    
     id = Column(Integer, primary_key=True, index=True)
     nome_relatorio = Column(String, index=True)
     data_emissao = Column(DateTime, default=datetime.utcnow)

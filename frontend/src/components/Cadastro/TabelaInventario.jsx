@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { getStatusBadge, getNomeTipoEquipamento } from '../../utils/helpers';
+import { QRCodeSVG } from 'qrcode.react';
 
 export default function TabelaInventario({
   ativosPaginaAtual,
@@ -23,6 +24,9 @@ export default function TabelaInventario({
   setModalTerminal
 }) {
   const [linhaExpandida, setLinhaExpandida] = useState(null);
+  
+  // 🚀 Pega a empresa atual para o QR Code
+  const tenantAtual = localStorage.getItem('tenant_id') || 'NEWPC'; 
 
   const toggleLinha = (id) => {
     setLinhaExpandida(linhaExpandida === id ? null : id);
@@ -36,7 +40,6 @@ export default function TabelaInventario({
     return diferencaMinutos >= 0 && diferencaMinutos < 4320; 
   };
 
-  // Pega a data formatada para colocar no tooltip e na visão rápida
   const formatarDataUltimoAcesso = (isoDate) => {
     if (!isoDate) return 'Nunca sincronizado';
     return new Date(isoDate + 'Z').toLocaleString('pt-BR', { 
@@ -48,7 +51,9 @@ export default function TabelaInventario({
   const parseJSONSeguro = (dado) => {
       if (!dado) return {};
       if (typeof dado === 'object') return dado;
-      try { return JSON.parse(dado.replace(/'/g, '"').replace(/None/g, 'null').replace(/False/g, 'false').replace(/True/g, 'true')); } 
+      try { 
+        return JSON.parse(dado.replace(/'/g, '"').replace(/None/g, 'null').replace(/False/g, 'false').replace(/True/g, 'true')); 
+      } 
       catch(e) { return {}; }
   };
 
@@ -57,11 +62,18 @@ export default function TabelaInventario({
       <table className="w-full text-left text-sm">
         <thead style={{ backgroundColor: 'var(--bg-input)', borderBottom: '1px solid var(--border-light)' }}>
           <tr>
-            <th className="p-4 w-10"><input type="checkbox" className="w-4 h-4 rounded cursor-pointer" checked={selecionados.length === ativosPaginaAtual.length && ativosPaginaAtual.length > 0} onChange={handleSelectAll} /></th>
+            <th className="p-4 w-10">
+              <input 
+                type="checkbox" 
+                className="w-4 h-4 rounded cursor-pointer" 
+                checked={selecionados.length === ativosPaginaAtual.length && ativosPaginaAtual.length > 0} 
+                onChange={handleSelectAll} 
+              />
+            </th>
             <th className="p-4 text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-main)' }}>Patrimônio / Máquina</th>
             <th className="p-4 text-[10px] font-black uppercase tracking-widest opacity-60 hidden sm:table-cell" style={{ color: 'var(--text-main)' }}>Status</th>
             <th className="p-4 text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-main)' }}>Equipamento</th>
-            <th className="p-4 text-[10px] font-black uppercase tracking-widest opacity-60 hidden md:table-cell" style={{ color: 'var(--text-main)' }}>Localização</th>
+            <th className="p-4 text-[10px] font-black uppercase tracking-widest opacity-60 hidden md:table-cell" style={{ color: 'var(--text-main)' }}>Unidade / Local</th>
             <th className="p-4 text-[10px] font-black uppercase tracking-widest opacity-60 text-right" style={{ color: 'var(--text-main)' }}>Ações</th>
           </tr>
         </thead>
@@ -88,7 +100,12 @@ export default function TabelaInventario({
                     style={{ borderColor: 'var(--border-light)', backgroundColor: selecionados.includes(ativo.patrimonio) ? 'rgba(85, 110, 230, 0.05)' : (linhaExpandida === ativo.id ? 'var(--bg-input)' : 'transparent') }}
                   >
                     <td className="p-4 w-10" onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" className="w-4 h-4 rounded cursor-pointer" checked={selecionados.includes(ativo.patrimonio)} onChange={(e) => handleSelectOne(e, ativo.patrimonio)} />
+                      <input 
+                        type="checkbox" 
+                        className="w-4 h-4 rounded cursor-pointer" 
+                        checked={selecionados.includes(ativo.patrimonio)} 
+                        onChange={(e) => handleSelectOne(e, ativo.patrimonio)} 
+                      />
                     </td>
 
                     <td className="p-4">
@@ -101,7 +118,6 @@ export default function TabelaInventario({
                             <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${online ? 'bg-emerald-500' : 'bg-gray-400/50'}`}></span>
                           </span>
                           
-                          {/* 🚀 O TOOLTIP AGORA MOSTRA A ÚLTIMA VEZ QUE FOI VISTO */}
                           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-max bg-gray-900 text-white text-[10px] px-2 py-1.5 rounded-lg z-50">
                             {online ? (
                                <span className="font-bold text-emerald-400">🟢 Agente Online</span>
@@ -132,8 +148,13 @@ export default function TabelaInventario({
                     </td>
                     
                     <td className="p-4 hidden md:table-cell">
-                      <div className="font-black text-xs uppercase" style={{color: 'var(--text-main)'}}>{ativo.secretaria || 'N/A'}</div>
-                      <div className="text-[10px] font-bold opacity-60 mt-0.5" style={{color:'var(--text-main)'}}>{ativo.setor || 'N/A'}</div>
+                      {/* 🚀 EXIBIÇÃO DA NOVA UNIDADE GOVERNAMENTAL */}
+                      <div className="font-black text-xs uppercase text-blue-600">
+                        {ativo.unidade ? ativo.unidade.nome : (ativo.secretaria || 'Não Alocado')}
+                      </div>
+                      <div className="text-[10px] font-bold opacity-60 mt-0.5" style={{color:'var(--text-main)'}}>
+                        {ativo.unidade ? ativo.unidade.tipo : (ativo.setor || '-')}
+                      </div>
                     </td>
                     
                     <td className="p-4 flex justify-end items-center gap-2 relative" onClick={e => e.stopPropagation()}>
@@ -158,13 +179,12 @@ export default function TabelaInventario({
                     </td>
                   </tr>
 
-                  {/* 🚀 QUICK VIEW (VISÃO RÁPIDA) COM "ÚLTIMO LOGIN" E BOTÃO DO TERMINAL */}
+                  {/* QUICK VIEW (VISÃO RÁPIDA) COM "ÚLTIMO LOGIN" E BOTÃO DO TERMINAL */}
                   {linhaExpandida === ativo.id && (
                     <tr className="border-b animate-fade-in" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
                        <td colSpan="6" className="p-4 relative">
                           <div className="flex flex-wrap gap-3 items-center">
                              
-                             {/* Usuário */}
                              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white" style={{ borderColor: 'var(--border-light)' }}>
                                 <span className="text-sm opacity-50">👤</span>
                                 <div>
@@ -173,7 +193,6 @@ export default function TabelaInventario({
                                 </div>
                              </div>
 
-                             {/* Sincronização (Último Login) */}
                              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white" style={{ borderColor: 'var(--border-light)' }}>
                                 <span className="text-sm opacity-50">⏳</span>
                                 <div>
@@ -200,7 +219,6 @@ export default function TabelaInventario({
                                </div>
                              )}
 
-                             {/* Botão de Terminal Direto (Somente se online para não criar falsa expectativa) */}
                              {online && (
                                 <button 
                                    onClick={(e) => { e.stopPropagation(); setModalTerminal({ aberto: true, ativo: ativo }); }}

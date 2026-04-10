@@ -1,42 +1,46 @@
-import sqlite3
 import os
+import sqlite3
 
-# Pega a pasta raiz onde o script está rodando (C:\NexusInv)
-DIRETORIO_RAIZ = os.path.dirname(os.path.abspath(__file__))
+# Forçando o caminho absoluto manualmente para não ter erro
+TENANTS_DB_DIR = r"C:\NexusInv\backend\data\tenants"
 
-# Define o caminho exato: C:\NexusInv\backend\data\nexus.db
-CAMINHO_DB = os.path.join(DIRETORIO_RAIZ, "backend", "data", "nexus.db")
+def migrar_bancos():
+    print(f"🚀 Alvo: {TENANTS_DB_DIR}")
+    
+    if not os.path.exists(TENANTS_DB_DIR):
+        print("❌ A pasta ainda não foi encontrada pelo Python.")
+        print(f"Pasta atual de execução: {os.getcwd()}")
+        # Lista o que tem na pasta atual para ajudar no diagnóstico
+        print(f"Conteúdo da pasta atual: {os.listdir('.')}")
+        return
 
-def atualizar_banco():
-    print(f"🔍 Procurando banco de dados em: {CAMINHO_DB}")
-    try:
-        if not os.path.exists(CAMINHO_DB):
-            print(f"❌ Erro: O arquivo 'nexus.db' não foi encontrado no caminho especificado.")
-            print(f"Verifique se o ficheiro está realmente em: {CAMINHO_DB}")
-            return
+    arquivos = [f for f in os.listdir(TENANTS_DB_DIR) if f.endswith('.db')]
+    
+    if not arquivos:
+        print(f"⚠️ Pasta encontrada, mas está vazia ou sem arquivos .db")
+        return
 
-        conn = sqlite3.connect(CAMINHO_DB)
-        cursor = conn.cursor()
+    for arquivo in arquivos:
+        caminho_db = os.path.join(TENANTS_DB_DIR, arquivo)
+        print(f"🔨 Processando: {arquivo}...")
         
-        # Tenta adicionar a coluna domínio_proprio
-        # No SQLite, usamos o tipo INTEGER (0 ou 1) para Booleanos
-        print("🛠️ A tentar adicionar a coluna 'dominio_proprio'...")
-        cursor.execute("ALTER TABLE ativos ADD COLUMN dominio_proprio BOOLEAN DEFAULT 0;")
-        conn.commit()
-        
-        print("✅ Sucesso! A coluna 'dominio_proprio' foi criada com sucesso.")
-        
-    except sqlite3.OperationalError as e:
-        # Se a coluna já existir, o SQLite lançará este erro
-        if "duplicate column name" in str(e).lower():
-            print("⚠️ Nota: A coluna 'dominio_proprio' já existe no banco de dados. Nada a fazer.")
-        else:
-            print(f"❌ Erro de Operação: {e}")
-    except Exception as e:
-        print(f"❌ Ocorreu um erro inesperado: {e}")
-    finally:
-        if 'conn' in locals():
+        try:
+            conn = sqlite3.connect(caminho_db)
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(ativos)")
+            colunas = [col[1] for col in cursor.fetchall()]
+            
+            if 'deletado' not in colunas:
+                cursor.execute("ALTER TABLE ativos ADD COLUMN deletado BOOLEAN DEFAULT 0")
+                conn.commit()
+                print(f"✅ Coluna 'deletado' adicionada com sucesso!")
+            else:
+                print(f"ℹ️ A coluna já existe.")
             conn.close()
+        except Exception as e:
+            print(f"❌ Erro em {arquivo}: {e}")
+
+    print("\n✨ Missão cumprida!")
 
 if __name__ == "__main__":
-    atualizar_banco()
+    migrar_bancos()

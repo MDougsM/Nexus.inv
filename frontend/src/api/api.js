@@ -6,9 +6,16 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
   const usuario = localStorage.getItem('usuario');
+  const empresa = localStorage.getItem('empresa'); // 🚀 Puxa a empresa
+
   if (usuario) {
     config.params = { ...config.params, usuario_acao: usuario };
   }
+  
+  if (empresa) {
+    config.headers['x-empresa'] = empresa; // 🚀 O Crachá que o database.py vai ler
+  }
+  
   return config;
 });
 

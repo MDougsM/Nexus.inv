@@ -7,29 +7,23 @@ from email.message import EmailMessage
 from datetime import datetime
 from typing import Optional, List
 from sqlalchemy import func
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import PlainTextResponse # 🚀 PARA O DOWNLOAD DO ARQUIVO .PEM
-from sqlalchemy.orm import Session
-from app.db.database import SessionLocal
-from app.models import Usuario, LogAuditoria
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import PlainTextResponse 
+from sqlalchemy.orm import Session, sessionmaker
 from pydantic import BaseModel
 from passlib.context import CryptContext
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, HTTPException, Query
 
-# 🚀 IMPORTAÇÕES DE SEGURANÇA MILITAR
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 
+# 🚀 NOVOS IMPORTS DA ARQUITETURA MULTI-TENANT
+from app.db.database import get_db, MasterSessionLocal, Empresa, SuperAdmin, get_tenant_engine
+from app.models import Usuario, LogAuditoria
 
 load_dotenv()
 
 router = APIRouter(prefix="/usuarios", tags=["Gestão de Usuários"])
-
-def get_db():
-    db = SessionLocal()
-    try: yield db
-    finally: db.close()
 
 # ==========================================
 # CONFIGURAÇÃO DE SEGURANÇA E CRIPTOGRAFIA
@@ -46,22 +40,17 @@ def verify_password(plain_password, hashed_password):
         return plain_password == hashed_password
 
 def gerar_senha_temporaria(tamanho=8):
-    """Gera uma senha forte aleatória (Letras, números e símbolos)"""
     caracteres = string.ascii_letters + string.digits + "@#$%"
     return ''.join(random.choice(caracteres) for i in range(tamanho))
 
 def enviar_email_recuperacao(destinatario, nova_senha, username):
-    """O 'Carteiro' que envia o e-mail para o usuário"""
-    
-    # 🚀 PUXANDO DO .ENV (Profissional e Seguro)
     EMAIL_REMETENTE = os.getenv("SMTP_EMAIL")
     SENHA_APP = os.getenv("SMTP_PASSWORD")
 
-    # Se as variáveis estiverem vazias ou com o texto de exemplo, ativa o Modo Simulação
     if not EMAIL_REMETENTE or not SENHA_APP or EMAIL_REMETENTE == "seu.email.do.sistema@gmail.com":
         print(f"⚠️ [MODO SIMULAÇÃO] E-mail SMTP não configurado no .env.")
         print(f"⚠️ A nova senha gerada para o usuário '{username}' é: {nova_senha}")
-        return # Sai da função para não dar erro na tela do usuário
+        return 
 
     msg = EmailMessage()
     msg['Subject'] = "NEXUS.INV - Recuperação de Acesso"
@@ -94,7 +83,7 @@ Equipe de Segurança NEXUS INC.
 class UsuarioCreate(BaseModel):
     username: str
     password: str
-    email: Optional[str] = None # 🚀 AGORA ACEITA E-MAIL
+    email: Optional[str] = None 
     is_admin: bool
     permissoes: List[str] = []
     usuario_acao: str
@@ -102,7 +91,7 @@ class UsuarioCreate(BaseModel):
 class UsuarioUpdate(BaseModel):
     username: str
     password: Optional[str] = None
-    email: Optional[str] = None # 🚀 AGORA ACEITA E-MAIL
+    email: Optional[str] = None 
     is_admin: bool
     permissoes: List[str] = [] 
     usuario_acao: str
@@ -123,25 +112,101 @@ class SenhaUpdate(BaseModel):
     senha_atual: str
     senha_nova: str
 
-# 🚀 MODELO PARA A ROTA DO ESQUECI A SENHA
 class RecuperarSenhaRequest(BaseModel):
     email: str
 
-
 class ChaveRequest(BaseModel):
     usuario_alvo: str
-    usuario_acao: str # Quem está executando a ação (Admin Global)
-    senha_arquivo: str = "Nexus@123" # Senha para proteger o .pem
+    usuario_acao: str 
+    senha_arquivo: str = "Nexus@123" 
+    
 # ==========================================
-# ROTAS
+# ROTAS DE LOGIN (NOVO ROTEADOR SAAS)
+# ==========================================
+@router.post("/login")
+def fazer_login(dados: dict, request: Request):
+    empresa_cod = dados.get("empresa", "").strip().upper()
+    username = dados.get("username", "").strip()
+    password = dados.get("password")
+    
+    if not empresa_cod:
+        raise HTTPException(status_code=400, detail="O código da empresa é obrigatório.")
+
+    master_db = MasterSessionLocal()
+    try:
+        # 1. 👁️ VERIFICAÇÃO MASTER (O Usuário Nexus é Global)
+        if username.lower() == "nexus":
+            super_admin = master_db.query(SuperAdmin).filter(func.lower(SuperAdmin.username) == "nexus").first()
+            
+            # 🚀 CORREÇÃO: Barra IMEDIATAMENTE se a senha mestre estiver errada
+            if not super_admin or not verify_password(password, super_admin.password_hash):
+                raise HTTPException(status_code=401, detail="Credenciais Mestre Incorretas!")
+                
+            # Se a senha está certa, verifica para onde ele quer ir
+            if empresa_cod == "NEXUS_MASTER":
+                return {
+                    "message": "Acesso Mestre Concedido.",
+                    "username": "Nexus",
+                    "is_admin": True,
+                    "permissoes": ["MASTER_CONTROL"],
+                    "termos_aceitos": True
+                }
+            
+            # 👻 GHOST MODE: Nexus entrando em uma empresa de cliente
+            empresa = master_db.query(Empresa).filter(Empresa.codigo_acesso == empresa_cod).first()
+            if not empresa:
+                raise HTTPException(status_code=404, detail="Empresa cliente não localizada para acesso Fantasma.")
+            
+            return {
+                "message": f"Modo Administrador Fantasma: {empresa.codigo_acesso}",
+                "username": "Nexus (Mestre)",
+                "is_admin": True,
+                "permissoes": ["all"], 
+                "termos_aceitos": True,
+                "is_ghost": True 
+            }
+
+        # 2. 🏢 MODO INQUILINO NORMAL (Clientes Comuns)
+        empresa = master_db.query(Empresa).filter(Empresa.codigo_acesso == empresa_cod).first()
+        
+        if not empresa:
+            raise HTTPException(status_code=401, detail="Empresa não encontrada.")
+            
+        if empresa.em_manutencao:
+             raise HTTPException(status_code=503, detail="🛠️ SISTEMA EM MANUTENÇÃO: Estamos aplicando melhorias no seu ambiente. Voltamos em breve.")
+
+    finally:
+        master_db.close()
+
+    # 3. VALIDAÇÃO NO BANCO DO CLIENTE
+    engine = get_tenant_engine(empresa.db_nome)
+    TenantSessionLocal = sessionmaker(bind=engine)
+    db = TenantSessionLocal()
+    
+    try:
+        usuario = db.query(Usuario).filter(func.lower(Usuario.username) == username.lower()).first()
+        if not usuario or not verify_password(password, usuario.password):
+            raise HTTPException(status_code=401, detail="Usuário ou senha incorretos!")
+        
+        return {
+            "message": f"Login efetuado! Conectado a {empresa.codigo_acesso}.",
+            "username": usuario.username,
+            "is_admin": usuario.is_admin,
+            "permissoes": getattr(usuario, 'permissoes', []) or [],
+            "termos_aceitos": getattr(usuario, 'termos_aceitos', False)
+        }
+    finally:
+        db.close()
+
+# ==========================================
+# ROTAS CRUD DE USUÁRIOS
 # ==========================================
 @router.post("/recuperar-senha")
 def recuperar_senha(req: RecuperarSenhaRequest, db: Session = Depends(get_db)):
-    """Gera uma senha nova e envia para o e-mail do usuário"""
+    if not db: raise HTTPException(400, "Modo Mestre não suporta recuperação de senha ainda.")
     user = db.query(Usuario).filter(Usuario.email == req.email.strip()).first()
     
-    if not user:
-        raise HTTPException(404, "Não encontramos nenhum usuário vinculado a este e-mail.")
+    if not user: raise HTTPException(404, "Não encontramos nenhum usuário vinculado a este e-mail.")
     
     nova_senha = gerar_senha_temporaria()
     user.password = get_password_hash(nova_senha)
@@ -149,13 +214,12 @@ def recuperar_senha(req: RecuperarSenhaRequest, db: Session = Depends(get_db)):
     db.add(LogAuditoria(usuario="SISTEMA", acao="RECUPERACAO_SENHA", entidade="Segurança", identificador=user.username, detalhes="Nova senha temporária gerada e enviada para o e-mail cadastrado."))
     db.commit()
     
-    # Chama o nosso carteiro
     enviar_email_recuperacao(user.email, nova_senha, user.username)
-    
     return {"message": "Sua nova senha foi enviada para o e-mail com sucesso!"}
 
 @router.get("/")
 def listar_usuarios(db: Session = Depends(get_db)):
+    if not db: return [] # Modo Mestre
     usuarios = db.query(Usuario).all()
     return [{
         "id": u.id, 
@@ -166,24 +230,23 @@ def listar_usuarios(db: Session = Depends(get_db)):
         "nome_exibicao": getattr(u, 'nome_exibicao', u.username) or u.username,
         "avatar": getattr(u, 'avatar', 'letras') or 'letras',
         "termos_aceitos": getattr(u, 'termos_aceitos', False),
-        # 🚀 A MÁGICA ACONTECE AQUI: Devolvemos o último acesso formatado pro React!
         "ultimo_acesso": u.ultimo_acesso.isoformat() + "Z" if getattr(u, 'ultimo_acesso', None) else None
     } for u in usuarios]
 
 @router.post("/")
 def criar_usuario(req: UsuarioCreate, db: Session = Depends(get_db)):
+    if not db: raise HTTPException(400, "Ação não permitida na Matriz.")
     if not req.username.strip(): raise HTTPException(400, "Nome não pode ser vazio.")
     if db.query(Usuario).filter(func.lower(Usuario.username) == req.username.strip().lower()).first():
         raise HTTPException(400, "Este usuário já existe.")
     
-    # Verifica se o e-mail já está em uso (Se tiver digitado um)
     if req.email and db.query(Usuario).filter(func.lower(Usuario.email) == req.email.strip().lower()).first():
         raise HTTPException(400, "Este e-mail já está sendo utilizado por outro usuário.")
     
     novo_user = Usuario(
         username=req.username.strip(), 
         password=get_password_hash(req.password), 
-        email=req.email.strip() if req.email else None, # 🚀 SALVA O E-MAIL
+        email=req.email.strip() if req.email else None, 
         is_admin=req.is_admin,
         permissoes=req.permissoes 
     )
@@ -197,6 +260,7 @@ def criar_usuario(req: UsuarioCreate, db: Session = Depends(get_db)):
 
 @router.put("/{user_id}")
 def editar_usuario(user_id: int, req: UsuarioUpdate, db: Session = Depends(get_db)):
+    if not db: raise HTTPException(400, "Ação não permitida na Matriz.")
     user = db.query(Usuario).filter(Usuario.id == user_id).first()
     if not user: raise HTTPException(404, "Usuário não encontrado.")
     if user.username == "admin" and req.username.lower() != "admin":
@@ -212,7 +276,7 @@ def editar_usuario(user_id: int, req: UsuarioUpdate, db: Session = Depends(get_d
         raise HTTPException(400, "Este e-mail já está em uso por outro usuário.")
 
     user.username = novo_nome
-    user.email = req.email.strip() if req.email else None # 🚀 ATUALIZA O E-MAIL
+    user.email = req.email.strip() if req.email else None
     user.is_admin = req.is_admin
     user.permissoes = req.permissoes
 
@@ -225,9 +289,7 @@ def editar_usuario(user_id: int, req: UsuarioUpdate, db: Session = Depends(get_d
 
 @router.put("/perfil/atualizar")
 def atualizar_perfil(req: PerfilUpdate, db: Session = Depends(get_db)):
-    # 🚀 RASTREADOR 1
-    print(f"➡️ [DEBUG] Chegou no backend! E-mail enviado pelo React: {req.email}")
-    
+    if not db: raise HTTPException(400, "Ação não permitida na Matriz.")
     user = db.query(Usuario).filter(Usuario.username == req.username).first()
     if not user: raise HTTPException(404, "Usuário não encontrado")
 
@@ -238,14 +300,11 @@ def atualizar_perfil(req: PerfilUpdate, db: Session = Depends(get_db)):
     user.avatar = req.avatar
     user.email = req.email.strip() if req.email else None
     db.commit()
-    
-    # 🚀 RASTREADOR 2
-    print(f"✅ [DEBUG] O e-mail {user.email} foi salvo no banco com sucesso!")
-    
     return {"message": "Perfil atualizado"}
 
 @router.put("/senha/trocar")
 def trocar_senha(req: SenhaUpdate, db: Session = Depends(get_db)):
+    if not db: raise HTTPException(400, "Ação não permitida na Matriz.")
     user = db.query(Usuario).filter(Usuario.username == req.username).first()
     if not user or not verify_password(req.senha_atual, user.password):
         raise HTTPException(401, "Senha atual incorreta")
@@ -256,6 +315,7 @@ def trocar_senha(req: SenhaUpdate, db: Session = Depends(get_db)):
 
 @router.delete("/{user_id}")
 def deletar_usuario(user_id: int, req: JustificativaRequest, db: Session = Depends(get_db)):
+    if not db: raise HTTPException(400, "Ação não permitida na Matriz.")
     user = db.query(Usuario).filter(Usuario.id == user_id).first()
     if not user: raise HTTPException(404, "Usuário não encontrado.")
     if user.username == "admin": raise HTTPException(400, "O admin não pode ser excluído.")
@@ -266,59 +326,28 @@ def deletar_usuario(user_id: int, req: JustificativaRequest, db: Session = Depen
     db.commit()
     return {"message": "Excluído"}
 
-@router.post("/login")
-def fazer_login(dados: dict, db: Session = Depends(get_db)):
-    username = dados.get("username")
-    password = dados.get("password")
-    
-    usuario = db.query(Usuario).filter(Usuario.username == username).first()
-    
-    if not usuario or not verify_password(password, usuario.password):
-        db.add(LogAuditoria(usuario=username, acao="LOGIN FALHADO", entidade="Segurança", identificador="N/A", detalhes="Tentativa de login com credenciais inválidas."))
-        db.commit()
-        raise HTTPException(status_code=401, detail="Usuário ou senha incorretos!")
-    
-    db.add(LogAuditoria(usuario=usuario.username, acao="LOGIN", entidade="Segurança", identificador="N/A", detalhes="Sessão iniciada com sucesso."))
-    db.commit()
-    
-    return {
-        "message": "Login efetuado com sucesso!",
-        "username": usuario.username,
-        "is_admin": usuario.is_admin,
-        "permissoes": getattr(usuario, 'permissoes', []) or [],
-        "termos_aceitos": getattr(usuario, 'termos_aceitos', False)
-    }
-
-
 # ==========================================
 # GESTÃO DE CHAVES C2 (Criptografia RSA)
 # ==========================================
 @router.get("/chaves/listar")
 def listar_status_chaves(usuario_acao: str = Query(...), db: Session = Depends(get_db)):
-    """Retorna a lista de chaves. Admins veem todos, comuns veem só a si mesmos."""
+    if not db: return []
     user_req = db.query(Usuario).filter(Usuario.username == usuario_acao).first()
     if not user_req: return []
 
-    # 🚀 Agora puxa TODOS os usuários cadastrados no banco
     operadores = db.query(Usuario).all()
     
-    # 🔒 TRAVA DE SEGURANÇA MANTIDA:
     if not user_req.is_admin:
-        # Se NÃO for admin, ele corta a lista e mostra APENAS ele mesmo
         operadores = [u for u in operadores if u.username == usuario_acao]
         
-    return [{
-        "username": u.username,
-        "tem_chave": bool(u.chave_publica_c2)
-    } for u in operadores]
+    return [{"username": u.username, "tem_chave": bool(u.chave_publica_c2)} for u in operadores]
 
 @router.post("/chaves/gerar")
 def gerar_par_chaves_c2(req: ChaveRequest, db: Session = Depends(get_db)):
-    """Gera RSA 4096."""
+    if not db: raise HTTPException(400, "Ação não permitida na Matriz.")
     user_acao = db.query(Usuario).filter(Usuario.username == req.usuario_acao).first()
     if not user_acao: raise HTTPException(403, "Usuário executor inválido.")
     
-    # 🚀 TRAVA DE SEGURANÇA: Usuário comum não gera chave pros outros
     if not user_acao.is_admin and req.usuario_acao != req.usuario_alvo:
         raise HTTPException(403, "Você só pode gerar chaves para o seu próprio usuário.")
 
@@ -346,10 +375,9 @@ def gerar_par_chaves_c2(req: ChaveRequest, db: Session = Depends(get_db)):
 
 @router.delete("/chaves/revogar/{usuario_alvo}")
 def revogar_chave_c2(usuario_alvo: str, usuario_acao: str, db: Session = Depends(get_db)):
-    """Deleta a chave pública do banco."""
+    if not db: raise HTTPException(400, "Ação não permitida na Matriz.")
     user_acao_obj = db.query(Usuario).filter(Usuario.username == usuario_acao).first()
     
-    # 🚀 TRAVA DE SEGURANÇA: Usuário comum não deleta chave dos outros
     if not user_acao_obj.is_admin and usuario_acao != usuario_alvo:
         raise HTTPException(403, "Você só pode revogar a sua própria chave.")
 

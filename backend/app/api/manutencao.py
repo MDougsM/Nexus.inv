@@ -1,15 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.db.database import SessionLocal
+from app.db.database import get_db
 from app.models import Ativo, RegistroManutencao, LogAuditoria
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/manutencao", tags=["Manutenção e Descartes"])
-
-def get_db():
-    db = SessionLocal()
-    try: yield db
-    finally: db.close()
 
 class StatusUpdate(BaseModel):
     patrimonio: str
@@ -26,21 +21,20 @@ def alterar_status(req: StatusUpdate, db: Session = Depends(get_db)):
     
     status_antigo = ativo.status or "ATIVO"
     
-    # Se for sucata/descarte, ele move fisicamente para o "Descarte"
+    # 🚀 LÓGICA DE SUCATA (DESVINCULA DA UNIDADE)
     if req.novo_status.upper() == "SUCATA":
+        ativo.unidade_id = None # Tira da localidade governamental
         ativo.secretaria = "DESCARTE"
         ativo.setor = req.destino or "N/A"
     
     ativo.status = req.novo_status.upper()
     
-    # Salva o Histórico O.S.
     registro = RegistroManutencao(
         patrimonio=req.patrimonio, status_anterior=status_antigo, status_novo=ativo.status,
         os_referencia=req.os_referencia, motivo=req.motivo, destino=req.destino, usuario=req.usuario_acao
     )
     db.add(registro)
     
-    # Carimba a Auditoria
     txt_os = f" (OS: {req.os_referencia})" if req.os_referencia else ""
     db.add(LogAuditoria(
         usuario=req.usuario_acao, acao="EDICAO", entidade="Ativo", identificador=req.patrimonio,

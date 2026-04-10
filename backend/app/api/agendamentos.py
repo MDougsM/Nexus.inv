@@ -15,18 +15,13 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 
-from app.db.database import SessionLocal
+from app.db.database import get_db
 from app.models import AgendamentoRelatorio, Ativo, HistoricoLeitura, RelatorioGerado
 
 router = APIRouter(prefix="/agendamentos", tags=["Relatórios Automáticos"])
 
 PASTA_RELATORIOS = "relatorios_gerados_csv"
 os.makedirs(PASTA_RELATORIOS, exist_ok=True)
-
-def get_db():
-    db = SessionLocal()
-    try: yield db
-    finally: db.close()
 
 class AgendamentoCreate(BaseModel):
     nome: str
@@ -40,7 +35,10 @@ class AgendamentoCreate(BaseModel):
 
 def gerar_e_enviar_relatorio(agendamento_id: int):
     print(f"\n[AGENDADOR] ⏳ Iniciando geração dupla (CSV+PDF) ID: {agendamento_id}")
-    db = SessionLocal()
+    # Nota: No ambiente assíncrono real o SessionLocal deve vir da factory correta
+    # Como isso é rodado via scheduler do main.py, usamos import manual.
+    from app.db.database import MasterSessionLocal 
+    db = MasterSessionLocal() # Adapte conforme sua injeção de Tenant
     try:
         agendamento = db.query(AgendamentoRelatorio).filter(AgendamentoRelatorio.id == agendamento_id).first()
         if not agendamento or getattr(agendamento, 'status', None) is not True:
@@ -72,13 +70,10 @@ def gerar_e_enviar_relatorio(agendamento_id: int):
         query_ativos = db.query(Ativo)
         if agendamento.secretarias and len(agendamento.secretarias) > 0:
             query_ativos = query_ativos.filter(Ativo.secretaria.in_(agendamento.secretarias))
-        if agendamento.setores and len(agendamento.setores) > 0:
-            query_ativos = query_ativos.filter(Ativo.setor.in_(agendamento.setores))
             
         lista_ativos = query_ativos.all()
 
-        # DADOS BASE PARA AMBOS (CSV E PDF)
-        dados_tabela = [["Patrimonio", "Modelo", "Secretaria", "Setor", "Contador Inicial", "Contador Final", "Consumo"]]
+        dados_tabela = [["Patrimonio", "Modelo", "Unidade/Local", "Contador Inicial", "Contador Final", "Consumo"]]
         total_consumo = 0
 
         for ativo in lista_ativos:
@@ -97,21 +92,22 @@ def gerar_e_enviar_relatorio(agendamento_id: int):
                 v_fim = final.paginas_totais
                 if v_fim >= v_ini:
                     consumo = v_fim - v_ini
-                    dados_tabela.append([ativo.patrimonio, ativo.modelo[:20] if ativo.modelo else 'S/N', ativo.secretaria[:15] if ativo.secretaria else 'S/N', ativo.setor[:15] if ativo.setor else 'S/N', str(v_ini), str(v_fim), str(consumo)])
+                    
+                    # 🚀 LÊ O NOME DA NOVA HIERARQUIA
+                    unidade_nome = ativo.unidade.nome[:25] if ativo.unidade else (ativo.secretaria[:25] if ativo.secretaria else 'S/N')
+                    
+                    dados_tabela.append([ativo.patrimonio, ativo.modelo[:20] if ativo.modelo else 'S/N', unidade_nome, str(v_ini), str(v_fim), str(consumo)])
                     total_consumo += consumo
 
         timestamp = hoje.strftime("%Y%m%d_%H%M%S")
         nome_limpo = agendamento.nome.replace(" ", "_").replace("/", "-")
 
-        # ==========================================
-        # 1. GERANDO O CSV
-        # ==========================================
         caminho_csv = os.path.join(PASTA_RELATORIOS, f"{timestamp}_{nome_limpo}.csv")
         csv_buffer = StringIO()
         csv_writer = csv.writer(csv_buffer, delimiter=';')
         for linha in dados_tabela:
             csv_writer.writerow(linha)
-        csv_writer.writerow(["", "", "", "", "", "TOTAL GERAL:", str(total_consumo)])
+        csv_writer.writerow(["", "", "", "", "TOTAL GERAL:", str(total_consumo)])
 
         csv_bytes = ("\uFEFF" + csv_buffer.getvalue()).encode('utf-8')
         with open(caminho_csv, "wb") as f:
@@ -124,11 +120,8 @@ def gerar_e_enviar_relatorio(agendamento_id: int):
             tamanho_kb=round(len(csv_bytes) / 1024, 1)
         ))
 
-        # ==========================================
-        # 2. GERANDO O PDF
-        # ==========================================
         dados_tabela_pdf = dados_tabela.copy()
-        dados_tabela_pdf.append(["", "", "", "", "", "TOTAL GERAL:", f"{total_consumo} pag."])
+        dados_tabela_pdf.append(["", "", "", "", "TOTAL GERAL:", f"{total_consumo} pag."])
 
         caminho_pdf = os.path.join(PASTA_RELATORIOS, f"{timestamp}_{nome_limpo}.pdf")
         doc = SimpleDocTemplate(caminho_pdf, pagesize=landscape(A4))
@@ -171,16 +164,10 @@ def gerar_e_enviar_relatorio(agendamento_id: int):
     finally:
         db.close()
 
-
 @router.get("/gerados")
 def listar_relatorios_gerados(db: Session = Depends(get_db)):
     relatorios = db.query(RelatorioGerado).order_by(RelatorioGerado.data_emissao.desc()).all()
-    return [{
-        "id": r.id,
-        "nome": r.nome_relatorio,
-        "data_emissao": r.data_emissao.strftime("%Y-%m-%d às %H:%M"),
-        "tamanho": f"{r.tamanho_kb} KB"
-    } for r in relatorios]
+    return [{"id": r.id, "nome": r.nome_relatorio, "data_emissao": r.data_emissao.strftime("%Y-%m-%d %H:%M"), "tamanho": f"{r.tamanho_kb} KB"} for r in relatorios]
 
 @router.get("/gerados/download/{id_relatorio}")
 def baixar_relatorio_gerado(id_relatorio: int, db: Session = Depends(get_db)):
@@ -195,8 +182,7 @@ def baixar_relatorio_gerado(id_relatorio: int, db: Session = Depends(get_db)):
 def deletar_relatorio_gerado(id_relatorio: int, db: Session = Depends(get_db)):
     relatorio = db.query(RelatorioGerado).filter(RelatorioGerado.id == id_relatorio).first()
     if relatorio:
-        if os.path.exists(relatorio.caminho_arquivo):
-            os.remove(relatorio.caminho_arquivo)
+        if os.path.exists(relatorio.caminho_arquivo): os.remove(relatorio.caminho_arquivo)
         db.delete(relatorio)
         db.commit()
         return {"message": "Relatório apagado."}
@@ -226,8 +212,6 @@ def criar_agendamento(req: AgendamentoCreate, db: Session = Depends(get_db)):
 
 @router.post("/{id}/gerar-agora")
 def forcar_geracao_agora(id: int, db: Session = Depends(get_db)):
-    agendamento = db.query(AgendamentoRelatorio).filter(AgendamentoRelatorio.id == id).first()
-    if not agendamento: raise HTTPException(status_code=404, detail="Não encontrado")
     try:
         gerar_e_enviar_relatorio(id)
         return {"message": "Gerado com sucesso!"}

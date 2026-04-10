@@ -15,6 +15,7 @@ import TerminalRemoto from '../components/Cadastro/TerminalRemoto';
 import MapaRede from '../components/MapaRede';
 
 export default function Cadastro() {
+  if (localStorage.getItem('empresa') === 'NEXUS_MASTER') return null; // Trava de segurança anti-montagem
   const [abaAtiva, setAbaAtiva] = useState('lista'); 
   const usuarioAtual = localStorage.getItem('usuario') || 'admin';
   const location = useLocation();
@@ -46,12 +47,24 @@ export default function Cadastro() {
   const [modalExcluir, setModalExcluir] = useState({ aberto: false, ativos: [] });
   const [motivoExclusao, setMotivoExclusao] = useState('');
 
-  const carregarDados = async () => {
+const carregarDados = async () => {
     try {
       setLoading(true);
-      const [resAtivos, resCat, resSec, resManut] = await Promise.all([ api.get('/api/inventario/'), api.get('/api/inventario/categorias'), api.get('/api/unidades/secretarias'), api.get('/api/manutencao/historico') ]);
-      setAtivos(resAtivos.data); setCategorias(resCat.data); setSecretarias(resSec.data); setHistoricoManut(resManut.data);
-    } catch (e) { toast.error('Erro ao conectar.'); } finally { setLoading(false); }
+      const [resAtivos, resCat, resSec, resManut] = await Promise.all([ 
+        api.get('/api/inventario/'), 
+        api.get('/api/inventario/categorias'), 
+        api.get('/api/unidades/'), // 🚀 CORRIGIDO: Rota nova e unificada!
+        api.get('/api/manutencao/historico') 
+      ]);
+      setAtivos(resAtivos.data); 
+      setCategorias(resCat.data); 
+      setSecretarias(resSec.data); // Aqui a gente continua chamando de secretarias pro React, mas são as Unidades
+      setHistoricoManut(resManut.data);
+    } catch (e) { 
+      toast.error('Erro ao conectar.'); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
 // ATUALIZE ESTA PARTE NO SEU CADASTRO.JSX

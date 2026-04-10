@@ -2,94 +2,119 @@ import os
 import json
 import uuid
 import pytz
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 from sqlalchemy import text
 from cryptography.hazmat.primitives import serialization
 
-# 🛡️ CORREÇÃO: Removido Flask (causador do erro) e corrigido imports do FastAPI
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 from apscheduler.schedulers.background import BackgroundScheduler
+
 from app.schemas import ComandoCreate, ComandoResultado
-
-# 🚀 1. AQUI ESTÁ A PRIMEIRA MUDANÇA: Tiramos o 'inventario' do app.api
 from app.api import auth, unidades, auditoria, transferencia, usuarios, manutencao, importacao, agendamentos
+from app.routers import inventario_core, inventario_categorias, inventario_relatorios, inventario_agente, matriz
 
-# 🚀 E IMPORTAMOS OS 4 ARQUIVOS NOVOS DA PASTA ROUTERS
-from app.routers import inventario_core, inventario_categorias, inventario_relatorios, inventario_agente
-
-from app.db.database import engine, SessionLocal, get_db
+# 🚀 IMPORTAÇÕES DA NOVA ARQUITETURA MULTI-TENANT
+from app.db.database import MasterSessionLocal, Empresa, SuperAdmin, get_tenant_engine, get_db, seed_master_db
 from app.models import Base, Categoria, Usuario, Ativo, LogAuditoria, HistoricoLeitura, ComandoAgente
 
-# 🛡️ CORREÇÃO: Definindo o router que estava faltando no topo
+
+app = FastAPI(title="Nexus SaaS Mestre")
+@app.on_event("startup")
+def startup():
+    seed_master_db()
+
 router = APIRouter()
 
+# VARIÁVEIS SEGURAS PELO .ENV
 BACKEND_PORT = int(os.getenv("BACKEND_PORT", 8001))
+AGENTE_SECRET_TOKEN = os.getenv("AGENTE_SECRET_TOKEN", "NEXUS_AGENTE_V5_9b7e1f2a4c6d8e0f3a5b7c9d1e2f4a6b8c0d2e4f6a8b0c2d")
+MODO_TRANSICAO_LEGADO = os.getenv("MODO_TRANSICAO_LEGADO", "True") == "True"
+EMPRESA_PADRAO_NOME = os.getenv("EMPRESA_PADRAO_NOME", "NEWPC")
+EMPRESA_PADRAO_DB = os.getenv("EMPRESA_PADRAO_DB", "empresa_newpc.db")
 
-# Cria as tabelas no banco de dados se não existirem
-Base.metadata.create_all(bind=engine)
+
+def verificar_vencimentos_global():
+    """Vigia financeiro: Bloqueia empresas inadimplentes automaticamente."""
+    db = MasterSessionLocal()
+    try:
+        hoje = date.today()
+        # Busca empresas que venceram e ainda estão marcadas como pagas (inadimplente=False)
+        empresas_vencidas = db.query(Empresa).filter(
+            Empresa.proximo_vencimento < hoje,
+            Empresa.inadimplente == False,
+            Empresa.ativo == True
+        ).all()
+        
+        for emp in empresas_vencidas:
+            emp.inadimplente = True
+            print(f"🚨 [FATURAMENTO] Empresa {emp.codigo_acesso} bloqueada por falta de pagamento.")
+        
+        db.commit()
+    except Exception as e:
+        print(f"❌ Erro no robô de cobrança: {e}")
+    finally:
+        db.close()
+
+# Configuração do Agendador (Adicione antes do 'app = FastAPI()')
+scheduler = BackgroundScheduler()
+# Roda todo dia às 00:01
+scheduler.add_job(verificar_vencimentos_global, 'cron', hour=0, minute=1)
+scheduler.start()
 
 # ==========================================
-# 🔑 GUARDA-COSTAS DO AGENTE SENTINEL (API KEY)
+# 🛡️ DEPENDÊNCIAS DE SEGURANÇA E ROTEAMENTO
 # ==========================================
-AGENTE_SECRET_TOKEN = "NEXUS_AGENTE_V5_9b7e1f2a4c6d8e0f3a5b7c9d1e2f4a6b8c0d2e4f6a8b0c2d"
-
-# 🚀 MODO DE TRANSIÇÃO: Deixe True até salvar todas as máquinas antigas. 
-# Depois, mude para False para blindar o servidor definitivamente.
-MODO_TRANSICAO_LEGADO = True 
-
 def validar_token_agente(x_nexus_token: str = Header(None)):
-    # 1. Se tem o token correto, é o Agente Novo! Passe livre.
-    if x_nexus_token == AGENTE_SECRET_TOKEN:
-        return True 
-        
-    # 2. Se NÃO tem token, mas estamos em transição, deixa passar para ele poder atualizar
-    if not x_nexus_token and MODO_TRANSICAO_LEGADO:
-        # print("⚠️ [TRANSIÇÃO] Agente antigo acessou a API sem token.")
-        return True
-        
-    # 3. Se a transição acabou ou mandaram um token errado (Hackers), BLOQUEIO ABSOLUTO!
-    print(f"🚨 Tentativa de invasão bloqueada! Token recebido: {x_nexus_token}")
+    if x_nexus_token == AGENTE_SECRET_TOKEN: return True 
+    if not x_nexus_token and MODO_TRANSICAO_LEGADO: return True
     raise HTTPException(status_code=403, detail="Acesso negado. Token de Agente inválido ou ausente.")
 
+def get_db_agente(x_nexus_token: str = Header(None)):
+    """ 
+    Dependency especial pro Agente (Já que ele não manda o crachá da empresa no Header).
+    Redireciona a telemetria das máquinas da rua para o banco da empresa Padrão.
+    """
+    master_db = MasterSessionLocal()
+    empresa = master_db.query(Empresa).filter(Empresa.codigo_acesso == EMPRESA_PADRAO_NOME).first()
+    master_db.close()
+    
+    if not empresa: raise HTTPException(status_code=404, detail="Empresa padrão não encontrada")
+    
+    engine = get_tenant_engine(empresa.db_nome)
+    TenantSessionLocal = sessionmaker(bind=engine)
+    db = TenantSessionLocal()
+    try: yield db
+    finally: db.close()
+
 # ==========================================
-# 👤 ROTA DE PERFIL (VERSÃO CORRIGIDA FASTAPI)
+# 👤 ROTA DE PERFIL 
 # ==========================================
 @router.put("/usuarios/perfil/atualizar")
 async def atualizar_perfil(request: Request, db: Session = Depends(get_db)):
     dados = await request.json()
     username = dados.get('username')
-
     usuario = db.query(Usuario).filter(Usuario.username == username).first()
     
-    if not usuario:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    if not usuario: raise HTTPException(status_code=404, detail="Usuário não encontrado")
 
-    # ⚖️ LÓGICA DO ACEITE / REVOGAÇÃO DOS TERMOS
     if 'termos_aceitos' in dados:
         aceitou = dados.get('termos_aceitos')
         usuario.termos_aceitos = aceitou
-        
         if aceitou:
             usuario.data_aceite = datetime.utcnow()
             usuario.ip_aceite = request.client.host 
-            print(f"✅ Termos aceitos por {username} no IP {usuario.ip_aceite}")
         else:
             usuario.data_aceite = None
             usuario.ip_aceite = None
-            print(f"❌ Assinatura revogada por {username}")
 
-    # Atualizações normais
-    if 'nome_exibicao' in dados:
-        usuario.nome_exibicao = dados.get('nome_exibicao')
-    if 'avatar' in dados:
-        usuario.avatar = dados.get('avatar')
-    if 'email' in dados:
-        usuario.email = dados.get('email')
+    if 'nome_exibicao' in dados: usuario.nome_exibicao = dados.get('nome_exibicao')
+    if 'avatar' in dados: usuario.avatar = dados.get('avatar')
+    if 'email' in dados: usuario.email = dados.get('email')
 
     db.commit()
     db.refresh(usuario)
@@ -101,108 +126,49 @@ async def atualizar_perfil(request: Request, db: Session = Depends(get_db)):
         "avatar": usuario.avatar
     }
 
-
 # ==========================================
-# 🚀 FUNÇÃO DE SEED (Alimentação Automática)
+# ⏰ SCHEDULER MULTI-TENANT (Roda os relatórios de todas as empresas ativas)
 # ==========================================
-def create_initial_data():
-    db = SessionLocal()
-    try:       
-        # Garante o usuário admin com a senha padrão e TERMOS ACEITOS
-        user = db.query(Usuario).filter(Usuario.username == "admin").first()
-        
-        if not user:
-            print("👤 Criando usuário mestre: admin / admin123")
-            novo_admin = Usuario(
-                username="admin", 
-                password="admin123", 
-                is_admin=True,
-                nome_exibicao="Administrador do Sistema",
-                termos_aceitos=True, # 🚀 Nasce com os termos aceitos!
-                data_aceite=datetime.now(),
-                ip_aceite="127.0.0.1 (Sistema)"
-            )
-            db.add(novo_admin)
-            db.commit()
-            print("✅ Usuário Admin criado e salvo com sucesso!")
-            
-        else:
-            # Se o Admin já existe, mas está com a senha errada ou SEM os termos:
-            mudou_algo = False
-            
-            if user.password != "admin123":
-                user.password = "admin123"
-                mudou_algo = True
-                print("✅ Senha do Admin resetada para o padrão.")
-                
-            # Garante que o Admin atual seja atualizado para a regra nova
-            if not user.termos_aceitos:
-                user.termos_aceitos = True
-                user.data_aceite = datetime.now()
-                user.ip_aceite = "127.0.0.1 (Atualização do Sistema)"
-                mudou_algo = True
-                print("✅ Termos de uso validados automaticamente para o Admin.")
-                
-            if mudou_algo:
-                db.commit()
-            
-        # GARANTE A CATEGORIA MULTIFUNCIONAL NO BANCO
-        cat_print = db.query(Categoria).filter(Categoria.nome == "Multifuncional").first()
-        if not cat_print:
-            nova_cat = Categoria(nome="Multifuncional", campos_config=["ip", "toner", "cilindro", "paginas_totais", "alerta_critico", "serial"])
-            db.add(nova_cat)
-            db.commit()
-            
-    except Exception as e:
-        print(f"❌ Erro crítico ao popular banco: {e}")
-        db.rollback() 
-    finally:
-        db.close()
-
-# Executa o seed
-create_initial_data()
-
-app = FastAPI(title="NEXUS API")
-
-# Inicia o relógio do sistema
 fuso_horario = pytz.timezone('America/Campo_Grande')
 scheduler = BackgroundScheduler(timezone=fuso_horario)
 scheduler.start()
 
-# Carrega os relatórios do banco para a memória quando o servidor liga
 @app.on_event("startup")
 def carregar_cron_jobs():
-    db = SessionLocal()
-    # Import dinâmico para evitar circular import
+    db_master = MasterSessionLocal()
+    empresas = db_master.query(Empresa).filter(Empresa.ativo == True).all()
+    db_master.close()
+    
     from app.api.agendamentos import gerar_e_enviar_relatorio
     from app.models import AgendamentoRelatorio
-    
-    ativos = db.query(AgendamentoRelatorio).filter(AgendamentoRelatorio.status == True).all()
-    for ag in ativos:
-        if ag.horario:
-            hora, minuto = ag.horario.split(":")
-            job_id = f"relatorio_{ag.id}"
-            scheduler.add_job(
-                gerar_e_enviar_relatorio, 'cron', 
-                day=ag.dia_do_mes, hour=int(hora), minute=int(minuto), 
-                args=[ag.id], id=job_id, replace_existing=True
-            )
-    db.close()
-    print(f"⏰ APScheduler iniciado! {len(ativos)} relatório(s) agendado(s) na memória.")
+
+    for emp in empresas:
+        engine = get_tenant_engine(emp.db_nome)
+        TenantSessionLocal = sessionmaker(bind=engine)
+        db = TenantSessionLocal()
+        try:
+            ativos = db.query(AgendamentoRelatorio).filter(AgendamentoRelatorio.status == True).all()
+            for ag in ativos:
+                if ag.horario:
+                    hora, minuto = ag.horario.split(":")
+                    job_id = f"relatorio_{emp.codigo_acesso}_{ag.id}"
+                    scheduler.add_job(
+                        gerar_e_enviar_relatorio, 'cron', 
+                        day=ag.dia_do_mes, hour=int(hora), minute=int(minuto), 
+                        args=[ag.id], id=job_id, replace_existing=True
+                    )
+        except Exception as e:
+            print(f"Erro ao carregar cron da empresa {emp.codigo_acesso}: {e}")
+        finally:
+            db.close()
+    print(f"⏰ APScheduler iniciado! Escaneando {len(empresas)} empresas.")
 
 # ==========================================
 # 🔒 CONFIGURAÇÃO DE SEGURANÇA (CORS)
 # ==========================================
 FRONTEND_URL = os.getenv("FRONTEND_URL", "") 
-
-origens_permitidas = [
-    "http://localhost",
-    "http://localhost:5174", 
-    "http://localhost:8001"
-]
-
-if FRONTEND_URL:
-    origens_permitidas.append(FRONTEND_URL)
+origens_permitidas = ["http://localhost", "http://localhost:5174", "http://localhost:8001"]
+if FRONTEND_URL: origens_permitidas.append(FRONTEND_URL)
 
 app.add_middleware(
     CORSMiddleware,
@@ -219,53 +185,50 @@ class PingRequest(BaseModel):
     username: str
 
 @app.post("/api/usuarios/ping")
-def ping_usuario(dados: PingRequest, db: Session = Depends(get_db)):
-    usuario = db.query(Usuario).filter(Usuario.username == dados.username).first()
-    if usuario:
-        usuario.ultimo_acesso = datetime.utcnow()
-        db.commit()
+def ping_usuario(dados: PingRequest, request: Request):
+    # 🚀 Se for a Matriz, retorna OK imediatamente. Não precisa de Banco de Dados.
+    if request.headers.get("x-empresa") == "NEXUS_MASTER":
+        return {"status": "ok"}
+    
+    # Se for um cliente comum, pega o banco e atualiza o acesso
+    try:
+        db = next(get_db(request))
+        usuario = db.query(Usuario).filter(Usuario.username == dados.username).first()
+        if usuario:
+            usuario.ultimo_acesso = datetime.utcnow()
+            db.commit()
+    except Exception:
+        pass # Ignora erros de ping silenciosamente
+    finally:
+        try: db.close() 
+        except: pass
+        
     return {"status": "ok"}
 
 @app.get("/api/usuarios/me")
-def get_me():
-    return {"username": "Operador Nexus", "is_admin": True}
+def get_me(): return {"username": "Operador Nexus", "is_admin": True}
 
 @app.get("/api/backup/download")
 def download_backup():
-    db_path = "./data/nexus.db" 
+    # Agora puxa o DB da empresa padrão pelo .env
+    db_path = os.path.join(os.getenv("TENANTS_DB_DIR", "./data/tenants"), EMPRESA_PADRAO_DB)
     if os.path.exists(db_path):
         return FileResponse(path=db_path, filename="nexus_backup.db", media_type="application/octet-stream")
     return {"error": "Arquivo de banco de dados não encontrado."}
 
-@app.get("/api/inventario/download/sentinel")
-def baixar_sentinel():
-    caminho = os.path.join("app", "static", "Nexus_Sentinel_Instalador.exe")
-    if os.path.exists(caminho):
-        return FileResponse(caminho, filename="Nexus_Sentinel_Instalador.exe")
-    return {"erro": "Arquivo Sentinel não encontrado."}
-
 @app.get("/api/inventario/download/agente")
 def download_agente():
-    # 1. Lê a versão do .env (Se não achar, usa '5.0' como segurança)
     versao_atual = os.getenv("AGENTE_VERSION", "5.0")
-    
-    # 2. Monta o nome do arquivo dinamicamente!
     nome_arquivo = f"Nexus_Instalador_v{versao_atual}.exe"
-    
-    # 3. Procura na pasta static
     caminho = os.path.join("app", "static", nome_arquivo)
     
     if os.path.exists(caminho):
-        return FileResponse(
-            path=caminho, 
-            filename=nome_arquivo, 
-            media_type='application/octet-stream'
-        )
-        
-    return {"erro": f"Arquivo {nome_arquivo} não encontrado no servidor. Verifique a pasta static."}
+        return FileResponse(path=caminho, filename=nome_arquivo, media_type='application/octet-stream')
+    return {"erro": f"Arquivo {nome_arquivo} não encontrado no servidor."}
 
 # ==========================================
-# 🤖 ROTAS DO AGENTE SENTINEL (TELEMETRIA)
+# 🤖 ROTAS DO AGENTE SENTINEL (TELEMETRIA E C2)
+# Usa o `get_db_agente` como fallback de empresa!
 # ==========================================
 class TelemetriaImpressora(BaseModel):
     alerta_critico: bool
@@ -275,7 +238,7 @@ class TelemetriaImpressora(BaseModel):
     telemetria: dict      
 
 @app.post("/api/inventario/telemetria", dependencies=[Depends(validar_token_agente)])
-async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session = Depends(get_db)):
+async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session = Depends(get_db_agente)):
     sn = dados.dados_da_maquina.get('serial', '').strip()
     ip = dados.dados_da_maquina.get('ip', '').strip()
     hostname = dados.dados_da_maquina.get('hostname', '').strip()
@@ -362,41 +325,59 @@ async def receber_telemetria_sentinel(dados: TelemetriaImpressora, db: Session =
     db.commit()
     return {"patrimonio": maquina_atual.patrimonio, "nome": maquina_atual.modelo}
 
+@app.get("/api/agente/comandos/pendentes/{uuid_persistente}", dependencies=[Depends(validar_token_agente)])
+def verificar_comandos(uuid_persistente: str, db: Session = Depends(get_db_agente)):
+    comando = db.query(ComandoAgente).filter(
+        (ComandoAgente.uuid_persistente == uuid_persistente) | 
+        (ComandoAgente.patrimonio == uuid_persistente),
+        ComandoAgente.status == "PENDENTE"
+    ).order_by(ComandoAgente.data_criacao.asc()).first()
+    
+    if not comando:
+        ativo = db.query(Ativo).filter((Ativo.uuid_persistente == uuid_persistente) | (Ativo.patrimonio == uuid_persistente)).first()
+        if ativo:
+            comando = db.query(ComandoAgente).filter(
+                (ComandoAgente.patrimonio == ativo.patrimonio) | (ComandoAgente.uuid_persistente == ativo.uuid_persistente),
+                ComandoAgente.status == "PENDENTE"
+            ).order_by(ComandoAgente.data_criacao.asc()).first()
 
-# ==========================================
-# 💻 ROTAS DO TERMINAL REMOTO (C2)
-# ==========================================
+    if comando:
+        comando.status = "EXECUTANDO"
+        db.commit()
+        return {"tem_comando": True, "comando_id": comando.id, "script_content": comando.script_content}
+    return {"tem_comando": False}
+
+@app.post("/api/agente/comandos/resultado", dependencies=[Depends(validar_token_agente)])
+def receber_resultado_comando(dados: ComandoResultado, db: Session = Depends(get_db_agente)):
+    comando = db.query(ComandoAgente).filter(ComandoAgente.id == dados.comando_id).first()
+    if comando:
+        comando.status = dados.status
+        comando.output_log = dados.output_log
+        comando.data_conclusao = datetime.utcnow()
+        db.commit()
+        return {"message": "Sucesso"}
+    raise HTTPException(status_code=404, detail="Não encontrado")
+
+# (Envia o comando. Usamos get_db pois é o painel que aciona esta rota)
 @app.post("/api/comandos/enviar")
 def enviar_comando(dados: ComandoCreate, db: Session = Depends(get_db)):
-    
-    # 1. Busca o usuário que está tentando enviar o comando
     user = db.query(Usuario).filter(Usuario.username == dados.usuario_emissor).first()
     if not user or not user.chave_publica_c2:
         raise HTTPException(status_code=403, detail="Acesso negado. Você não possui uma chave C2 ativa.")
 
-    # 🚀 A NOVA TRAVA: VERIFICA SE A MÁQUINA ESTÁ NA LISTA DE PROTEÇÃO MÁXIMA
     ativo_alvo = db.query(Ativo).filter(Ativo.patrimonio == dados.patrimonio).first()
-    if not ativo_alvo:
-        raise HTTPException(status_code=404, detail="Máquina alvo não encontrada no banco.")
+    if not ativo_alvo: raise HTTPException(status_code=404, detail="Máquina alvo não encontrada no banco.")
 
-    # Puxa os dados dinâmicos com segurança para ver se a flag existe
     dados_din = ativo_alvo.dados_dinamicos or {}
     if isinstance(dados_din, str):
-        import json
         try: dados_din = json.loads(dados_din.replace("'", '"').replace("None", "null"))
         except: dados_din = {}
     
     is_protegida = dados_din.get("protecao_c2", False)
 
-    # A REGRA DE OURO: Se a máquina é VIP e o usuário NÃO é admin global -> BLOQUEIA!
     if is_protegida and not user.is_admin:
-        raise HTTPException(
-            status_code=403, 
-            detail="⚠️ OPERAÇÃO BLOQUEADA: Esta máquina está sob Proteção Nível Máximo (Diretoria/Servidor). Apenas Administradores Globais podem injetar comandos nela."
-        )
+        raise HTTPException(status_code=403, detail="⚠️ OPERAÇÃO BLOQUEADA: Máquina VIP.")
 
-    # 2. TENTA ABRIR A CHAVE PRIVADA COM A SENHA FORNECIDA (Sua lógica RSA original continua aqui)
-    from cryptography.hazmat.primitives import serialization
     try:
         chave_privada = serialization.load_pem_private_key(
             dados.chave_privada_pem.encode('utf-8'),
@@ -406,18 +387,10 @@ def enviar_comando(dados: ComandoCreate, db: Session = Depends(get_db)):
             encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo
         ).decode('utf-8')
 
-        if chave_publica_extraida != user.chave_publica_c2:
-            raise ValueError("As chaves não coincidem")
-            
+        if chave_publica_extraida != user.chave_publica_c2: raise ValueError("As chaves não coincidem")
     except ValueError as ve:
-        if "As chaves não coincidem" in str(ve):
-            raise HTTPException(status_code=403, detail="Acesso bloqueado: Este arquivo .PEM pertence a outro técnico.")
-        else:
-            raise HTTPException(status_code=403, detail="Acesso bloqueado: Senha da chave incorreta.")
-    except Exception as e:
-        raise HTTPException(status_code=403, detail="Acesso bloqueado: O arquivo .PEM enviado é inválido ou está corrompido.")
+        raise HTTPException(status_code=403, detail="Acesso bloqueado: PEM inválido ou Senha Incorreta.")
 
-    # 3. SE PASSOU POR TODA A SEGURANÇA, ENFILEIRA O COMANDO!
     novo_comando = ComandoAgente(
         patrimonio=dados.patrimonio,
         uuid_persistente=dados.uuid_persistente,
@@ -433,70 +406,15 @@ def enviar_comando(dados: ComandoCreate, db: Session = Depends(get_db)):
 def listar_comandos(patrimonio: str, db: Session = Depends(get_db)):
     return db.query(ComandoAgente).filter(ComandoAgente.patrimonio == patrimonio).order_by(ComandoAgente.data_criacao.desc()).limit(10).all()
 
-@app.get("/api/agente/comandos/pendentes/{uuid_persistente}", dependencies=[Depends(validar_token_agente)])
-def verificar_comandos(uuid_persistente: str, db: Session = Depends(get_db)):
-    # PLANO A: Tenta achar o comando diretamente pelo UUID ou Patrimônio
-    comando = db.query(ComandoAgente).filter(
-        (ComandoAgente.uuid_persistente == uuid_persistente) | 
-        (ComandoAgente.patrimonio == uuid_persistente),
-        ComandoAgente.status == "PENDENTE"
-    ).order_by(ComandoAgente.data_criacao.asc()).first()
-    
-    # PLANO B: Desencontro de Identidade! Cruza os dados no banco
-    if not comando:
-        ativo = db.query(Ativo).filter(
-            (Ativo.uuid_persistente == uuid_persistente) |
-            (Ativo.patrimonio == uuid_persistente)
-        ).first()
-        
-        if ativo:
-            comando = db.query(ComandoAgente).filter(
-                (ComandoAgente.patrimonio == ativo.patrimonio) |
-                (ComandoAgente.uuid_persistente == ativo.uuid_persistente),
-                ComandoAgente.status == "PENDENTE"
-            ).order_by(ComandoAgente.data_criacao.asc()).first()
-
-    if comando:
-        comando.status = "EXECUTANDO"
-        db.commit()
-        return {"tem_comando": True, "comando_id": comando.id, "script_content": comando.script_content}
-        
-    return {"tem_comando": False}
-
-@app.post("/api/agente/comandos/resultado", dependencies=[Depends(validar_token_agente)])
-def receber_resultado_comando(dados: ComandoResultado, db: Session = Depends(get_db)):
-    comando = db.query(ComandoAgente).filter(ComandoAgente.id == dados.comando_id).first()
-    if comando:
-        comando.status = dados.status
-        comando.output_log = dados.output_log
-        comando.data_conclusao = datetime.utcnow()
-        db.commit()
-        return {"message": "Sucesso"}
-    raise HTTPException(status_code=404, detail="Não encontrado")
-
-@app.post("/api/agente/comandos/resultado", dependencies=[Depends(validar_token_agente)])
-def receber_resultado_comando(dados: ComandoResultado, db: Session = Depends(get_db)):
-    comando = db.query(ComandoAgente).filter(ComandoAgente.id == dados.comando_id).first()
-    if comando:
-        comando.status = dados.status
-        comando.output_log = dados.output_log
-        comando.data_conclusao = datetime.utcnow()
-        db.commit()
-        return {"message": "Sucesso"}
-    raise HTTPException(status_code=404, detail="Não encontrado")
-
 # ==========================================
 # 🔗 REGISTRO FINAL DE ROTAS
 # ==========================================
 app.include_router(router, prefix="/api") 
 app.include_router(auth.router, prefix="/api")
-
-# 🚀 2. AQUI ESTÁ A SEGUNDA MUDANÇA: Retiramos o 'inventario.router' e colocamos as 4 ramificações novas
 app.include_router(inventario_core.router, prefix="/api")
 app.include_router(inventario_categorias.router, prefix="/api")
 app.include_router(inventario_relatorios.router, prefix="/api")
 app.include_router(inventario_agente.router, prefix="/api")
-
 app.include_router(unidades.router, prefix="/api")
 app.include_router(auditoria.router, prefix="/api")
 app.include_router(transferencia.router, prefix="/api")
@@ -504,3 +422,4 @@ app.include_router(usuarios.router, prefix="/api")
 app.include_router(manutencao.router, prefix="/api")
 app.include_router(importacao.router, prefix="/api")
 app.include_router(agendamentos.router, prefix="/api")
+app.include_router(matriz.router, prefix="/api")

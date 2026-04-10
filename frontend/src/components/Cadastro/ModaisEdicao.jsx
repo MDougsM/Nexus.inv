@@ -121,7 +121,6 @@ export default function ModaisEdicao({
                 </div>
               </div>
 
-              {/* 🚀 O RÓTULO DO APELIDO AGORA É GLOBAL */}
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1 text-emerald-600">Nome da Máquina / Apelido</label>
                 <input value={modalEdicao.form.nome_personalizado || ''} placeholder="Ex: Recepção Central, PC do Diretor..." onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, nome_personalizado: e.target.value}})} className="w-full p-3 rounded-xl border outline-none font-bold focus:ring-2 focus:ring-emerald-500/20 transition-all" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} />
@@ -130,6 +129,27 @@ export default function ModaisEdicao({
               <div className="grid grid-cols-2 gap-6">
                  <div className="space-y-1"><label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1" style={{ color: 'var(--text-main)' }}>Marca</label><input className="w-full p-3 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500/20 transition-all" style={{backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)'}} value={modalEdicao.form.marca || ''} onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, marca: e.target.value}})} /></div>
                  <div className="space-y-1"><label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1" style={{ color: 'var(--text-main)' }}>Modelo</label><input className="w-full p-3 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500/20 transition-all" style={{backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)'}} value={modalEdicao.form.modelo || ''} onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, modelo: e.target.value}})} /></div>
+              </div>
+
+              {/* 🚀 NOVO BLOCO GOVERNAMENTAL DENTRO DA EDIÇÃO */}
+              <div className="pt-6 border-t" style={{borderColor: 'var(--border-light)'}}>
+                 <h4 className="text-[11px] font-black text-amber-600 uppercase tracking-[2px] mb-4 flex items-center gap-2">🏛️ Dados Governamentais</h4>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1" style={{ color: 'var(--text-main)' }}>Nº Licitação/Pregão</label>
+                      <input className="w-full p-3 rounded-xl border outline-none font-bold" style={{backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)'}} value={modalEdicao.form.numero_licitacao || ''} placeholder="Ex: PE-015/2024" onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, numero_licitacao: e.target.value}})} />
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1" style={{ color: 'var(--text-main)' }}>Término Garantia</label>
+                      <input type="date" className="w-full p-3 rounded-xl border outline-none font-bold" style={{backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)'}} value={modalEdicao.form.data_vencimento_garantia?.split('T')[0] || ''} onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, data_vencimento_garantia: e.target.value}})} />
+                    </div>
+                    
+                    <div className="space-y-1 md:col-span-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1" style={{ color: 'var(--text-main)' }}>Servidor Responsável (Cautela)</label>
+                      <input className="w-full p-3 rounded-xl border outline-none font-bold" style={{backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)'}} placeholder="Nome do servidor que assinou o termo..." value={modalEdicao.form.responsavel_atual || ''} onChange={e => setModalEdicao({...modalEdicao, form: {...modalEdicao.form, responsavel_atual: e.target.value}})} />
+                    </div>
+                 </div>
               </div>
 
               <div className="pt-6 border-t" style={{borderColor: 'var(--border-light)'}}>
@@ -191,7 +211,6 @@ export default function ModaisEdicao({
       {/* MODAL LOTE MANTIDO INTACTO */}
       {modalEdicaoMassa.aberto && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in" onClick={() => setModalEdicaoMassa({ aberto: false, ativos: [] })}>
-          {/* ... Código do modal de lote existente ... */}
           <div className="w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden border border-white/10" style={{backgroundColor: 'var(--bg-card)'}} onClick={e => e.stopPropagation()}>
             <div className="p-6 border-b flex items-center gap-3 bg-blue-600 text-white">
               <div className="text-2xl">⚡</div>
@@ -210,7 +229,7 @@ export default function ModaisEdicao({
                   <div className="grid grid-cols-1 gap-4">
                     {camposMassa.map(c => {
                       const isBloqueado = camposBloqueados.includes(c);
-                      if(isBloqueado) return null; // Não mostra os travados na edição em lote
+                      if(isBloqueado) return null; 
                       
                       return (
                         <div key={c} className="p-4 rounded-2xl border transition-all focus-within:border-blue-500 focus-within:shadow-sm" style={{backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)'}}>
