@@ -1,5 +1,6 @@
 import json
 import re
+import os
 from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -72,6 +73,45 @@ def listar_ativos(db: Session = Depends(get_db)):
     """Lista apenas ativos que NÃO estão na lixeira"""
     ativos = db.query(Ativo).filter(Ativo.deletado == False).all()
     return [{**a.__dict__, "categoria_nome": a.categoria.nome if a.categoria else "Sem Categoria"} for a in ativos]
+
+@router.get("/ficha/detalhes/{patrimonio}")
+def obter_detalhes_ficha(patrimonio: str, db: Session = Depends(get_db)):
+    ativo = db.query(Ativo).filter(Ativo.patrimonio == patrimonio, Ativo.deletado == False).first()
+    if not ativo:
+        raise HTTPException(status_code=404, detail="Ativo não encontrado")
+
+    dados_dinamicos = ativo.dados_dinamicos or {}
+    if isinstance(dados_dinamicos, str):
+        try:
+            dados_dinamicos = json.loads(dados_dinamicos.replace("'", '"'))
+        except Exception:
+            dados_dinamicos = {}
+
+    ativo_formatado = {
+        "id": ativo.id,
+        "patrimonio": ativo.patrimonio,
+        "marca": ativo.marca,
+        "modelo": ativo.modelo,
+        "nome_personalizado": ativo.nome_personalizado,
+        "tecnico": ativo.tecnico,
+        "categoria_id": int(ativo.categoria_id) if ativo.categoria_id else None,
+        "categoria_nome": ativo.categoria.nome if ativo.categoria else None,
+        "secretaria": ativo.secretaria,
+        "local": ativo.local,
+        "setor": ativo.setor,
+        "status": ativo.status,
+        "ultima_comunicacao": ativo.ultima_comunicacao.isoformat() if ativo.ultima_comunicacao else None,
+        "numero_licitacao": ativo.numero_licitacao,
+        "data_vencimento_garantia": ativo.data_vencimento_garantia.isoformat() if ativo.data_vencimento_garantia else None,
+        "responsavel_atual": ativo.responsavel_atual,
+        "uuid_persistente": ativo.uuid_persistente,
+        "dominio_proprio": ativo.dominio_proprio,
+        "dados_dinamicos": dados_dinamicos,
+        "unidade": {"id": ativo.unidade.id, "nome": ativo.unidade.nome, "tipo": ativo.unidade.tipo} if ativo.unidade else None
+    }
+
+    historico = db.query(LogAuditoria).filter(LogAuditoria.identificador == ativo.patrimonio).order_by(LogAuditoria.data_hora.desc()).limit(20).all()
+    return {"ativo": ativo_formatado, "historico": historico}
 
 @router.post("/")
 def criar_ativo(req: AtivoRequest, request: Request, db: Session = Depends(get_db)):
