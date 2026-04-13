@@ -9,6 +9,8 @@ export default function ConsultaQR() {
   const [loading, setLoading] = useState(true);
   const [dados, setDados] = useState(null);
   const [modo, setModo] = useState('VISITANTE');
+  
+  // States do Editor
   const [usuarioEditor, setUsuarioEditor] = useState(null);
   const [showLoginForm, setShowLoginForm] = useState(false);
   const [editorLogin, setEditorLogin] = useState({ username: '', password: '' });
@@ -26,9 +28,7 @@ export default function ConsultaQR() {
         const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
         const res = await axios.get(`${baseURL}/api/inventario/ficha/detalhes/${encodeURIComponent(patrimonio)}`, { headers });
 
-        if (!res.data || !res.data.ativo) {
-          throw new Error('Ativo não encontrado');
-        }
+        if (!res.data || !res.data.ativo) throw new Error('Ativo não encontrado');
 
         setDados(res.data);
         setModo(token ? 'EDITOR' : 'VISITANTE');
@@ -39,14 +39,13 @@ export default function ConsultaQR() {
         setLoading(false);
       }
     };
-
     buscarDados();
   }, [tenant, patrimonio]);
 
   useEffect(() => {
     if (!dados?.ativo) return;
     const ativo = dados.ativo;
-    const detalhes = parseJSONSeguro(ativo.dados_dinamicos);
+    const detalhes = superParse(ativo.dados_dinamicos);
     setFormEdicao({
       patrimonio: ativo.patrimonio || '',
       local: ativo.local || '',
@@ -57,10 +56,10 @@ export default function ConsultaQR() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="animate-pulse flex flex-col items-center">
           <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="font-black text-gray-500 uppercase tracking-widest text-sm">Consultando Base de Dados...</p>
+          <p className="font-black text-slate-500 uppercase tracking-widest text-sm">Decodificando Ativo...</p>
         </div>
       </div>
     );
@@ -68,258 +67,280 @@ export default function ConsultaQR() {
 
   if (dados === false) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4 text-center">
-        <div className="bg-white p-8 rounded-3xl shadow-xl max-w-sm w-full">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 text-center">
+        <div className="bg-white p-8 rounded-3xl shadow-xl max-w-sm w-full border-t-4 border-red-500">
           <div className="text-6xl mb-4">🚫</div>
-          <h2 className="text-xl font-black text-gray-800 mb-2">Ativo Inativo</h2>
-          <p className="text-sm text-gray-500 font-bold mb-6">Este patrimônio não existe ou foi removido da base.</p>
+          <h2 className="text-xl font-black text-slate-800 mb-2">Ativo Inativo</h2>
+          <p className="text-sm text-slate-500 font-bold mb-6">Este patrimônio não existe ou foi removido da base.</p>
           <button onClick={() => window.location.href = '/'} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg">Ir para a Home</button>
         </div>
       </div>
     );
   }
 
-  const parseJSONSeguro = (dado) => {
+  // 🚀 PARSER TURBINADO: Arruma strings quebradas do Python
+  const superParse = (dado) => {
     if (!dado) return {};
     if (typeof dado === 'object') return dado;
-    try { return JSON.parse(dado.replace(/'/g, '"').replace(/None/g, 'null').replace(/False/g, 'false').replace(/True/g, 'true')); } catch (e) { return {}; }
+    try { return JSON.parse(dado); } catch(e) {}
+    try { return JSON.parse(`[${dado}]`); } catch(e) {}
+    try {
+      let limpo = dado.replace(/'/g, '"').replace(/None/g, 'null').replace(/False/g, 'false').replace(/True/g, 'true');
+      return JSON.parse(limpo);
+    } catch (e) {}
+    try {
+      let limpo = dado.replace(/'/g, '"').replace(/None/g, 'null').replace(/False/g, 'false').replace(/True/g, 'true');
+      return JSON.parse(`[${limpo}]`);
+    } catch (e) { return dado; } // Retorna string original se tudo falhar
   };
 
   const ativo = dados.ativo;
-  const dinamicos = parseJSONSeguro(ativo.dados_dinamicos);
-  const camposExtras = Object.entries(dinamicos).sort(([a], [b]) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+  const dinamicos = superParse(ativo.dados_dinamicos);
+  
+  // Calcula Status Online
+  let isOnline = false;
+  if (ativo.ultima_comunicacao) {
+    const diffDias = (new Date() - new Date(ativo.ultima_comunicacao + 'Z')) / (1000 * 60 * 60 * 24);
+    isOnline = diffDias < 3;
+  }
 
-  const formatLabel = (label) => label.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
-  const formatValue = (value) => {
-    if (typeof value === 'boolean') return value ? 'Sim' : 'Não';
-    if (!value && value !== 0) return 'Não informado';
-    return value;
-  };
-
+  // Lógica do Editor
   const isEditor = modo === 'EDITOR' || Boolean(usuarioEditor);
 
   const handleEditorLogin = async (e) => {
     e.preventDefault();
     setEditorError('');
     setEditorLoading(true);
-
     try {
       const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
-      const res = await axios.post(`${baseURL}/api/usuarios/login`, {
-        empresa: tenant,
-        username: editorLogin.username.trim(),
-        password: editorLogin.password
-      });
-
+      const res = await axios.post(`${baseURL}/api/usuarios/login`, { empresa: tenant, username: editorLogin.username.trim(), password: editorLogin.password });
       setUsuarioEditor({ username: res.data.username, is_admin: res.data.is_admin });
       setModo('EDITOR');
       setShowLoginForm(false);
-      toast.success('Acesso técnico liberado. Agora você pode editar campos limitados.');
-    } catch (error) {
-      setEditorError(error?.response?.data?.detail || error.message || 'Credenciais inválidas.');
-    } finally {
-      setEditorLoading(false);
-    }
+      toast.success('Acesso técnico liberado.');
+    } catch (error) { setEditorError(error?.response?.data?.detail || 'Credenciais inválidas.'); } finally { setEditorLoading(false); }
   };
 
   const handleEditorSave = async () => {
-    setEditorError('');
     setEditorLoading(true);
     try {
       const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
-      const token = localStorage.getItem('token');
       const headers = { 'x-empresa': tenant };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
+      if (localStorage.getItem('token')) headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
 
       const payload = {
         usuario_acao: usuarioEditor?.username || 'Técnico QR',
         patrimonio: formEdicao.patrimonio.trim(),
         local: formEdicao.local.trim(),
         nome_personalizado: formEdicao.nome_personalizado.trim(),
-        dados_dinamicos: {
-          ...dinamicos,
-          observacao: formEdicao.observacao || ''
-        }
+        dados_dinamicos: { ...dinamicos, observacao: formEdicao.observacao || '' }
       };
 
       await axios.put(`${baseURL}/api/inventario/ficha/editar/${encodeURIComponent(ativo.patrimonio)}`, payload, { headers });
-
-      const novoAtivo = { ...ativo, ...payload, dados_dinamicos: payload.dados_dinamicos };
-      setDados(prev => ({ ...prev, ativo: novoAtivo }));
-      toast.success('Alterações salvas com sucesso.');
-
-      if (payload.patrimonio !== ativo.patrimonio) {
-        window.location.href = `/consulta/${tenant}/${encodeURIComponent(payload.patrimonio)}`;
-        return;
-      }
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || 'Erro ao salvar alterações.');
-    } finally {
-      setEditorLoading(false);
-    }
+      toast.success('Alterações salvas!');
+      if (payload.patrimonio !== ativo.patrimonio) { window.location.href = `/consulta/${tenant}/${encodeURIComponent(payload.patrimonio)}`; return; }
+      setDados(prev => ({ ...prev, ativo: { ...ativo, ...payload, dados_dinamicos: payload.dados_dinamicos } }));
+    } catch (error) { toast.error('Erro ao salvar alterações.'); } finally { setEditorLoading(false); }
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col relative">
-      <div className="bg-gradient-to-r from-blue-700 to-blue-900 text-white p-6 rounded-b-[40px] shadow-lg shrink-0">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <span className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">🏛️</span>
-            <span className="font-black tracking-widest text-xs opacity-80 uppercase">{tenant}</span>
-          </div>
-          <span className={`px-3 py-1 rounded-full text-[9px] font-black tracking-widest border ${modo === 'EDITOR' ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300' : 'bg-white/10 border-white/20 text-white/70'}`}>
-            MODO {modo}
-          </span>
-        </div>
+  // 🎨 RENDERIZADORES CUSTOMIZADOS PARA HARDWARE
+  const renderDiscos = (discos) => {
+    if (!Array.isArray(discos)) return <span className="text-sm font-bold text-slate-700">{discos}</span>;
+    return (
+      <div className="space-y-3 w-full">
+        {discos.map((d, i) => {
+          const total = d.tamanho_gb || 1;
+          const livre = d.livre_gb || 0;
+          const usado = total - livre;
+          const pct = Math.min(100, Math.max(0, (usado / total) * 100));
+          const corBarra = pct > 90 ? 'bg-red-500' : pct > 75 ? 'bg-yellow-500' : 'bg-blue-500';
+          return (
+            <div key={i} className="bg-white p-3 rounded-xl border border-slate-200">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-xs font-black uppercase text-slate-700 flex items-center gap-1">💾 Disco {d.drive}</span>
+                <span className="text-[10px] font-bold text-slate-500">{livre.toFixed(1)}GB Livres de {total.toFixed(1)}GB</span>
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-2 mb-1 overflow-hidden">
+                <div className={`${corBarra} h-2 rounded-full transition-all`} style={{ width: `${pct}%` }}></div>
+              </div>
+              <p className="text-right text-[9px] font-bold text-slate-400">{pct.toFixed(0)}% Utilizado</p>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
-        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-200 mb-1">Patrimônio Público</p>
-        <h1 className="text-4xl font-black tracking-tight mb-1">{ativo.patrimonio}</h1>
-        <p className="text-sm font-bold opacity-90">{`${ativo.marca || ''} ${ativo.modelo || ''}`.trim() || 'Equipamento não identificado'}</p>
+  const renderTabela = (itens, colunas) => {
+    if (!Array.isArray(itens) || itens.length === 0) return <span className="text-sm text-slate-500">Nenhum registro.</span>;
+    return (
+      <div className="max-h-60 overflow-y-auto custom-scrollbar border border-slate-200 rounded-xl">
+        <table className="w-full text-left text-xs">
+          <thead className="bg-slate-100 sticky top-0">
+            <tr>{colunas.map(c => <th key={c.key} className="p-2 font-black text-slate-600 uppercase text-[9px] tracking-wider">{c.label}</th>)}</tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 bg-white">
+            {itens.map((item, i) => (
+              <tr key={i} className="hover:bg-slate-50">
+                {colunas.map(c => <td key={c.key} className="p-2 font-medium text-slate-700 truncate max-w-[150px]" title={item[c.key]}>{item[c.key] || '-'}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  // Separa dados dinâmicos em Simples vs Complexos
+  const chavesOcultas = ['observacao', 'DISCOS LOGICOS', 'DISCOS LÓGICOS', 'SOFTWARES', 'REDES', 'MEMORIA RAM SLOTS', 'SERVICOS', 'IMPRESSORAS'];
+  const dadosSimples = Object.entries(dinamicos).filter(([k, v]) => !chavesOcultas.includes(k) && typeof v !== 'object');
+  
+  return (
+    <div className="min-h-screen bg-slate-100 flex flex-col relative font-sans pb-10">
+      
+      {/* HEADER ENTERPRISE / NOC */}
+      <div className="bg-slate-900 text-white p-8 sm:p-10 rounded-b-[40px] shadow-2xl shrink-0 relative overflow-hidden">
+        {/* Efeito luminoso de fundo */}
+        <div className="absolute -top-24 -right-24 w-64 h-64 bg-blue-600 rounded-full mix-blend-screen filter blur-[80px] opacity-40"></div>
+        
+        <div className="relative z-10">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <span className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center border border-blue-400/30">🏛️</span>
+              <span className="font-black tracking-widest text-xs opacity-80 uppercase text-blue-100">{tenant}</span>
+            </div>
+            <div className="flex gap-2">
+              <span className={`px-3 py-1 rounded-full text-[9px] font-black tracking-widest border ${isOnline ? 'bg-emerald-500/20 border-emerald-400 text-emerald-400' : 'bg-red-500/20 border-red-400 text-red-400'}`}>
+                {isOnline ? '🟢 ONLINE' : '🔴 OFFLINE'}
+              </span>
+              <span className="px-3 py-1 rounded-full text-[9px] font-black tracking-widest border bg-white/10 border-white/20 text-white/70">
+                MODO {modo}
+              </span>
+            </div>
+          </div>
+
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-300 mb-1">Patrimônio / Asset ID</p>
+          <div className="flex flex-col sm:flex-row sm:items-baseline gap-2 mb-2">
+            <h1 className="text-4xl sm:text-5xl font-black tracking-tight drop-shadow-md">{ativo.patrimonio}</h1>
+            {ativo.nome_personalizado && (
+              <h2 className="text-xl sm:text-2xl font-bold text-amber-400 sm:ml-4">"{ativo.nome_personalizado}"</h2>
+            )}
+          </div>
+          <p className="text-sm font-bold text-slate-300">{`${ativo.marca || ''} ${ativo.modelo || ''}`.trim() || 'Hardware não especificado'}</p>
+        </div>
       </div>
 
-      <div className="flex-1 p-6 space-y-4 -mt-4 z-10">
-        <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+      <div className="flex-1 p-4 sm:p-6 space-y-4 -mt-6 z-10 max-w-7xl mx-auto w-full">
+        <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr] items-start">
+          
+          {/* COLUNA ESQUERDA: DADOS PRINCIPAIS E HARDWARE */}
           <div className="space-y-4">
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between mb-5">
-                <div>
-                  <h2 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-2">Informações do Ativo</h2>
-                  <p className="text-lg font-black text-gray-900">Ficha completa</p>
-                </div>
-                <div className="text-right text-xs uppercase tracking-[0.25em] font-black text-gray-400">{ativo.categoria_nome || `Categoria #${ativo.categoria_id || 'N/A'}`}</div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
+            
+            {/* CARDS BASE */}
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+              <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2"><span className="text-blue-500">📋</span> Dados Cadastrais</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {[
-                  ['Patrimônio', ativo.patrimonio],
-                  ['Marca', ativo.marca],
-                  ['Modelo', ativo.modelo],
-                  ['Nome personalizado', ativo.nome_personalizado],
-                  ['Status', ativo.status],
-                  ['Domínio próprio', ativo.dominio_proprio],
-                  ['Técnico', ativo.tecnico],
-                  ['Unidade', ativo.unidade?.nome || ativo.secretaria],
-                  ['Tipo de unidade', ativo.unidade?.tipo || ativo.setor],
-                  ['Local', ativo.local],
-                  ['Última comunicação', ativo.ultima_comunicacao ? new Date(ativo.ultima_comunicacao).toLocaleString('pt-BR') : null],
-                  ['Nº licitação', ativo.numero_licitacao],
-                  ['Garantia', ativo.data_vencimento_garantia ? new Date(ativo.data_vencimento_garantia).toLocaleDateString('pt-BR') : null],
-                  ['Responsável atual', ativo.responsavel_atual],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-3xl bg-gray-50 p-4 border border-gray-100">
-                    <p className="text-[10px] uppercase tracking-[0.3em] font-black text-gray-500 mb-2">{label}</p>
-                    <p className="text-sm font-bold text-gray-900">{formatValue(value)}</p>
+                  ['Status', ativo.status], ['Usuário', dinamicos.USUÁRIO || ativo.tecnico], ['Domínio', ativo.dominio_proprio],
+                  ['Unidade', ativo.unidade?.nome || ativo.secretaria], ['Setor', ativo.unidade?.tipo || ativo.setor], ['Local', ativo.local],
+                  ['Nº Licitação', ativo.numero_licitacao], ['Venc. Garantia', ativo.data_vencimento_garantia ? new Date(ativo.data_vencimento_garantia).toLocaleDateString('pt-BR') : 'N/A']
+                ].map(([label, value], idx) => (
+                  <div key={idx} className="rounded-2xl bg-slate-50 p-3 border border-slate-100">
+                    <p className="text-[9px] uppercase tracking-widest font-black text-slate-400 mb-1">{label}</p>
+                    <p className="text-xs font-bold text-slate-800 truncate" title={value}>{value || '-'}</p>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-              <div className="flex items-center gap-3 mb-4">
-                <span className="text-blue-500 text-2xl">📋</span>
-                <div>
-                  <h3 className="text-sm font-black uppercase tracking-widest text-gray-700">Dados adicionais</h3>
-                  <p className="text-[10px] text-gray-500">Campos extras registrados para este ativo.</p>
-                </div>
-              </div>
+            {/* SESSÃO HARDWARE DINÂMICA (Renderizadores Customizados) */}
+            {(dinamicos['DISCOS LOGICOS'] || dinamicos['DISCOS LÓGICOS']) && (
+               <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                 <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4">💽 Armazenamento Local</h2>
+                 {renderDiscos(superParse(dinamicos['DISCOS LOGICOS'] || dinamicos['DISCOS LÓGICOS']))}
+               </div>
+            )}
 
-              {camposExtras.length === 0 ? (
-                <p className="text-sm font-medium text-gray-500">Nenhum dado dinâmico disponível.</p>
-              ) : (
-                <div className="grid gap-3">
-                  {camposExtras.map(([campo, valor]) => (
-                    <div key={campo} className="rounded-3xl bg-gray-50 p-4 border border-gray-100">
-                      <p className="text-[10px] uppercase tracking-[0.3em] font-black text-gray-500 mb-1">{formatLabel(campo)}</p>
-                      <p className="text-sm font-bold text-gray-900">{formatValue(valor)}</p>
+            {dinamicos['REDES'] && (
+               <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                 <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4">🌐 Interfaces de Rede</h2>
+                 {renderTabela(superParse(dinamicos['REDES']), [
+                   { key: 'descricao', label: 'Adaptador' }, { key: 'ip', label: 'IPv4' }, { key: 'mac', label: 'MAC Address' }, { key: 'status', label: 'Status' }
+                 ])}
+               </div>
+            )}
+
+            {dinamicos['SOFTWARES'] && (
+               <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                 <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4">📦 Softwares Instalados</h2>
+                 {renderTabela(superParse(dinamicos['SOFTWARES']), [
+                   { key: 'nome', label: 'Programa' }, { key: 'versao', label: 'Versão' }, { key: 'fabricante', label: 'Fabricante' }
+                 ])}
+               </div>
+            )}
+
+            {/* RESTANTE DOS DADOS DINÂMICOS SIMPLES */}
+            {dadosSimples.length > 0 && (
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2"><span className="text-emerald-500">⚡</span> Telemetria & Especificações</h2>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {dadosSimples.map(([campo, valor]) => (
+                    <div key={campo} className="rounded-2xl bg-slate-50 p-3 border border-slate-100 flex justify-between items-center">
+                      <p className="text-[10px] uppercase tracking-widest font-black text-slate-500 truncate w-1/2" title={campo}>{campo.replace(/_/g, ' ')}</p>
+                      <p className="text-xs font-bold text-slate-900 text-right w-1/2 truncate" title={String(valor)}>{String(valor)}</p>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
+          {/* COLUNA DIREITA: AÇÕES E QR CODE */}
           <div className="space-y-4">
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-              <h3 className="text-sm font-black uppercase tracking-widest text-gray-700 mb-4">QR Code da máquina</h3>
-              <div className="flex items-center justify-center p-4 rounded-3xl bg-gray-50 border border-dashed border-gray-200">
-                <div className="inline-flex rounded-3xl bg-white p-4">
-                  <QRCodeSVG value={`${window.location.origin}/consulta/${tenant}/${ativo.patrimonio}`} size={220} level="H" includeMargin={false} />
-                </div>
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 text-center">
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">QR Code Oficial</h3>
+              <div className="inline-flex rounded-3xl bg-white p-3 border-2 border-dashed border-slate-200">
+                <QRCodeSVG value={`${window.location.origin}/consulta/${tenant}/${ativo.patrimonio}`} size={180} level="H" />
               </div>
-              <p className="mt-4 text-xs text-gray-500 text-center">Escaneie para abrir esta ficha pública.</p>
             </div>
 
+            {/* ÁREA DO EDITOR */}
             {isEditor ? (
-              <div className="bg-blue-50 p-6 rounded-3xl shadow-sm border border-blue-100">
-                <h3 className="text-xs font-black uppercase tracking-widest text-blue-800 mb-4">Edição limitada liberada</h3>
-                <p className="text-sm text-blue-700 font-bold mb-4">Edite apenas os campos permitidos abaixo.</p>
-
-                <div className="space-y-4">
+              <div className="bg-blue-50 p-6 rounded-3xl shadow-sm border border-blue-200">
+                <h3 className="text-xs font-black uppercase tracking-widest text-blue-800 mb-4 flex items-center gap-2"><span>✏️</span> Edição Limitada</h3>
+                <div className="space-y-3">
+                  {['patrimonio', 'nome_personalizado', 'local'].map(campo => (
+                    <div key={campo}>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-blue-600/70">{campo.replace('_', ' ')}</label>
+                      <input value={formEdicao[campo]} onChange={(e) => setFormEdicao({...formEdicao, [campo]: e.target.value})} className="w-full mt-1 p-2.5 rounded-xl border border-blue-200 bg-white text-xs font-bold outline-none focus:border-blue-500" />
+                    </div>
+                  ))}
                   <div>
-                    <label className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Patrimônio</label>
-                    <input value={formEdicao.patrimonio} onChange={(e) => setFormEdicao({...formEdicao, patrimonio: e.target.value})} className="w-full mt-2 p-3 rounded-2xl border border-gray-200 bg-white text-sm font-bold outline-none" />
+                    <label className="text-[9px] font-black uppercase tracking-widest text-blue-600/70">Observação Técnica</label>
+                    <textarea value={formEdicao.observacao} onChange={(e) => setFormEdicao({...formEdicao, observacao: e.target.value})} rows={3} className="w-full mt-1 p-2.5 rounded-xl border border-blue-200 bg-white text-xs font-bold outline-none resize-none" />
                   </div>
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Nome da máquina</label>
-                    <input value={formEdicao.nome_personalizado} onChange={(e) => setFormEdicao({...formEdicao, nome_personalizado: e.target.value})} className="w-full mt-2 p-3 rounded-2xl border border-gray-200 bg-white text-sm font-bold outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Local</label>
-                    <input value={formEdicao.local} onChange={(e) => setFormEdicao({...formEdicao, local: e.target.value})} className="w-full mt-2 p-3 rounded-2xl border border-gray-200 bg-white text-sm font-bold outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Observação</label>
-                    <textarea value={formEdicao.observacao} onChange={(e) => setFormEdicao({...formEdicao, observacao: e.target.value})} rows={4} className="w-full mt-2 p-3 rounded-2xl border border-gray-200 bg-white text-sm font-bold outline-none resize-none" />
-                  </div>
-                  <button onClick={handleEditorSave} disabled={editorLoading} className="w-full py-3 rounded-2xl bg-blue-600 text-white font-black shadow-lg hover:bg-blue-700 transition-all disabled:opacity-50">
-                    {editorLoading ? 'Salvando...' : 'Salvar alterações'}
+                  <button onClick={handleEditorSave} disabled={editorLoading} className="w-full py-3 mt-2 rounded-xl bg-blue-600 text-white text-xs font-black shadow-lg hover:bg-blue-700 transition-all disabled:opacity-50 uppercase tracking-widest">
+                    {editorLoading ? 'Salvando...' : 'Salvar Alterações'}
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                <h3 className="text-xs font-black uppercase tracking-widest text-gray-700 mb-3">Acesso técnico</h3>
-                <p className="text-sm text-gray-600 mb-5">Faça login apenas para editar local, nome, patrimônio e observação.</p>
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                <h3 className="text-xs font-black uppercase tracking-widest text-slate-700 mb-2">Acesso Técnico</h3>
+                <p className="text-[10px] text-slate-500 mb-4 font-bold">Autentique-se para editar nomenclaturas e observações in-loco.</p>
                 {showLoginForm ? (
-                  <form onSubmit={handleEditorLogin} className="space-y-4">
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Usuário</label>
-                      <input value={editorLogin.username} onChange={(e) => setEditorLogin({...editorLogin, username: e.target.value})} className="w-full mt-2 p-3 rounded-2xl border border-gray-200 bg-white text-sm font-bold outline-none" />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Senha</label>
-                      <input type="password" value={editorLogin.password} onChange={(e) => setEditorLogin({...editorLogin, password: e.target.value})} className="w-full mt-2 p-3 rounded-2xl border border-gray-200 bg-white text-sm font-bold outline-none" />
-                    </div>
-                    {editorError && <p className="text-red-600 text-sm font-bold">{editorError}</p>}
-                    <button type="submit" disabled={editorLoading} className="w-full py-3 rounded-2xl bg-gray-900 text-white font-black shadow-lg hover:bg-gray-800 transition-all disabled:opacity-50">
-                      {editorLoading ? 'Entrando...' : 'Entrar'}
-                    </button>
-                    <button type="button" onClick={() => setShowLoginForm(false)} className="w-full py-3 rounded-2xl border border-gray-200 text-gray-700 font-black hover:bg-gray-50 transition-all">
-                      Cancelar
-                    </button>
+                  <form onSubmit={handleEditorLogin} className="space-y-3">
+                    <input placeholder="Usuário" value={editorLogin.username} onChange={(e) => setEditorLogin({...editorLogin, username: e.target.value})} className="w-full p-2.5 rounded-xl border bg-slate-50 text-xs font-bold outline-none" />
+                    <input type="password" placeholder="Senha" value={editorLogin.password} onChange={(e) => setEditorLogin({...editorLogin, password: e.target.value})} className="w-full p-2.5 rounded-xl border bg-slate-50 text-xs font-bold outline-none" />
+                    {editorError && <p className="text-red-500 text-[10px] font-bold text-center">{editorError}</p>}
+                    <button type="submit" disabled={editorLoading} className="w-full py-3 rounded-xl bg-slate-900 text-white text-xs font-black hover:bg-slate-800 transition-all uppercase tracking-widest">Entrar</button>
+                    <button type="button" onClick={() => setShowLoginForm(false)} className="w-full py-2 text-slate-500 text-xs font-black uppercase tracking-widest">Cancelar</button>
                   </form>
                 ) : (
-                  <button onClick={() => setShowLoginForm(true)} className="w-full py-3 rounded-2xl bg-gray-900 text-white font-black shadow-lg hover:bg-gray-800 transition-all">
-                    Sou Técnico / Fazer Login
+                  <button onClick={() => setShowLoginForm(true)} className="w-full py-3 rounded-xl bg-slate-900 text-white text-xs font-black shadow-lg hover:bg-slate-800 transition-all uppercase tracking-widest">
+                    Fazer Login
                   </button>
                 )}
-              </div>
-            )}
-
-            {dados.historico && dados.historico.length > 0 && (
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                <h3 className="text-sm font-black uppercase tracking-widest text-gray-700 mb-4">Últimos registros</h3>
-                <div className="space-y-3 max-h-72 overflow-y-auto custom-scrollbar">
-                  {dados.historico.map((log, idx) => (
-                    <div key={idx} className="rounded-3xl bg-gray-50 p-4 border border-gray-100">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[10px] uppercase tracking-[0.3em] font-black text-gray-500">{log.acao}</span>
-                        <span className="text-[10px] text-gray-400">{new Date(log.data_hora).toLocaleDateString('pt-BR')}</span>
-                      </div>
-                      <p className="text-sm text-gray-700">{log.detalhes}</p>
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
           </div>

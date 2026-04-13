@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { getStatusBadge, getNomeTipoEquipamento } from '../../utils/helpers';
 import { QRCodeSVG } from 'qrcode.react';
 
 export default function TabelaInventario({
-  ativosPaginaAtual,
+  ativosPaginaAtual, // Lista original (apesar do nome, usaremos ela para os filtros locais)
   selecionados,
   handleSelectAll,
   handleSelectOne,
@@ -25,12 +25,15 @@ export default function TabelaInventario({
 }) {
   const [linhaExpandida, setLinhaExpandida] = useState(null);
   
+  // --- ESTADOS DOS FILTROS AVANÇADOS ---
+  const [filtroDropdownStatus, setFiltroDropdownStatus] = useState('');
+  const [filtroDropdownCategoria, setFiltroDropdownCategoria] = useState('');
+  const [filtroDropdownUnidade, setFiltroDropdownUnidade] = useState('');
+
   // 🚀 Pega a empresa atual para o QR Code
   const tenantAtual = localStorage.getItem('tenant_id') || 'NEWPC'; 
 
-  const toggleLinha = (id) => {
-    setLinhaExpandida(linhaExpandida === id ? null : id);
-  };
+  const toggleLinha = (id) => setLinhaExpandida(linhaExpandida === id ? null : id);
 
   const isOnline = (ultimaComunicacao) => {
     if (!ultimaComunicacao) return false;
@@ -57,17 +60,117 @@ export default function TabelaInventario({
       catch(e) { return {}; }
   };
 
+  // --- LÓGICA DE FILTRAGEM ---
+  
+  // 1. Gera as listas únicas para popular os Dropdowns baseadas nos dados atuais
+  const opcoesStatus = useMemo(() => {
+    const statusSet = new Set(ativosPaginaAtual.map(a => a.status).filter(Boolean));
+    return Array.from(statusSet).sort();
+  }, [ativosPaginaAtual]);
+
+  const opcoesCategorias = useMemo(() => {
+    const catSet = new Set(ativosPaginaAtual.map(a => getNomeTipoEquipamento(a, categorias)).filter(Boolean));
+    return Array.from(catSet).sort();
+  }, [ativosPaginaAtual, categorias]);
+
+  const opcoesUnidades = useMemo(() => {
+    const unidadeSet = new Set(ativosPaginaAtual.map(a => a.unidade?.nome || a.secretaria).filter(Boolean));
+    return Array.from(unidadeSet).sort();
+  }, [ativosPaginaAtual]);
+
+  // 2. Aplica os filtros na lista sendo exibida
+  const ativosFiltradosTabela = useMemo(() => {
+    return ativosPaginaAtual.filter(ativo => {
+      let matchStatus = true;
+      let matchCategoria = true;
+      let matchUnidade = true;
+
+      if (filtroDropdownStatus) {
+        matchStatus = ativo.status === filtroDropdownStatus;
+      }
+      
+      if (filtroDropdownCategoria) {
+         const catNome = getNomeTipoEquipamento(ativo, categorias) || '';
+         matchCategoria = catNome === filtroDropdownCategoria;
+      }
+      
+      if (filtroDropdownUnidade) {
+         const uniNome = ativo.unidade?.nome || ativo.secretaria || '';
+         matchUnidade = uniNome === filtroDropdownUnidade;
+      }
+
+      return matchStatus && matchCategoria && matchUnidade;
+    });
+  }, [ativosPaginaAtual, filtroDropdownStatus, filtroDropdownCategoria, filtroDropdownUnidade, categorias]);
+
+  // Handler para limpar os filtros locais da tabela
+  const limparFiltros = () => {
+     setFiltroDropdownStatus('');
+     setFiltroDropdownCategoria('');
+     setFiltroDropdownUnidade('');
+  };
+
+  const filtrosAtivos = filtroDropdownStatus || filtroDropdownCategoria || filtroDropdownUnidade;
+
   return (
     <div className="flex-1 overflow-x-auto mt-2 min-h-[350px] pb-20">
       <table className="w-full text-left text-sm">
         <thead style={{ backgroundColor: 'var(--bg-input)', borderBottom: '1px solid var(--border-light)' }}>
+          {/* --- LINHA DOS FILTROS DROPDOWN --- */}
+          <tr>
+             <th colSpan="2" className="p-2 border-r" style={{ borderColor: 'var(--border-light)' }}>
+               {filtrosAtivos && (
+                  <button 
+                    onClick={limparFiltros}
+                    className="w-full text-[10px] uppercase font-black text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors"
+                  >
+                     Limpar Filtros ✖
+                  </button>
+               )}
+             </th>
+             <th className="p-2 hidden sm:table-cell border-r" style={{ borderColor: 'var(--border-light)' }}>
+                <select 
+                   value={filtroDropdownStatus} 
+                   onChange={(e) => setFiltroDropdownStatus(e.target.value)}
+                   className="w-full text-xs font-bold p-1 rounded outline-none cursor-pointer text-gray-600 bg-white border border-gray-200 hover:border-blue-400"
+                >
+                   <option value="">Status...</option>
+                   {opcoesStatus.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+             </th>
+             <th className="p-2 border-r" style={{ borderColor: 'var(--border-light)' }}>
+                <select 
+                   value={filtroDropdownCategoria} 
+                   onChange={(e) => setFiltroDropdownCategoria(e.target.value)}
+                   className="w-full text-xs font-bold p-1 rounded outline-none cursor-pointer text-gray-600 bg-white border border-gray-200 hover:border-blue-400"
+                >
+                   <option value="">Equipamento...</option>
+                   {opcoesCategorias.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+             </th>
+             <th className="p-2 hidden md:table-cell border-r" style={{ borderColor: 'var(--border-light)' }}>
+                <select 
+                   value={filtroDropdownUnidade} 
+                   onChange={(e) => setFiltroDropdownUnidade(e.target.value)}
+                   className="w-full text-xs font-bold p-1 rounded outline-none cursor-pointer text-gray-600 bg-white border border-gray-200 hover:border-blue-400"
+                >
+                   <option value="">Localização...</option>
+                   {opcoesUnidades.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+             </th>
+             <th className="p-2 text-center text-[10px] font-black uppercase text-gray-400">
+                {ativosFiltradosTabela.length} itens
+             </th>
+          </tr>
+
+          {/* --- LINHA DOS TÍTULOS ORIGINAIS --- */}
           <tr>
             <th className="p-4 w-10">
               <input 
                 type="checkbox" 
                 className="w-4 h-4 rounded cursor-pointer" 
-                checked={selecionados.length === ativosPaginaAtual.length && ativosPaginaAtual.length > 0} 
-                onChange={handleSelectAll} 
+                checked={selecionados.length === ativosFiltradosTabela.length && ativosFiltradosTabela.length > 0} 
+                onChange={(e) => handleSelectAll({ ...e, target: { ...e.target, checked: e.target.checked, list: ativosFiltradosTabela }})} 
               />
             </th>
             <th className="p-4 text-[10px] font-black uppercase tracking-widest opacity-60" style={{ color: 'var(--text-main)' }}>Patrimônio / Máquina</th>
@@ -78,15 +181,15 @@ export default function TabelaInventario({
           </tr>
         </thead>
         <tbody>
-          {ativosPaginaAtual.length === 0 ? (
+          {ativosFiltradosTabela.length === 0 ? (
             <tr>
               <td colSpan="6" className="p-12 text-center opacity-50 font-bold" style={{ color: 'var(--text-main)' }}>
-                <div className="text-4xl mb-4">📭</div>
-                Nenhum equipamento encontrado.
+                <div className="text-4xl mb-4">{ativosPaginaAtual.length > 0 ? "🕵️‍♂️" : "📭"}</div>
+                {ativosPaginaAtual.length > 0 ? "Nenhum equipamento bate com os filtros aplicados." : "Nenhum equipamento encontrado."}
               </td>
             </tr>
           ) : (
-            ativosPaginaAtual.map(ativo => {
+            ativosFiltradosTabela.map(ativo => {
               const din = parseJSONSeguro(ativo.dados_dinamicos);
               const adv = typeof din.dados_avancados === 'string' ? parseJSONSeguro(din.dados_avancados) : (din.dados_avancados || {});
               const online = isOnline(ativo.ultima_comunicacao);
@@ -148,7 +251,6 @@ export default function TabelaInventario({
                     </td>
                     
                     <td className="p-4 hidden md:table-cell">
-                      {/* 🚀 EXIBIÇÃO DA NOVA UNIDADE GOVERNAMENTAL */}
                       <div className="font-black text-xs uppercase text-blue-600">
                         {ativo.unidade ? ativo.unidade.nome : (ativo.secretaria || 'Não Alocado')}
                       </div>
@@ -179,12 +281,11 @@ export default function TabelaInventario({
                     </td>
                   </tr>
 
-                  {/* QUICK VIEW (VISÃO RÁPIDA) COM "ÚLTIMO LOGIN" E BOTÃO DO TERMINAL */}
+                  {/* QUICK VIEW (VISÃO RÁPIDA) */}
                   {linhaExpandida === ativo.id && (
                     <tr className="border-b animate-fade-in" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
                        <td colSpan="6" className="p-4 relative">
                           <div className="flex flex-wrap gap-3 items-center">
-                             
                              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white" style={{ borderColor: 'var(--border-light)' }}>
                                 <span className="text-sm opacity-50">👤</span>
                                 <div>
