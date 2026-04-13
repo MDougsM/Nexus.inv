@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../api/api';
@@ -7,7 +7,7 @@ import AbaNovoCadastro from './AbaNovoCadastro';
 import AbaManutencao from './AbaManutencao';
 import ModaisEdicao from '../components/Cadastro/ModaisEdicao';
 import ModaisOperacao from '../components/Cadastro/ModaisOperacao';
-import { getNomeTipoEquipamento, getStatusBadge } from '../utils/helpers';
+import { getNomeTipoEquipamento } from '../utils/helpers';
 import BarraPesquisa from '../components/Cadastro/BarraPesquisa';
 import BarraAcoesLote from '../components/Cadastro/BarraAcoesLote';
 import TabelaInventario from '../components/Cadastro/TabelaInventario';
@@ -15,7 +15,7 @@ import TerminalRemoto from '../components/Cadastro/TerminalRemoto';
 import MapaRede from '../components/MapaRede';
 
 export default function Cadastro() {
-  if (localStorage.getItem('empresa') === 'NEXUS_MASTER') return null; // Trava de segurança anti-montagem
+  if (localStorage.getItem('empresa') === 'NEXUS_MASTER') return null;
   const [abaAtiva, setAbaAtiva] = useState('lista'); 
   const usuarioAtual = localStorage.getItem('usuario') || 'admin';
   const location = useLocation();
@@ -25,9 +25,15 @@ export default function Cadastro() {
   const [historicoManut, setHistoricoManut] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [secretarias, setSecretarias] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // ESTADOS DO PAINEL DE FILTROS
   const [buscaGeral, setBuscaGeral] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [filtroAgente, setFiltroAgente] = useState('');
+  const [filtroCategoria, setFiltroCategoria] = useState('');
+  const [filtroMarca, setFiltroMarca] = useState('');
+  const [filtroUnidade, setFiltroUnidade] = useState('');
 
   const [itensPorPagina, setItensPorPagina] = useState(10);
   const [paginaAtual, setPaginaAtual] = useState(1);
@@ -47,202 +53,166 @@ export default function Cadastro() {
   const [modalExcluir, setModalExcluir] = useState({ aberto: false, ativos: [] });
   const [motivoExclusao, setMotivoExclusao] = useState('');
 
-const carregarDados = async () => {
+  const carregarDados = async () => {
     try {
       setLoading(true);
       const [resAtivos, resCat, resSec, resManut] = await Promise.all([ 
-        api.get('/api/inventario/'), 
-        api.get('/api/inventario/categorias'), 
-        api.get('/api/unidades/'), // 🚀 CORRIGIDO: Rota nova e unificada!
-        api.get('/api/manutencao/historico') 
+        api.get('/api/inventario/'), api.get('/api/inventario/categorias'), 
+        api.get('/api/unidades/'), api.get('/api/manutencao/historico') 
       ]);
       setAtivos(resAtivos.data); 
       setCategorias(resCat.data); 
-      setSecretarias(resSec.data); // Aqui a gente continua chamando de secretarias pro React, mas são as Unidades
+      setSecretarias(resSec.data); 
       setHistoricoManut(resManut.data);
-    } catch (e) { 
-      toast.error('Erro ao conectar.'); 
-    } finally { 
-      setLoading(false); 
-    }
+    } catch (e) { toast.error('Erro ao conectar.'); } finally { setLoading(false); }
   };
 
-// ATUALIZE ESTA PARTE NO SEU CADASTRO.JSX
   useEffect(() => {
     carregarDados();
     const params = new URLSearchParams(location.search);
-    
-    // Filtro normal de busca
-    if (params.get('busca')) {
-      setBuscaGeral(params.get('busca'));
-    }
-    
-    // FILTRO DA NOTIFICAÇÃO: Se vier um filtro de status pela URL
-    const statusURL = params.get('filtroStatus');
-    if (statusURL) {
-      setFiltroStatus(statusURL.toUpperCase());
+    if (params.get('busca')) setBuscaGeral(params.get('busca'));
+    if (params.get('filtroStatus')) {
+      const s = params.get('filtroStatus').toUpperCase();
+      if (s === 'ONLINE' || s === 'OFFLINE') setFiltroAgente(s);
+      else setFiltroStatus(s);
       setPaginaAtual(1);
     }
-  }, [location]); // Agora ele monitora a URL (location)
+  }, [location]);
 
-  const ativosFiltrados = ativos.filter(a => {
-    // 🧠 1. LÓGICA DE FILTRO STATUS (Mantida sua lógica dos 3 dias)
-    let matchStatus = true;
-    if (filtroStatus === 'ONLINE' || filtroStatus === 'OFFLINE') {
-      let isOnline = false;
-      if (a.ultima_comunicacao) {
-        const dataCom = new Date(a.ultima_comunicacao + 'Z');
-        const diffDias = (new Date() - dataCom) / (1000 * 60 * 60 * 24);
-        isOnline = diffDias < 3; 
-      }
-      matchStatus = (filtroStatus === 'ONLINE') ? isOnline : !isOnline;
-    } else if (filtroStatus) {
-      matchStatus = a.status?.toUpperCase() === filtroStatus.toUpperCase();
+  // =========================================================================
+  // 🧠 MOTOR DE FILTRAGEM FACETADA (Filtros Dependentes Inteligentes)
+  // =========================================================================
+  
+  const verificarOnline = (ultima_comunicacao) => {
+    if (!ultima_comunicacao) return false;
+    return ((new Date() - new Date(ultima_comunicacao + 'Z')) / (1000 * 60)) < 4320;
+  };
+
+  const ativoPassaNosFiltros = useCallback((a, ignorarFiltro = null) => {
+    // 1. Status Físico
+    if (ignorarFiltro !== 'status' && filtroStatus && a.status?.toUpperCase() !== filtroStatus.toUpperCase()) return false;
+    
+    // 2. Agente (Rede)
+    if (ignorarFiltro !== 'agente' && filtroAgente) {
+      const online = verificarOnline(a.ultima_comunicacao);
+      if (filtroAgente === 'ONLINE' && !online) return false;
+      if (filtroAgente === 'OFFLINE' && online) return false;
     }
 
-    // Se a máquina já não passou no filtro de status, descarta imediatamente
-    if (!matchStatus) return false;
+    // 3. Categoria
+    if (ignorarFiltro !== 'categoria' && filtroCategoria && (getNomeTipoEquipamento(a, categorias) || '') !== filtroCategoria) return false;
 
-    // 🚀 2. A NOVA BUSCA SUPER PODEROSA (ONISCIENTE)
-    if (buscaGeral) {
+    // 4. Marca
+    if (ignorarFiltro !== 'marca' && filtroMarca && a.marca !== filtroMarca) return false;
+
+    // 5. Unidade
+    if (ignorarFiltro !== 'unidade' && filtroUnidade && (a.unidade?.nome || a.secretaria || '') !== filtroUnidade) return false;
+
+    // 6. Busca Geral (Livre)
+    if (ignorarFiltro !== 'busca' && buscaGeral) {
       const termos = buscaGeral.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
       const tipoNome = getNomeTipoEquipamento(a, categorias)?.toLowerCase() || '';
+      let dinStr = '';
+      try { dinStr = typeof a.dados_dinamicos === 'object' ? JSON.stringify(a.dados_dinamicos) : String(a.dados_dinamicos || ''); } catch(e){}
       
-      // Extrai os dados e limpa aspas para não quebrar a leitura
-      let dinamicos = {};
-      try { 
-        dinamicos = typeof a.dados_dinamicos === 'string' 
-          ? JSON.parse(a.dados_dinamicos.replace(/'/g, '"').replace(/None/g, 'null')) 
-          : (a.dados_dinamicos || {}); 
-      } catch(e){}
-
-      // 💥 A MÁGICA: Junta TODOS os dados dinâmicos da máquina em um texto só (IP, MAC, RAM, Chave, etc)
-      const stringDinamica = Object.values(dinamicos).join(' ').toLowerCase();
-
-      // Verifica se o termo digitado bate com QUALQUER coisa da máquina
-      const matchBusca = termos.length === 0 || termos.some(termo => 
-        (a.patrimonio || '').toLowerCase().includes(termo) || 
-        (a.marca || '').toLowerCase().includes(termo) || 
-        (a.modelo || '').toLowerCase().includes(termo) || 
-        (a.nome_personalizado || '').toLowerCase().includes(termo) || // Busca pelo Apelido
-        tipoNome.includes(termo) ||
-        (a.secretaria || '').toLowerCase().includes(termo) || 
-        (a.setor || '').toLowerCase().includes(termo) ||
-        stringDinamica.includes(termo) // 🚀 Busca dentro de TODA a telemetria
-      );
-
-      return matchBusca;
+      const stringTotal = `${a.patrimonio} ${a.marca} ${a.modelo} ${a.nome_personalizado} ${tipoNome} ${a.secretaria} ${a.setor} ${dinStr}`.toLowerCase();
+      if (!termos.every(termo => stringTotal.includes(termo))) return false;
     }
 
-    // Se não tem pesquisa de texto, e passou no filtro de status, mostra a máquina
     return true;
-  });
+  }, [filtroStatus, filtroAgente, filtroCategoria, filtroMarca, filtroUnidade, buscaGeral, categorias]);
+
+  // 🎯 APLICAÇÃO FINAL PARA A TABELA (Usa todos os filtros)
+  const ativosFiltrados = useMemo(() => {
+    return ativos.filter(a => ativoPassaNosFiltros(a, null));
+  }, [ativos, ativoPassaNosFiltros]);
+
+  // 🔮 GERAÇÃO DE DROPDOWNS DEPENDENTES (Exclui o próprio filtro da conta para não travar o usuário)
+  const opcoesCategorias = useMemo(() => 
+    Array.from(new Set(ativos.filter(a => ativoPassaNosFiltros(a, 'categoria')).map(a => getNomeTipoEquipamento(a, categorias)).filter(Boolean))).sort(), 
+  [ativos, ativoPassaNosFiltros, categorias]);
+
+  const opcoesMarcas = useMemo(() => 
+    Array.from(new Set(ativos.filter(a => ativoPassaNosFiltros(a, 'marca')).map(a => a.marca).filter(Boolean))).sort(), 
+  [ativos, ativoPassaNosFiltros]);
+
+  const opcoesUnidades = useMemo(() => 
+    Array.from(new Set(ativos.filter(a => ativoPassaNosFiltros(a, 'unidade')).map(a => a.unidade?.nome || a.secretaria).filter(Boolean))).sort(), 
+  [ativos, ativoPassaNosFiltros]);
+  // =========================================================================
 
   const totalPaginas = Math.ceil(ativosFiltrados.length / itensPorPagina);
   const ativosPaginaAtual = ativosFiltrados.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
   
   const handleSelectAll = (e) => setSelecionados(e.target.checked ? ativosPaginaAtual.map(a => a.patrimonio) : []);
   const handleSelectOne = (e, pat) => setSelecionados(prev => e.target.checked ? [...prev, pat] : prev.filter(p => p !== pat));
-  const getAtivosSelecionadosObj = () => ativos.filter(a => selecionados.includes(a.patrimonio));
 
-  // 🚀 1. TRADUTOR: Limpa a sujeira de aspas do Python
   const parseJSONSeguro = (dado) => {
       if (!dado) return {};
       if (typeof dado === 'object') return dado;
       if (typeof dado === 'string') {
           try { return JSON.parse(dado); } 
           catch(e1) {
-              try {
-                  let limpo = dado.replace(/'/g, '"').replace(/None/g, 'null').replace(/False/g, 'false').replace(/True/g, 'true');
-                  return JSON.parse(limpo);
-              } catch(e2) { return {}; }
+              try { return JSON.parse(dado.replace(/'/g, '"').replace(/None/g, 'null').replace(/False/g, 'false').replace(/True/g, 'true')); } catch(e2) { return {}; }
           }
       }
       return {};
   };
 
-  // 🚀 2. ADAPTADOR UNIVERSAL: Garante que os Modais antigos achem os dados
   const normalizarDinamicosParaModais = (din, uuid_persistente, modelo) => {
       const n = { ...din };
-      // Puxa o dado de onde quer que ele esteja
       n.ip = n.ip || n.IP || n['Endereço IP'] || '';
       n.hostname = n.hostname || n.Hostname || n.Modelo || modelo || '';
       n.serial = n.serial || n.Serial || n['Número de Série'] || uuid_persistente || '';
       n.paginas_totais = n.paginas_totais || n['Páginas Impressas'] || '';
       n.toner = n.toner || n['% Toner'] || '';
       n.cilindro = n.cilindro || n['% Drum'] || '';
-
-      // Duplica as chaves com nomes antigos para o Modal não quebrar
-      n.IP = n.ip;
-      n.Hostname = n.hostname;
-      n.Serial = n.serial;
-      n['Páginas Impressas'] = n.paginas_totais;
-      n['% Toner'] = n.toner;
-      n['% Drum'] = n.cilindro;
-
+      n.IP = n.ip; n.Hostname = n.hostname; n.Serial = n.serial; n['Páginas Impressas'] = n.paginas_totais; n['% Toner'] = n.toner; n['% Drum'] = n.cilindro;
       return n;
   };
 
-  // 🚀 3. ABRIR FICHA CORRIGIDO
   const abrirFicha = async (patrimonio) => { 
     try { 
       const res = await api.get(`/api/inventario/ficha/detalhes/${encodeURIComponent(patrimonio)}`);
       let payload = res.data;
-      
       if (payload.ativo) {
           let din = parseJSONSeguro(payload.ativo.dados_dinamicos);
           payload.ativo.dados_dinamicos = normalizarDinamicosParaModais(din, payload.ativo.uuid_persistente, payload.ativo.modelo);
       }
-      
       setModalFicha({ aberto: true, dados: payload }); 
-    } catch (e) { 
-      toast.error("Erro ao carregar a ficha."); 
-      console.error(e); 
-    } 
+    } catch (e) { toast.error("Erro ao carregar a ficha."); } 
   };
   
-  // 🚀 4. ABRIR EDIÇÃO CORRIGIDO
   const abrirEdicao = (ativo, e) => { 
     if(e) e.stopPropagation(); 
     let din = parseJSONSeguro(ativo.dados_dinamicos);
     let dinAdaptado = normalizarDinamicosParaModais(din, ativo.uuid_persistente, ativo.modelo);
-    
     setModalEdicao({ aberto: true, ativo, form: { ...ativo, dados_dinamicos: dinAdaptado }}); 
   };
 
   const exportarParaExcel = () => {
     if (ativosFiltrados.length === 0) return toast.warn("Nenhum dado para exportar.");
-    
-    // Cabeçalhos das colunas
     let csv = "Patrimônio;Status;Equipamento;Marca;Modelo;Secretaria;Setor\n";
-    
-    // Preenchendo as linhas com os dados filtrados
     ativosFiltrados.forEach(a => {
       const catNome = getNomeTipoEquipamento(a, categorias) || 'Sem Categoria';
-      // Limpando textos para evitar quebra de linha do CSV
       const sec = (a.secretaria || '').replace(/;/g, ',');
       const set = (a.setor || '').replace(/;/g, ',');
       const mar = (a.marca || '').replace(/;/g, ',');
       const mod = (a.modelo || '').replace(/;/g, ',');
-      
       csv += `${a.patrimonio};${a.status};${catNome};${mar};${mod};${sec};${set}\n`;
     });
-    
-    // Criando o arquivo com suporte a acentuação (UTF-8 BOM)
     const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `Inventario_Nexus_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.csv`;
+    link.download = `Inventario_Nexus_${new Date().toLocaleDateString('pt-BR')}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
     toast.success(`Planilha gerada com ${ativosFiltrados.length} registros! 📊`);
   };
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 relative pb-10">
-      
       <div>
         <h2 className="text-2xl font-bold" style={{ color: 'var(--text-main)', letterSpacing: '-0.5px' }}>Gestão de Equipamentos</h2>
         <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Busque múltiplos ativos, movimente em lote ou registre manutenções.</p>
@@ -258,57 +228,36 @@ const carregarDados = async () => {
       {abaAtiva === 'lista' && (
         <div className="space-y-4 animate-fade-in">
           
-          {/* BARRA DE PESQUISA MODULARIZADA */}
           <BarraPesquisa 
-            buscaGeral={buscaGeral} 
-            setBuscaGeral={setBuscaGeral}
-            filtroStatus={filtroStatus} 
-            setFiltroStatus={setFiltroStatus}
-            setPaginaAtual={setPaginaAtual}
-            exportarParaExcel={exportarParaExcel}
+            buscaGeral={buscaGeral} setBuscaGeral={setBuscaGeral}
+            filtroStatus={filtroStatus} setFiltroStatus={setFiltroStatus}
+            filtroAgente={filtroAgente} setFiltroAgente={setFiltroAgente}
+            filtroCategoria={filtroCategoria} setFiltroCategoria={setFiltroCategoria}
+            filtroMarca={filtroMarca} setFiltroMarca={setFiltroMarca}
+            filtroUnidade={filtroUnidade} setFiltroUnidade={setFiltroUnidade}
+            opcoesCategorias={opcoesCategorias} opcoesMarcas={opcoesMarcas} opcoesUnidades={opcoesUnidades}
+            setPaginaAtual={setPaginaAtual} exportarParaExcel={exportarParaExcel} totalFiltrados={ativosFiltrados.length}
           />
 
-          {/* BARRA DE AÇÕES EM LOTE MODULARIZADA */}
           <BarraAcoesLote 
-            selecionados={selecionados}
-            setSelecionados={setSelecionados}
-            ativosFiltrados={ativosFiltrados}
-            setModalQRLote={setModalQRLote}
-            setModalTransferencia={setModalTransferencia}
-            setModalEdicaoMassa={setModalEdicaoMassa}
-            setModalStatus={setModalStatus}
-            setModalExcluir={setModalExcluir}
-            setMotivoExclusao={setMotivoExclusao}
+            selecionados={selecionados} setSelecionados={setSelecionados} ativosFiltrados={ativosFiltrados}
+            setModalQRLote={setModalQRLote} setModalTransferencia={setModalTransferencia} setModalEdicaoMassa={setModalEdicaoMassa}
+            setModalStatus={setModalStatus} setModalExcluir={setModalExcluir} setMotivoExclusao={setMotivoExclusao}
           />
 
           <div className="rounded-xl border shadow-sm overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
             <div className="overflow-x-auto min-h-[400px]">
-              
-              {/* TABELA PRINCIPAL MODULARIZADA */}
-          <TabelaInventario 
-            ativosPaginaAtual={ativosPaginaAtual}
-            selecionados={selecionados}
-            handleSelectAll={handleSelectAll}
-            handleSelectOne={handleSelectOne}
-            categorias={categorias}
-            dropdownAberto={dropdownAberto}
-            setDropdownAberto={setDropdownAberto}
-            abrirFicha={abrirFicha}
-            setModalQR={setModalQR}
-            setAtivoClonado={setAtivoClonado}
-            setAbaAtiva={setAbaAtiva}
-            abrirEdicao={abrirEdicao}
-            setModalTransferencia={setModalTransferencia}
-            setModalStatus={setModalStatus}
-            formStatus={formStatus}
-            setFormStatus={setFormStatus}
-            setModalExcluir={setModalExcluir}
-            setMotivoExclusao={setMotivoExclusao}
-            setModalTerminal={setModalTerminal}
-          />
+              <TabelaInventario 
+                ativosPaginaAtual={ativosPaginaAtual} selecionados={selecionados}
+                handleSelectAll={handleSelectAll} handleSelectOne={handleSelectOne}
+                categorias={categorias} dropdownAberto={dropdownAberto} setDropdownAberto={setDropdownAberto}
+                abrirFicha={abrirFicha} setModalQR={setModalQR} setAtivoClonado={setAtivoClonado}
+                setAbaAtiva={setAbaAtiva} abrirEdicao={abrirEdicao} setModalTransferencia={setModalTransferencia}
+                setModalStatus={setModalStatus} formStatus={formStatus} setFormStatus={setFormStatus}
+                setModalExcluir={setModalExcluir} setMotivoExclusao={setMotivoExclusao} setModalTerminal={setModalTerminal}
+              />
             </div>
 
-            {/* PAGINAÇÃO ORIGINAL */}
             <div className="p-4 border-t flex flex-col sm:flex-row justify-between items-center gap-4" style={{ backgroundColor: 'var(--bg-page)', borderColor: 'var(--border-light)' }}>
               <div className="text-sm font-bold" style={{ color: 'var(--text-muted)' }}>
                 Mostrar: 
@@ -322,28 +271,16 @@ const carregarDados = async () => {
                 <button onClick={() => setPaginaAtual(p => Math.min(totalPaginas, p + 1))} disabled={paginaAtual === totalPaginas || totalPaginas === 0} className="px-3 py-1.5 rounded border disabled:opacity-50 text-sm font-bold shadow-sm hover:bg-gray-50" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>Próxima</button>
               </div>
             </div>
-
           </div>
         </div>
       )}
 
       {abaAtiva === 'novo' && <AbaNovoCadastro categorias={categorias} secretarias={secretarias} usuarioAtual={usuarioAtual} carregarDados={carregarDados} setAbaAtiva={setAbaAtiva} ativoClonado={ativoClonado} setAtivoClonado={setAtivoClonado} ativos={ativos} />}
       {abaAtiva === 'manutencao' && <AbaManutencao historicoManut={historicoManut} carregarDados={carregarDados} />}
-      {abaAtiva === 'mapa' && (
-        <div className="mt-4 animate-fade-in">
-           <MapaRede ativos={ativos} />
-        </div>
-      )}
+      {abaAtiva === 'mapa' && <div className="mt-4 animate-fade-in"><MapaRede ativos={ativos} /></div>}
 
-      {/* COMPONENTES DE MODAIS EXECUTANDO EM SEGUNDO PLANO */}
       <ModaisEdicao modalEdicao={modalEdicao} setModalEdicao={setModalEdicao} modalEdicaoMassa={modalEdicaoMassa} setModalEdicaoMassa={setModalEdicaoMassa} categorias={categorias} secretarias={secretarias} usuarioAtual={usuarioAtual} carregarDados={carregarDados} setSelecionados={setSelecionados} ativos={ativos} />
-        {modalTerminal.aberto && (
-          <TerminalRemoto 
-            ativo={modalTerminal.ativo} 
-            onClose={() => setModalTerminal({ aberto: false, ativo: null })} 
-            usuarioAtual={usuarioAtual} 
-          />
-        )}
+      {modalTerminal.aberto && <TerminalRemoto ativo={modalTerminal.ativo} onClose={() => setModalTerminal({ aberto: false, ativo: null })} usuarioAtual={usuarioAtual} />}
       <ModaisOperacao modalFicha={modalFicha} setModalFicha={setModalFicha} modalQR={modalQR} setModalQR={setModalQR} modalQRLote={modalQRLote} setModalQRLote={setModalQRLote} modalStatus={modalStatus} setModalStatus={setModalStatus} formStatus={formStatus} setFormStatus={setFormStatus} modalTransferencia={modalTransferencia} setModalTransferencia={setModalTransferencia} formTransfer={formTransfer} setFormTransfer={setFormTransfer} modalExcluir={modalExcluir} setModalExcluir={setModalExcluir} motivoExclusao={motivoExclusao} setMotivoExclusao={setMotivoExclusao} categorias={categorias} secretarias={secretarias} usuarioAtual={usuarioAtual} carregarDados={carregarDados} setSelecionados={setSelecionados} />
     </div>
   );
