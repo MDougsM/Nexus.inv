@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 from app.db.database import get_db
 from app.models import UnidadeAdministrativa, LogAuditoria
-from pydantic import BaseModel
 from typing import List, Optional
 
 router = APIRouter(prefix="/unidades", tags=["Hierarquia Governamental"])
@@ -33,6 +33,17 @@ def obter_arvore_completa(db: Session = Depends(get_db)):
 def listar_todas_unidades(db: Session = Depends(get_db)):
     """Lista simples (plana) de todas as unidades"""
     return db.query(UnidadeAdministrativa).all()
+
+# ==========================================
+# 🔍 BUSCA ESPECÍFICA DE SETORES (CASCATA)
+# ==========================================
+@router.get("/secretarias/{secretaria_id}/setores")
+def listar_setores_da_secretaria(secretaria_id: int, db: Session = Depends(get_db)):
+    # Faz a query cirúrgica no banco buscando apenas os Filhos (Setores) deste Pai (Secretaria)
+    setores = db.query(UnidadeAdministrativa).filter(UnidadeAdministrativa.pai_id == secretaria_id).order_by(UnidadeAdministrativa.nome.asc()).all()
+    
+    # Devolve um array limpo para o React
+    return [{"id": s.id, "nome": s.nome, "tipo": s.tipo} for s in setores]
 
 @router.post("/")
 def criar_unidade(req: UnidadeCreate, db: Session = Depends(get_db)):

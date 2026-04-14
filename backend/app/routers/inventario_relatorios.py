@@ -1,4 +1,4 @@
-import csv, io
+import csv, io, re
 from datetime import timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -103,9 +103,37 @@ def relatorio_faturamento_pdf(filtros: FiltroRelatorio, db: Session = Depends(ge
 
 @router.get("/patrimonios/status")
 def status_patrimonios(db: Session = Depends(get_db)):
-    ativos = db.query(Ativo.patrimonio, Ativo.modelo).all()
-    usados = sorted([{"patrimonio": a[0], "modelo": a[1] or "Desconhecido"} for a in ativos], key=lambda x: x["patrimonio"])
-    return {"proximo_livre": obter_proximo_patrimonio(db), "total_usados": len(usados), "lista_usados": usados}
+    ativos = db.query(Ativo.patrimonio, Ativo.modelo).filter(
+        Ativo.deletado == False,
+        Ativo.patrimonio.isnot(None),
+        Ativo.patrimonio != ""
+    ).all()
+
+    usados = sorted(
+        [{"patrimonio": a[0], "modelo": a[1] or "Desconhecido"} for a in ativos],
+        key=lambda x: x["patrimonio"]
+    )
+
+    numeros_usados = set()
+    for ativo in ativos:
+        match = re.search(r"NXS-(\d{4})$", ativo[0] or "")
+        if match:
+            numeros_usados.add(int(match.group(1)))
+
+    proximo_livre = None
+    for numero in range(0, 10000):
+        if numero not in numeros_usados:
+            proximo_livre = f"NXS-{numero:04d}"
+            break
+
+    if proximo_livre is None:
+        proximo_livre = "ESGOTADO"
+
+    return {
+        "proximo_livre": proximo_livre,
+        "total_usados": len(usados),
+        "lista_usados": usados
+    }
 
 @router.post("/patrimonios/etiquetas/pdf")
 def gerar_etiquetas_pdf(req: EtiquetasRequest, db: Session = Depends(get_db)):

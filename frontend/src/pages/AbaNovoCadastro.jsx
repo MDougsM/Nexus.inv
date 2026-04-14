@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { toast } from 'react-toastify';
 import api from '../api/api';
 
@@ -12,7 +12,7 @@ export default function AbaNovoCadastro({
     marca: '',
     modelo: '',
     nome_personalizado: '', 
-    dominio_proprio: false, // 🚀 NOVO CAMPO AQUI
+    dominio_proprio: false, 
     dados_dinamicos: {}
   });
   
@@ -37,7 +37,7 @@ export default function AbaNovoCadastro({
         marca: ativoClonado.marca || '',
         modelo: ativoClonado.modelo || '',
         nome_personalizado: ativoClonado.nome_personalizado || '', 
-        dominio_proprio: ativoClonado.dominio_proprio || false, // 🚀 CLONANDO A TAG
+        dominio_proprio: ativoClonado.dominio_proprio || false,
         dados_dinamicos: dinDinamicos
       });
 
@@ -63,11 +63,79 @@ export default function AbaNovoCadastro({
     setFormNovo({ ...formNovo, categoria_id: cid, dados_dinamicos: {} });
   };
 
+  // =========================================================================
+  // 🧠 INTELIGÊNCIA DE DROPDOWN EM CASCATA (HIERARQUIA DE LOCALIZAÇÃO)
+  // =========================================================================
+
+  // 1. Filtro Blindado: Remove os setores varrendo todos os padrões de banco de dados
+  const secretariasOrdenadas = useMemo(() => {
+    const apenasPais = secretarias.filter(s => {
+      // Se a unidade tiver qualquer uma dessas chaves preenchidas, ela é um FILHO (Setor)
+      if (s.secretaria_id || s.parent_id || s.unidade_pai_id || s.unidade_id) return false;
+      
+      // Se o banco usar a coluna 'tipo' para diferenciar quem é quem
+      if (s.tipo && (s.tipo.toUpperCase() === 'SETOR' || s.tipo.toUpperCase() === 'SALA')) return false;
+
+      // Se passou pelas travas acima, é uma Secretaria (PAI) limpa!
+      return true; 
+    });
+    
+    return apenasPais.sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
+  }, [secretarias]);
+
+  // 2. Inteligência Suprema de Busca (Com Rastreador no Console)
   const handleMudarSecretariaNovo = async (e) => {
-    const id = e.target.value; setSecIdNovo(id); setSetorNovo('');
-    if (!id) { setSetoresNovo([]); return; }
-    try { const res = await api.get(`/api/unidades/secretarias/${id}/setores`); setSetoresNovo(res.data); } catch(e){}
+    const id = e.target.value; 
+    setSecIdNovo(id); 
+    setSetorNovo('');
+    
+    if (!id) { 
+      setSetoresNovo([]); 
+      return; 
+    }
+
+    console.log("🔍 Procurando setores para a Secretaria ID:", id);
+
+    // 1ª TENTATIVA: Busca na memória (Se os setores vieram embutidos na Secretaria)
+    const sec = secretarias.find(s => String(s.id) === String(id));
+    
+    if (sec && sec.setores && Array.isArray(sec.setores) && sec.setores.length > 0) {
+      console.log("✅ Achei os setores embutidos na memória!", sec.setores);
+      setSetoresNovo(sec.setores);
+      return;
+    }
+
+    // 2ª TENTATIVA: Busca na memória (Se os setores vieram soltos na mesma lista)
+    const filhosSoltos = secretarias.filter(s => 
+      String(s.secretaria_id) === String(id) || 
+      String(s.parent_id) === String(id) || 
+      String(s.unidade_pai_id) === String(id)
+    );
+
+    if (filhosSoltos.length > 0) {
+      console.log("✅ Achei os setores soltos na lista principal!", filhosSoltos);
+      setSetoresNovo(filhosSoltos);
+      return;
+    }
+
+    // 3ª TENTATIVA: Bate na sua API original
+    console.log("🌐 Nao achei na memória, buscando na API...");
+    try { 
+      const res = await api.get(`/api/unidades/secretarias/${id}/setores`); 
+      console.log("✅ Resposta da API:", res.data);
+      
+      if (Array.isArray(res.data) && res.data.length > 0) {
+        setSetoresNovo(res.data); 
+      } else {
+        console.warn("⚠️ A API retornou vazio. Esta secretaria não tem setores cadastrados!");
+        setSetoresNovo([]);
+      }
+    } catch(err) { 
+      console.error("❌ Erro ao buscar setores na API:", err);
+      setSetoresNovo([]); 
+    }
   };
+  // =========================================================================
 
   const salvarNovoCadastro = async (e) => {
     e.preventDefault();
@@ -113,8 +181,6 @@ export default function AbaNovoCadastro({
     } catch (e) { console.error("Erro ao processar campos dinâmicos:", e); }
   }
 
-  const categoriasOrdenadas = [...categorias].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-  const secretariasOrdenadas = [...secretarias].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   const setoresOrdenados = [...setoresNovo].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 
   return (
@@ -147,7 +213,7 @@ export default function AbaNovoCadastro({
                 <p className="text-[10px] font-bold uppercase tracking-widest mt-1 opacity-50" style={{ color: 'var(--text-main)' }}>Dados básicos do equipamento</p>
                 </div>
             </div>
-            {/* 🚀 TOGGLE DOMÍNIO PRÓPRIO AQUI */}
+            
             <div className="flex items-center gap-3 bg-indigo-50/50 dark:bg-indigo-900/20 px-4 py-2 rounded-xl border border-indigo-100 dark:border-indigo-800">
                 <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 tracking-widest">🔖 Equipamento Próprio?</span>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -166,13 +232,13 @@ export default function AbaNovoCadastro({
               <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Tipo de Equipamento *</label>
               <select required value={formNovo.categoria_id} onChange={handleMudarCategoriaNovo} className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm cursor-pointer" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
                 <option value="">Selecione a Categoria...</option>
-                {categoriasOrdenadas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select>
             </div>
           </div>
         </div>
 
-        {/* ... O RESTO DO FORMULÁRIO PERMANECE IDÊNTICO ... */}
+        {/* BLOCO 2: ESPECIFICAÇÕES */}
         {formNovo.categoria_id && (
           <div className="p-8 rounded-3xl border shadow-xl transition-all animate-fade-in" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
             <div className="flex items-center gap-3 mb-8 pb-4 border-b" style={{ borderColor: 'var(--border-light)' }}>

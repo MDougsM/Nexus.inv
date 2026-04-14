@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../api/api';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 import AbaNovoCadastro from './AbaNovoCadastro';
 import AbaManutencao from './AbaManutencao';
@@ -211,6 +213,46 @@ export default function Cadastro() {
     toast.success(`Planilha gerada com ${ativosFiltrados.length} registros! 📊`);
   };
 
+  const exportarParaPDF = () => {
+    if (ativosFiltrados.length === 0) return toast.warn("Nenhum dado para exportar.");
+
+    const empresaNome = localStorage.getItem('empresaNome') || 'Nexus Inventory';
+    const empresaDoc = localStorage.getItem('empresaDoc') || '';
+    const agora = new Date();
+    const dataArquivo = agora.toLocaleDateString('pt-BR').replace(/\//g, '-');
+
+    const doc = new jsPDF({ orientation: 'landscape' });
+    doc.setFontSize(18);
+    doc.text(empresaNome, 14, 18);
+    doc.setFontSize(10);
+    if (empresaDoc) doc.text(empresaDoc, 14, 26);
+    doc.text(`Relatório de Inventário - ${agora.toLocaleDateString('pt-BR')} ${agora.toLocaleTimeString('pt-BR')}`, 14, empresaDoc ? 36 : 26);
+
+    const headers = [["Patrimônio", "Status", "Equipamento", "Marca", "Modelo", "Secretaria", "Setor"]];
+    const body = ativosFiltrados.map(a => [
+      a.patrimonio || '',
+      a.status || '',
+      getNomeTipoEquipamento(a, categorias) || 'Sem Categoria',
+      a.marca || '',
+      a.modelo || '',
+      a.secretaria || '',
+      a.setor || ''
+    ]);
+
+    autoTable(doc, {
+      head: headers,
+      body,
+      startY: empresaDoc ? 42 : 34,
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: '#2563EB', textColor: '#ffffff', fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: '#F8FAFC' },
+      margin: { left: 14, right: 14 }
+    });
+
+    doc.save(`Inventario_Nexus_${dataArquivo}.pdf`);
+    toast.success(`PDF gerado com ${ativosFiltrados.length} registros! 📄`);
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 relative pb-10">
       <div>
@@ -236,7 +278,7 @@ export default function Cadastro() {
             filtroMarca={filtroMarca} setFiltroMarca={setFiltroMarca}
             filtroUnidade={filtroUnidade} setFiltroUnidade={setFiltroUnidade}
             opcoesCategorias={opcoesCategorias} opcoesMarcas={opcoesMarcas} opcoesUnidades={opcoesUnidades}
-            setPaginaAtual={setPaginaAtual} exportarParaExcel={exportarParaExcel} totalFiltrados={ativosFiltrados.length}
+            setPaginaAtual={setPaginaAtual} exportarParaExcel={exportarParaExcel} exportarParaPDF={exportarParaPDF} totalFiltrados={ativosFiltrados.length}
           />
 
           <BarraAcoesLote 

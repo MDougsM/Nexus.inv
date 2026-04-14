@@ -1,30 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
-import axios from 'axios';
+import api from '../../api/api';
 
 export default function GerenciadorChavesC2({ usuarioAtual }) {
   const [usuariosC2, setUsuariosC2] = useState([]);
   const [loading, setLoading] = useState(true);
   const [senhaArquivo, setSenhaArquivo] = useState("Nexus@2026");
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
-
   const carregarStatusChaves = async () => {
     try {
-      // 1. Rastreador para vermos no console (F12) se a variável existe
-      console.log("🛠️ O usuário atual é:", usuarioAtual);
-
-      // 2. Trava de segurança: se o usuário estiver vazio, coloca 'admin' por precaução
       const usuarioLogado = usuarioAtual || 'admin';
-
-      // 3. Forçando a URL na marra com a variável chumbada no texto
-      const urlCompleta = `${API_URL}/api/usuarios/chaves/listar?usuario_acao=${usuarioLogado}`;
-      console.log("🌐 URL que será disparada:", urlCompleta);
-
-      const res = await axios.get(urlCompleta);
+      
+      // 🚀 Usando a API configurada que envia o x-empresa e o token
+      const res = await api.get(`/api/usuarios/chaves/listar?usuario_acao=${usuarioLogado}`);
       setUsuariosC2(res.data);
     } catch (error) {
-      console.error(error); // Mostra o erro real no console
+      console.error(error);
       toast.error("Erro ao carregar status das chaves.");
     } finally {
       setLoading(false);
@@ -44,7 +35,7 @@ export default function GerenciadorChavesC2({ usuarioAtual }) {
     try {
       const toastId = toast.loading("Calculando Criptografia RSA de 4096 bits...");
       
-      const res = await axios.post(`${API_URL}/api/usuarios/chaves/gerar`, {
+      const res = await api.post(`/api/usuarios/chaves/gerar`, {
         usuario_alvo: usuarioAlvo,
         usuario_acao: usuarioAtual,
         senha_arquivo: senhaArquivo
@@ -72,7 +63,7 @@ export default function GerenciadorChavesC2({ usuarioAtual }) {
     if(!window.confirm(`Tem certeza? O técnico ${usuarioAlvo} perderá IMEDIATAMENTE o acesso de comandos remotos.`)) return;
     
     try {
-      await axios.delete(`${API_URL}/api/usuarios/chaves/revogar/${usuarioAlvo}?usuario_acao=${usuarioAtual}`);
+      await api.delete(`/api/usuarios/chaves/revogar/${usuarioAlvo}?usuario_acao=${usuarioAtual}`);
       toast.success("Acesso revogado! A chave .pem dele agora é inútil.");
       carregarStatusChaves();
     } catch (error) {

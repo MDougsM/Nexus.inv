@@ -121,6 +121,69 @@ class ChaveRequest(BaseModel):
     senha_arquivo: str = "Nexus@123" 
     
 # ==========================================
+# GESTÃO DE CHAVES C2 (Criptografia RSA)
+# ==========================================
+@router.get("/chaves/listar")
+def listar_status_chaves(usuario_acao: str = Query(...), db: Session = Depends(get_db)):
+    if not db: return []
+    user_req = db.query(Usuario).filter(Usuario.username == usuario_acao).first()
+    if not user_req: return []
+
+    operadores = db.query(Usuario).all()
+    
+    if not user_req.is_admin:
+        operadores = [u for u in operadores if u.username == usuario_acao]
+        
+    return [{"username": u.username, "tem_chave": bool(u.chave_publica_c2)} for u in operadores]
+
+@router.post("/chaves/gerar")
+def gerar_par_chaves_c2(req: ChaveRequest, db: Session = Depends(get_db)):
+    if not db: raise HTTPException(400, "Ação não permitida na Matriz.")
+    user_acao = db.query(Usuario).filter(Usuario.username == req.usuario_acao).first()
+    if not user_acao: raise HTTPException(403, "Usuário executor inválido.")
+    
+    if not user_acao.is_admin and req.usuario_acao != req.usuario_alvo:
+        raise HTTPException(403, "Você só pode gerar chaves para o seu próprio usuário.")
+
+    user = db.query(Usuario).filter(Usuario.username == req.usuario_alvo).first()
+    if not user: raise HTTPException(404, "Usuário alvo não encontrado.")
+
+    chave_privada = rsa.generate_private_key(public_exponent=65537, key_size=4096)
+    pem_privado = chave_privada.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.BestAvailableEncryption(req.senha_arquivo.encode())
+    ).decode('utf-8')
+
+    chave_publica = chave_privada.public_key()
+    pem_publico = chave_publica.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode('utf-8')
+
+    user.chave_publica_c2 = pem_publico
+    db.add(LogAuditoria(usuario=req.usuario_acao, acao="SEGURANÇA", entidade="Chave C2", identificador=req.usuario_alvo, detalhes="Gerou novo par de chaves RSA."))
+    db.commit()
+
+    return PlainTextResponse(content=pem_privado, status_code=200)
+
+@router.delete("/chaves/revogar/{usuario_alvo}")
+def revogar_chave_c2(usuario_alvo: str, usuario_acao: str, db: Session = Depends(get_db)):
+    if not db: raise HTTPException(400, "Ação não permitida na Matriz.")
+    user_acao_obj = db.query(Usuario).filter(Usuario.username == usuario_acao).first()
+    
+    if not user_acao_obj.is_admin and usuario_acao != usuario_alvo:
+        raise HTTPException(403, "Você só pode revogar a sua própria chave.")
+
+    user = db.query(Usuario).filter(Usuario.username == usuario_alvo).first()
+    if not user: raise HTTPException(404, "Usuário não encontrado.")
+
+    user.chave_publica_c2 = None
+    db.add(LogAuditoria(usuario=usuario_acao, acao="SEGURANÇA", entidade="Chave C2", identificador=usuario_alvo, detalhes="Revogou a chave de acesso C2."))
+    db.commit()
+    return {"message": "Acesso revogado com sucesso!"}
+
+# ==========================================
 # ROTAS DE LOGIN (NOVO ROTEADOR SAAS)
 # ==========================================
 @router.post("/login")
@@ -326,65 +389,3 @@ def deletar_usuario(user_id: int, req: JustificativaRequest, db: Session = Depen
     db.commit()
     return {"message": "Excluído"}
 
-# ==========================================
-# GESTÃO DE CHAVES C2 (Criptografia RSA)
-# ==========================================
-@router.get("/chaves/listar")
-def listar_status_chaves(usuario_acao: str = Query(...), db: Session = Depends(get_db)):
-    if not db: return []
-    user_req = db.query(Usuario).filter(Usuario.username == usuario_acao).first()
-    if not user_req: return []
-
-    operadores = db.query(Usuario).all()
-    
-    if not user_req.is_admin:
-        operadores = [u for u in operadores if u.username == usuario_acao]
-        
-    return [{"username": u.username, "tem_chave": bool(u.chave_publica_c2)} for u in operadores]
-
-@router.post("/chaves/gerar")
-def gerar_par_chaves_c2(req: ChaveRequest, db: Session = Depends(get_db)):
-    if not db: raise HTTPException(400, "Ação não permitida na Matriz.")
-    user_acao = db.query(Usuario).filter(Usuario.username == req.usuario_acao).first()
-    if not user_acao: raise HTTPException(403, "Usuário executor inválido.")
-    
-    if not user_acao.is_admin and req.usuario_acao != req.usuario_alvo:
-        raise HTTPException(403, "Você só pode gerar chaves para o seu próprio usuário.")
-
-    user = db.query(Usuario).filter(Usuario.username == req.usuario_alvo).first()
-    if not user: raise HTTPException(404, "Usuário alvo não encontrado.")
-
-    chave_privada = rsa.generate_private_key(public_exponent=65537, key_size=4096)
-    pem_privado = chave_privada.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.BestAvailableEncryption(req.senha_arquivo.encode())
-    ).decode('utf-8')
-
-    chave_publica = chave_privada.public_key()
-    pem_publico = chave_publica.public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo
-    ).decode('utf-8')
-
-    user.chave_publica_c2 = pem_publico
-    db.add(LogAuditoria(usuario=req.usuario_acao, acao="SEGURANÇA", entidade="Chave C2", identificador=req.usuario_alvo, detalhes="Gerou novo par de chaves RSA."))
-    db.commit()
-
-    return PlainTextResponse(content=pem_privado, status_code=200)
-
-@router.delete("/chaves/revogar/{usuario_alvo}")
-def revogar_chave_c2(usuario_alvo: str, usuario_acao: str, db: Session = Depends(get_db)):
-    if not db: raise HTTPException(400, "Ação não permitida na Matriz.")
-    user_acao_obj = db.query(Usuario).filter(Usuario.username == usuario_acao).first()
-    
-    if not user_acao_obj.is_admin and usuario_acao != usuario_alvo:
-        raise HTTPException(403, "Você só pode revogar a sua própria chave.")
-
-    user = db.query(Usuario).filter(Usuario.username == usuario_alvo).first()
-    if not user: raise HTTPException(404, "Usuário não encontrado.")
-
-    user.chave_publica_c2 = None
-    db.add(LogAuditoria(usuario=usuario_acao, acao="SEGURANÇA", entidade="Chave C2", identificador=usuario_alvo, detalhes="Revogou a chave de acesso C2."))
-    db.commit()
-    return {"message": "Acesso revogado com sucesso!"}

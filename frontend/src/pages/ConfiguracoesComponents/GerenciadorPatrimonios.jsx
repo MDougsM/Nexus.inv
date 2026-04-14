@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
+import api from '../../api/api';
 
 export default function GerenciadorPatrimonios() {
   const navigate = useNavigate();
@@ -20,17 +19,20 @@ export default function GerenciadorPatrimonios() {
 
   const carregarStatus = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/inventario/patrimonios/status`);
-      if (response.ok) {
-        const data = await response.json();
-        setStatus(data);
-        
-        // Sugere o próximo range de 10 etiquetas
-        if (data.proximo_livre) {
-          const numSugerido = parseInt(data.proximo_livre.replace(/\D/g, ''));
-          setRangeInicio(numSugerido);
-          setRangeFim(numSugerido + 9);
-        }
+      const response = await api.get('/api/inventario/patrimonios/status');
+      const data = response.data || {};
+      setStatus({
+        proximo_livre: 'Carregando...',
+        total_usados: 0,
+        lista_usados: [],
+        ...data,
+      });
+      
+      // Sugere o próximo range de 10 etiquetas
+      if (data.proximo_livre) {
+        const numSugerido = parseInt(data.proximo_livre.replace(/\D/g, ''));
+        setRangeInicio(numSugerido);
+        setRangeFim(numSugerido + 9);
       }
     } catch (error) {
       toast.error('Erro ao conectar com o servidor para ler os patrimônios.');
@@ -117,9 +119,9 @@ export default function GerenciadorPatrimonios() {
     imprimirLoteNativo(lista);
   };
 
-  const ativosFiltrados = status.lista_usados.filter(item => 
-    item.patrimonio.toLowerCase().includes(busca.toLowerCase()) || 
-    item.modelo.toLowerCase().includes(busca.toLowerCase())
+  const ativosFiltrados = (status.lista_usados || []).filter(item => 
+    item.patrimonio?.toLowerCase().includes(busca.toLowerCase()) || 
+    item.modelo?.toLowerCase().includes(busca.toLowerCase())
   );
 
   if (loading) return <div className="p-10 text-center animate-pulse font-bold" style={{ color: 'var(--text-main)' }}>Carregando Gestor de Patrimônios...</div>;

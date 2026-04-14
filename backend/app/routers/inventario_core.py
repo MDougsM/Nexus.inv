@@ -10,7 +10,7 @@ from app.db.database import get_db, MasterSessionLocal, Empresa
 from app.models import Ativo, LogAuditoria, RegistroManutencao, HistoricoLeitura, ComandoAgente
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/inventario", tags=["Inventário - Core"])
+router = APIRouter(prefix="/inventario", tags=["Inventário"]) # (O seu deve estar parecido com isso)
 
 # --- SCHEMAS ---
 class AtivoRequest(BaseModel):
@@ -32,13 +32,18 @@ class LoteDeleteRequest(BaseModel):
 # --- AUXILIARES ---
 def obter_proximo_patrimonio(db: Session) -> str:
     ativos = db.query(Ativo.patrimonio).filter(Ativo.patrimonio.like('NXS-%')).all()
-    max_num = 0
+    numeros_usados = set()
+
     for a in ativos:
-        numeros = re.findall(r'\d+', a[0])
-        if numeros:
-            num = int(numeros[-1])
-            if num > max_num: max_num = num
-    return f"NXS-{max_num + 1:04d}"
+        match = re.search(r'NXS-(\d{4})$', a[0] or "")
+        if match:
+            numeros_usados.add(int(match.group(1)))
+
+    for numero in range(0, 10000):
+        if numero not in numeros_usados:
+            return f"NXS-{numero:04d}"
+
+    raise ValueError("Nenhum patrimônio NXS livre está disponível.")
 
 # --- ROTAS ---
 @router.get("/qr-access/{patrimonio}")
