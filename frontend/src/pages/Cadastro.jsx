@@ -192,29 +192,70 @@ export default function Cadastro() {
     setModalEdicao({ aberto: true, ativo, form: { ...ativo, dados_dinamicos: dinAdaptado }}); 
   };
 
+// =========================================================================
+  // 📊 EXPORTAÇÃO DE DADOS (PDF & EXCEL/CSV) COM DETALHAMENTO PROFUNDO
+  // =========================================================================
+
   const exportarParaExcel = () => {
     if (ativosFiltrados.length === 0) return toast.warn("Nenhum dado para exportar.");
-    let csv = "Patrimônio;Status;Equipamento;Marca;Modelo;Secretaria;Setor\n";
-    ativosFiltrados.forEach(a => {
+    
+    // Se tiver marcado a checkbox, exporta só os selecionados. Senão, exporta todos da tela.
+    const ativosExportar = selecionados.length > 0 
+      ? ativosFiltrados.filter(a => selecionados.includes(a.patrimonio)) 
+      : ativosFiltrados;
+
+    // 1. Descobre TODAS as colunas técnicas que existem nos ativos que serão exportados
+    let chavesDinamicas = new Set();
+    const ativosComDinamicos = ativosExportar.map(a => {
+       const dyn = parseJSONSeguro(a.dados_dinamicos);
+       Object.keys(dyn).forEach(k => chavesDinamicas.add(k));
+       return { ...a, dynParsed: dyn };
+    });
+    const colunasExtras = Array.from(chavesDinamicas).sort();
+
+    // 2. Monta o Cabeçalho da Planilha
+    let csv = "Patrimônio;Status;Equipamento;Marca;Modelo;Nome/Apelido;Equip. Próprio;Secretaria;Setor";
+    if (colunasExtras.length > 0) csv += ";" + colunasExtras.join(";");
+    csv += "\n";
+
+    // 3. Monta as Linhas com os dados
+    ativosComDinamicos.forEach(a => {
       const catNome = getNomeTipoEquipamento(a, categorias) || 'Sem Categoria';
       const sec = (a.secretaria || '').replace(/;/g, ',');
       const set = (a.setor || '').replace(/;/g, ',');
       const mar = (a.marca || '').replace(/;/g, ',');
       const mod = (a.modelo || '').replace(/;/g, ',');
-      csv += `${a.patrimonio};${a.status};${catNome};${mar};${mod};${sec};${set}\n`;
+      const apelido = (a.nome_personalizado || '').replace(/;/g, ',');
+      const proprio = a.dominio_proprio ? 'SIM' : 'NÃO';
+      
+      let linha = `${a.patrimonio};${a.status};${catNome};${mar};${mod};${apelido};${proprio};${sec};${set}`;
+      
+      // Insere os dados técnicos extras na mesma ordem do cabeçalho
+      colunasExtras.forEach(col => {
+          const val = (a.dynParsed[col] || '').toString().replace(/;/g, ',');
+          linha += `;${val}`;
+      });
+      csv += linha + "\n";
     });
+
+    // 4. Força o Download
     const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `Inventario_Nexus_${new Date().toLocaleDateString('pt-BR')}.csv`;
+    link.download = `Inventario_Nexus_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast.success(`Planilha gerada com ${ativosFiltrados.length} registros! 📊`);
+    
+    toast.success(`Planilha gerada com ${ativosExportar.length} registros e todos os detalhes! 📊`);
   };
 
   const exportarParaPDF = () => {
     if (ativosFiltrados.length === 0) return toast.warn("Nenhum dado para exportar.");
+    
+    const ativosExportar = selecionados.length > 0 
+      ? ativosFiltrados.filter(a => selecionados.includes(a.patrimonio)) 
+      : ativosFiltrados;
 
     const empresaNome = localStorage.getItem('empresaNome') || 'Nexus Inventory';
     const empresaDoc = localStorage.getItem('empresaDoc') || '';
@@ -226,31 +267,54 @@ export default function Cadastro() {
     doc.text(empresaNome, 14, 18);
     doc.setFontSize(10);
     if (empresaDoc) doc.text(empresaDoc, 14, 26);
-    doc.text(`Relatório de Inventário - ${agora.toLocaleDateString('pt-BR')} ${agora.toLocaleTimeString('pt-BR')}`, 14, empresaDoc ? 36 : 26);
+    doc.text(`Relatório Detalhado de Equipamentos - ${agora.toLocaleDateString('pt-BR')} ${agora.toLocaleTimeString('pt-BR')}`, 14, empresaDoc ? 36 : 26);
 
-    const headers = [["Patrimônio", "Status", "Equipamento", "Marca", "Modelo", "Secretaria", "Setor"]];
-    const body = ativosFiltrados.map(a => [
-      a.patrimonio || '',
-      a.status || '',
-      getNomeTipoEquipamento(a, categorias) || 'Sem Categoria',
-      a.marca || '',
-      a.modelo || '',
-      a.secretaria || '',
-      a.setor || ''
+    // Mágica para varrer e formatar todos os detalhes técnicos em um bloco de texto legível
+    const formatarDetalhes = (ativo) => {
+      let linhas = [];
+      if (ativo.nome_personalizado) linhas.push(`Apelido: ${ativo.nome_personalizado}`);
+      if (ativo.dominio_proprio) linhas.push(`[Equipamento Próprio]`);
+
+      const dyn = parseJSONSeguro(ativo.dados_dinamicos);
+      if (dyn && typeof dyn === 'object') {
+        Object.entries(dyn).forEach(([key, val]) => {
+          if (val && val !== '-' && val !== 'N/A' && val !== '') {
+             linhas.push(`${key}: ${val}`);
+          }
+        });
+      }
+      return linhas.length > 0 ? linhas.join('\n') : 'Sem detalhes extras';
+    };
+
+    const headers = [["Patrimônio", "Equipamento", "Localização", "Status", "Especificações Técnicas"]];
+    
+    const body = ativosExportar.map(a => [
+      a.patrimonio || '-',
+      `${getNomeTipoEquipamento(a, categorias) || 'Sem Categoria'}\n${a.marca || '-'} ${a.modelo || '-'}`,
+      `${a.secretaria || '-'}\nSetor: ${a.setor || '-'}`,
+      a.status || '-',
+      formatarDetalhes(a) // O novo bloco de detalhes entra aqui!
     ]);
 
     autoTable(doc, {
       head: headers,
       body,
       startY: empresaDoc ? 42 : 34,
-      styles: { fontSize: 8, cellPadding: 3 },
+      styles: { fontSize: 8, cellPadding: 3, valign: 'middle' },
       headStyles: { fillColor: '#2563EB', textColor: '#ffffff', fontStyle: 'bold' },
+      columnStyles: {
+        0: { cellWidth: 25, fontStyle: 'bold' },
+        1: { cellWidth: 45 },
+        2: { cellWidth: 45 },
+        3: { cellWidth: 20 },
+        4: { cellWidth: 'auto' } // Adapta o tamanho da coluna baseada no texto técnico
+      },
       alternateRowStyles: { fillColor: '#F8FAFC' },
       margin: { left: 14, right: 14 }
     });
 
     doc.save(`Inventario_Nexus_${dataArquivo}.pdf`);
-    toast.success(`PDF gerado com ${ativosFiltrados.length} registros! 📄`);
+    toast.success(`PDF gerado com ${ativosExportar.length} registros e especificações completas! 📄`);
   };
 
   return (
