@@ -1,4 +1,4 @@
-# 🗺️ Mapa de Arquitetura - Nexus.inv
+# 🗺️ Mapa de Arquitetura - Nexus Control
 
 Este documento é o guia oficial para localização de funções, rotas e regras de negócio do sistema. 
 

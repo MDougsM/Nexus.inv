@@ -18,6 +18,7 @@ class AtivoRequest(BaseModel):
     categoria_id: int
     marca: Optional[str] = None
     modelo: Optional[str] = None
+    nome_personalizado: Optional[str] = None  # 🎯 Apelido/Nome da máquina
     secretaria: Optional[str] = None
     local: Optional[str] = None
     setor: Optional[str] = None
@@ -77,9 +78,13 @@ def acesso_inteligente_qr(patrimonio: str, request: Request, db: Session = Depen
 def listar_ativos(db: Session = Depends(get_db)):
     """Lista apenas ativos que NÃO estão na lixeira"""
     ativos = db.query(Ativo).filter(Ativo.deletado == False).all()
-    return [{**a.__dict__, "categoria_nome": a.categoria.nome if a.categoria else "Sem Categoria"} for a in ativos]
+    return [{
+        **a.__dict__, 
+        "categoria_nome": a.categoria.nome if a.categoria else "Sem Categoria",
+        "nome_personalizado": a.nome_personalizado or ""  # 🎯 Garante que apelido vem sempre
+    } for a in ativos]
 
-@router.get("/ficha/detalhes/{patrimonio}")
+@router.get("/ficha/detalhes/{patrimonio:path}")
 def obter_detalhes_ficha(patrimonio: str, db: Session = Depends(get_db)):
     ativo = db.query(Ativo).filter(Ativo.patrimonio == patrimonio, Ativo.deletado == False).first()
     if not ativo:
@@ -150,6 +155,7 @@ def criar_ativo(req: AtivoRequest, request: Request, db: Session = Depends(get_d
     
     novo_ativo = Ativo(
         patrimonio=pat_final, categoria_id=req.categoria_id, marca=req.marca, modelo=req.modelo,
+        nome_personalizado=req.nome_personalizado,  # 🎯 Apelido/Nome da máquina
         secretaria=req.secretaria, local=req.local, setor=req.setor, tecnico=req.usuario_acao,
         dados_dinamicos=req.dados_dinamicos, ultima_comunicacao=datetime.utcnow(),
         deletado=False
@@ -304,3 +310,72 @@ async def salvar_topologia_global(request: Request):
         json.dump(dados, f, ensure_ascii=False)
         
     return {"message": "Topologia salva com sucesso"}
+
+
+# ==========================================
+# 🕸️ MÓDULO DE TOPOLOGIA E VÍNCULOS (CMDB)
+# ==========================================
+from pydantic import BaseModel
+from typing import Optional
+
+# ==========================================
+# 🕸️ MÓDULO DE TOPOLOGIA E VÍNCULOS (CMDB)
+# ==========================================
+class VinculoNovoRequest(BaseModel):
+    patrimonio_alvo: str
+    tipo_vinculo: str 
+    tipo_relacao: Optional[str] = "VINCULADO"
+    # 🚀 ABSORVEDORES DE INTERCEPTOR: Evitam o erro 422 quando o React injeta dados extras
+    usuario_acao: Optional[str] = None 
+    motivo: Optional[str] = None
+
+@router.get("/vinculos/{patrimonio:path}")
+def listar_vinculos(patrimonio: str, db: Session = Depends(get_db)):
+    from app.models import Ativo, AtivoVinculo
+    
+    vinculos_filhos = db.query(AtivoVinculo).filter(AtivoVinculo.patrimonio_pai == patrimonio).all()
+    vinculos_pais = db.query(AtivoVinculo).filter(AtivoVinculo.patrimonio_filho == patrimonio).all()
+    
+    filhos, pais = [], []
+    
+    for v in vinculos_filhos:
+        f = db.query(Ativo).filter(Ativo.patrimonio == v.patrimonio_filho).first()
+        if f: filhos.append({"id_vinculo": v.id, "patrimonio": f.patrimonio, "nome": getattr(f, 'nome_personalizado', '') or f.modelo, "tipo": "FILHO"})
+        
+    for v in vinculos_pais:
+        p = db.query(Ativo).filter(Ativo.patrimonio == v.patrimonio_pai).first()
+        if p: pais.append({"id_vinculo": v.id, "patrimonio": p.patrimonio, "nome": getattr(p, 'nome_personalizado', '') or p.modelo, "tipo": "PAI"})
+        
+    return {"pais": pais, "filhos": filhos}
+
+@router.post("/vinculos/{patrimonio:path}")
+def adicionar_vinculo(patrimonio: str, req: VinculoNovoRequest, db: Session = Depends(get_db)):
+    from app.models import Ativo, AtivoVinculo
+    
+    if patrimonio.strip().upper() == req.patrimonio_alvo.strip().upper():
+        raise HTTPException(400, "Inception detected: Uma máquina não pode ser vinculada a si mesma.")
+        
+    alvo = db.query(Ativo).filter(Ativo.patrimonio == req.patrimonio_alvo.strip().upper(), Ativo.deletado == False).first()
+    if not alvo: raise HTTPException(404, f"O Patrimônio {req.patrimonio_alvo} não existe ou foi excluído.")
+    
+    pai = req.patrimonio_alvo if req.tipo_vinculo == "PAI" else patrimonio
+    filho = patrimonio if req.tipo_vinculo == "PAI" else req.patrimonio_alvo
+    
+    existe_normal = db.query(AtivoVinculo).filter(AtivoVinculo.patrimonio_pai == pai, AtivoVinculo.patrimonio_filho == filho).first()
+    existe_inverso = db.query(AtivoVinculo).filter(AtivoVinculo.patrimonio_pai == filho, AtivoVinculo.patrimonio_filho == pai).first()
+    
+    if existe_normal: raise HTTPException(400, "Este vínculo já existe.")
+    if existe_inverso: raise HTTPException(400, "Estas máquinas já estão vinculadas, mas na ordem contrária. Remova o vínculo antigo primeiro.")
+    
+    db.add(AtivoVinculo(patrimonio_pai=pai, patrimonio_filho=filho, tipo_relacao=req.tipo_relacao))
+    db.commit()
+    return {"message": "Vínculo criado com sucesso!"}
+
+@router.delete("/vinculos/{id_vinculo}")
+def remover_vinculo(id_vinculo: int, db: Session = Depends(get_db)):
+    from app.models import AtivoVinculo
+    v = db.query(AtivoVinculo).filter(AtivoVinculo.id == id_vinculo).first()
+    if v:
+        db.delete(v)
+        db.commit()
+    return {"message": "Vínculo desfeito!"}

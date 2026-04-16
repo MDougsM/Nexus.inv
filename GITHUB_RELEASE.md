@@ -1,6 +1,6 @@
 ﻿# Publicação de nova versão no GitHub
 
-Siga estes passos ao subir uma nova versão do Nexus.inv:
+Siga estes passos ao subir uma nova versão do Nexus Control:
 
 1. Adiciona os arquivos modificados à fila de envio:
    ```bash

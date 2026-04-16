@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'react-toastify';
 import api from '../api/api';
 
@@ -19,6 +19,12 @@ export default function AbaNovoCadastro({
   const [secIdNovo, setSecIdNovo] = useState('');
   const [setorNovo, setSetorNovo] = useState('');
   const [setoresNovo, setSetoresNovo] = useState([]);
+
+  // 🚀 ESTADOS DO CMDB / BUSCADOR INTELIGENTE
+  const [vinculoCMDB, setVinculoCMDB] = useState({ patrimonio_alvo: '', tipo_vinculo: 'PAI' }); 
+  const [buscaVinculo, setBuscaVinculo] = useState('');
+  const [mostrarDropdown, setMostrarDropdown] = useState(false);
+  const dropdownRef = useRef(null);
 
   useEffect(() => {
     if (ativoClonado) {
@@ -54,7 +60,11 @@ export default function AbaNovoCadastro({
 
   const limparFormNovo = () => {
     setFormNovo({ patrimonio: '', categoria_id: '', marca: '', modelo: '', nome_personalizado: '', dominio_proprio: false, dados_dinamicos: {} });
-    setSecIdNovo(''); setSetorNovo(''); setSetoresNovo([]);
+    setSecIdNovo(''); 
+    setSetorNovo(''); 
+    setSetoresNovo([]);
+    setVinculoCMDB({ patrimonio_alvo: '', tipo_vinculo: 'PAI' }); 
+    setBuscaVinculo('');
     if (setAtivoClonado) setAtivoClonado(null); 
   };
 
@@ -63,27 +73,15 @@ export default function AbaNovoCadastro({
     setFormNovo({ ...formNovo, categoria_id: cid, dados_dinamicos: {} });
   };
 
-  // =========================================================================
-  // 🧠 INTELIGÊNCIA DE DROPDOWN EM CASCATA (HIERARQUIA DE LOCALIZAÇÃO)
-  // =========================================================================
-
-  // 1. Filtro Blindado: Remove os setores varrendo todos os padrões de banco de dados
   const secretariasOrdenadas = useMemo(() => {
     const apenasPais = secretarias.filter(s => {
-      // Se a unidade tiver qualquer uma dessas chaves preenchidas, ela é um FILHO (Setor)
       if (s.secretaria_id || s.parent_id || s.unidade_pai_id || s.unidade_id) return false;
-      
-      // Se o banco usar a coluna 'tipo' para diferenciar quem é quem
       if (s.tipo && (s.tipo.toUpperCase() === 'SETOR' || s.tipo.toUpperCase() === 'SALA')) return false;
-
-      // Se passou pelas travas acima, é uma Secretaria (PAI) limpa!
       return true; 
     });
-    
     return apenasPais.sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
   }, [secretarias]);
 
-  // 2. Inteligência Suprema de Busca (Com Rastreador no Console)
   const handleMudarSecretariaNovo = async (e) => {
     const id = e.target.value; 
     setSecIdNovo(id); 
@@ -94,18 +92,12 @@ export default function AbaNovoCadastro({
       return; 
     }
 
-    console.log("🔍 Procurando setores para a Secretaria ID:", id);
-
-    // 1ª TENTATIVA: Busca na memória (Se os setores vieram embutidos na Secretaria)
     const sec = secretarias.find(s => String(s.id) === String(id));
-    
     if (sec && sec.setores && Array.isArray(sec.setores) && sec.setores.length > 0) {
-      console.log("✅ Achei os setores embutidos na memória!", sec.setores);
       setSetoresNovo(sec.setores);
       return;
     }
 
-    // 2ª TENTATIVA: Busca na memória (Se os setores vieram soltos na mesma lista)
     const filhosSoltos = secretarias.filter(s => 
       String(s.secretaria_id) === String(id) || 
       String(s.parent_id) === String(id) || 
@@ -113,29 +105,48 @@ export default function AbaNovoCadastro({
     );
 
     if (filhosSoltos.length > 0) {
-      console.log("✅ Achei os setores soltos na lista principal!", filhosSoltos);
       setSetoresNovo(filhosSoltos);
       return;
     }
 
-    // 3ª TENTATIVA: Bate na sua API original
-    console.log("🌐 Nao achei na memória, buscando na API...");
     try { 
       const res = await api.get(`/api/unidades/secretarias/${id}/setores`); 
-      console.log("✅ Resposta da API:", res.data);
-      
       if (Array.isArray(res.data) && res.data.length > 0) {
         setSetoresNovo(res.data); 
       } else {
-        console.warn("⚠️ A API retornou vazio. Esta secretaria não tem setores cadastrados!");
         setSetoresNovo([]);
       }
     } catch(err) { 
-      console.error("❌ Erro ao buscar setores na API:", err);
       setSetoresNovo([]); 
     }
   };
-  // =========================================================================
+
+  // 🔎 FECHAR DROPDOWN AO CLICAR FORA
+  useEffect(() => {
+    const handleClickFora = (event) => {
+        if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setMostrarDropdown(false);
+    };
+    document.addEventListener("mousedown", handleClickFora);
+    return () => document.removeEventListener("mousedown", handleClickFora);
+  }, []);
+
+  // 🔎 FILTRO INTELIGENTE DE MÁQUINAS
+  const ativosParaVinculo = useMemo(() => {
+      if (!buscaVinculo) return [];
+      const termo = buscaVinculo.toLowerCase();
+      return (ativos || []).filter(a => {
+          let ip = "";
+          try { ip = a.dados_dinamicos?.IP || a.dados_dinamicos?.ip || ""; } catch(e){}
+          const strBusca = `${a.patrimonio} ${a.nome_personalizado || ''} ${a.modelo || ''} ${a.marca || ''} ${ip}`.toLowerCase();
+          return strBusca.includes(termo);
+      }).slice(0, 8); 
+  }, [buscaVinculo, ativos]);
+
+  const selecionarVinculo = (ativoSelecionado) => {
+      setVinculoCMDB({ ...vinculoCMDB, patrimonio_alvo: ativoSelecionado.patrimonio });
+      setBuscaVinculo(`${ativoSelecionado.patrimonio} • ${ativoSelecionado.nome_personalizado || ativoSelecionado.modelo || 'Sem Modelo'}`);
+      setMostrarDropdown(false);
+  };
 
   const salvarNovoCadastro = async (e) => {
     e.preventDefault();
@@ -155,8 +166,24 @@ export default function AbaNovoCadastro({
 
     try {
       const res = await api.post('/api/inventario/', payload);
-      const nomeGerado = res.data.patrimonio_gerado;
-      toast.success(`✅ Ativo cadastrado! Etiqueta: ${nomeGerado || patrimonioFinal}`);
+      const nomeGerado = res.data.patrimonio_gerado || patrimonioFinal;
+      
+      // 🚀 CRIA O VÍNCULO SE O USUÁRIO PREENCHEU A TOPOLOGIA
+      if (vinculoCMDB.patrimonio_alvo.trim()) {
+         try {
+            const payloadVinculo = {
+                patrimonio_alvo: vinculoCMDB.patrimonio_alvo,
+                tipo_vinculo: vinculoCMDB.tipo_vinculo,
+                tipo_relacao: "VINCULADO"
+            };
+            await api.post(`/api/inventario/vinculos/${encodeURIComponent(nomeGerado)}`, payloadVinculo);
+            toast.success(`✅ Ativo cadastrado e vinculado a ${vinculoCMDB.patrimonio_alvo}!`);
+         } catch (vErr) {
+            toast.error(`Ativo cadastrado, mas o vínculo falhou: ${vErr.response?.data?.detail || 'Máquina alvo não encontrada'}`);
+         }
+      } else {
+         toast.success(`✅ Ativo cadastrado! Etiqueta: ${nomeGerado}`);
+      }
       
       limparFormNovo();
       carregarDados();
@@ -170,7 +197,7 @@ export default function AbaNovoCadastro({
     }
   };
 
-  const categoriaSelecionada = categorias.find(c => c.id == formNovo.categoria_id);
+  const categoriaSelecionada = categorias.find(c => String(c.id) === String(formNovo.categoria_id));
   let camposFormulario = [];
   
   if (categoriaSelecionada && categoriaSelecionada.campos_config) {
@@ -201,7 +228,7 @@ export default function AbaNovoCadastro({
 
       <form onSubmit={salvarNovoCadastro} className="space-y-6">
         
-        {/* BLOCO 1: IDENTIDADE */}
+        {/* ================= BLOCO 1: IDENTIDADE ================= */}
         <div className="p-8 rounded-3xl border shadow-xl transition-all relative overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
           {ativoClonado && <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 animate-pulse"></div>}
           
@@ -223,22 +250,45 @@ export default function AbaNovoCadastro({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Patrimônio (Opcional)</label>
-              <input autoFocus={!!ativoClonado} value={formNovo.patrimonio} onChange={e => setFormNovo({...formNovo, patrimonio: e.target.value})} placeholder="Deixe em branco para auto-gerar" className="w-full p-4 rounded-xl border font-black text-lg outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} />
+              <input 
+                autoFocus={!!ativoClonado} 
+                value={formNovo.patrimonio} 
+                onChange={e => setFormNovo({...formNovo, patrimonio: e.target.value})} 
+                placeholder="Deixe em branco para auto-gerar" 
+                className="w-full p-4 rounded-xl border font-black text-lg outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm" 
+                style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} 
+              />
             </div>
             <div>
               <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Tipo de Equipamento *</label>
-              <select required value={formNovo.categoria_id} onChange={handleMudarCategoriaNovo} className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm cursor-pointer" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
+              <select 
+                required 
+                value={formNovo.categoria_id} 
+                onChange={handleMudarCategoriaNovo} 
+                className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm cursor-pointer" 
+                style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}
+              >
                 <option value="">Selecione a Categoria...</option>
                 {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select>
             </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Nome Personalizado / Apelido</label>
+              <input 
+                value={formNovo.nome_personalizado} 
+                onChange={e => setFormNovo({...formNovo, nome_personalizado: e.target.value})} 
+                placeholder="Ex: PC Recepção, Servidor..." 
+                className="w-full p-4 rounded-xl border font-bold text-emerald-600 outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors shadow-sm" 
+                style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}
+              />
+            </div>
           </div>
         </div>
 
-        {/* BLOCO 2: ESPECIFICAÇÕES */}
+        {/* ================= BLOCO 2: ESPECIFICAÇÕES ================= */}
         {formNovo.categoria_id && (
           <div className="p-8 rounded-3xl border shadow-xl transition-all animate-fade-in" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
             <div className="flex items-center gap-3 mb-8 pb-4 border-b" style={{ borderColor: 'var(--border-light)' }}>
@@ -248,31 +298,56 @@ export default function AbaNovoCadastro({
                 <p className="text-[10px] font-bold uppercase tracking-widest mt-1 opacity-50" style={{ color: 'var(--text-main)' }}>Marca, modelo e dados extras</p>
               </div>
             </div>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div><label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Marca do Equipamento</label><input value={formNovo.marca} onChange={e => setFormNovo({...formNovo, marca: e.target.value})} placeholder="Ex: Dell, HP, Mercusys..." className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}/></div>
-              <div><label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Modelo</label><input value={formNovo.modelo} onChange={e => setFormNovo({...formNovo, modelo: e.target.value})} placeholder="Ex: Optiplex 3020..." className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}/></div>
+              <div>
+                <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Marca do Equipamento</label>
+                <input 
+                  value={formNovo.marca} 
+                  onChange={e => setFormNovo({...formNovo, marca: e.target.value})} 
+                  placeholder="Ex: Dell, HP, Mercusys..." 
+                  className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm" 
+                  style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Modelo</label>
+                <input 
+                  value={formNovo.modelo} 
+                  onChange={e => setFormNovo({...formNovo, modelo: e.target.value})} 
+                  placeholder="Ex: Optiplex 3020..." 
+                  className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm" 
+                  style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}
+                />
+              </div>
             </div>
-            <div className="mb-8">
-                <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Nome Personalizado / Apelido (Opcional)</label>
-                <input value={formNovo.nome_personalizado} onChange={e => setFormNovo({...formNovo, nome_personalizado: e.target.value})} placeholder="Ex: Impressora da Recepção, Servidor de Arquivos..." className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}/>
-            </div>
+
             {camposFormulario.length > 0 && (
               <div className="p-6 rounded-2xl border bg-black/5 dark:bg-white/5" style={{ borderColor: 'var(--border-light)' }}>
                 <h5 className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-4">Campos Exclusivos da Categoria</h5>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                  {camposFormulario.map(c => (
-                    <div key={c}>
-                      <label className="block text-[9px] font-black uppercase opacity-80 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>{c}</label>
-                      <input className="w-full p-3.5 rounded-xl border font-medium outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} placeholder={`Definir ${c}...`} value={formNovo.dados_dinamicos[c] || ''} onChange={e => setFormNovo({...formNovo, dados_dinamicos: {...formNovo.dados_dinamicos, [c]: e.target.value}})} />
-                    </div>
-                  ))}
+                  {camposFormulario.map(c => {
+                    if (c.toLowerCase().includes('apelido') || c.toLowerCase().includes('par_vinculo')) return null;
+                    return (
+                      <div key={c}>
+                        <label className="block text-[9px] font-black uppercase opacity-80 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>{c}</label>
+                        <input 
+                          className="w-full p-3.5 rounded-xl border font-medium outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm" 
+                          style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} 
+                          placeholder={`Definir ${c}...`} 
+                          value={formNovo.dados_dinamicos[c] || ''} 
+                          onChange={e => setFormNovo({...formNovo, dados_dinamicos: {...formNovo.dados_dinamicos, [c]: e.target.value}})} 
+                        />
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
           </div>
         )}
 
-        {/* BLOCO 3: LOCALIZAÇÃO */}
+        {/* ================= BLOCO 3: LOCALIZAÇÃO ================= */}
         <div className="p-8 rounded-3xl border shadow-xl transition-all" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
           <div className="flex items-center gap-3 mb-8 pb-4 border-b" style={{ borderColor: 'var(--border-light)' }}>
             <span className="text-2xl">📍</span>
@@ -284,14 +359,27 @@ export default function AbaNovoCadastro({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Secretaria / Prédio *</label>
-              <select required value={secIdNovo} onChange={handleMudarSecretariaNovo} className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm cursor-pointer" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
+              <select 
+                required 
+                value={secIdNovo} 
+                onChange={handleMudarSecretariaNovo} 
+                className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm cursor-pointer" 
+                style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}
+              >
                 <option value="">Selecione o Local...</option>
                 {secretariasOrdenadas.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Setor / Sala *</label>
-              <select required value={setorNovo} onChange={e => setSetorNovo(e.target.value)} disabled={setoresNovo.length === 0} className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm disabled:opacity-50 cursor-pointer" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
+              <select 
+                required 
+                value={setorNovo} 
+                onChange={e => setSetorNovo(e.target.value)} 
+                disabled={setoresNovo.length === 0} 
+                className="w-full p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors shadow-sm disabled:opacity-50 cursor-pointer" 
+                style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}
+              >
                 <option value="">Selecione o Setor...</option>
                 {setoresOrdenados.map(s => <option key={s.id} value={s.nome}>{s.nome}</option>)}
               </select>
@@ -299,9 +387,94 @@ export default function AbaNovoCadastro({
           </div>
         </div>
 
+        {/* 🚀 ================= BLOCO 4: VÍNCULO CMDB COM BUSCADOR INTELIGENTE ================= */}
+        <div className="p-8 rounded-3xl border shadow-xl transition-all bg-indigo-50/30 dark:bg-indigo-900/10" style={{ borderColor: 'var(--border-light)' }}>
+          <div className="flex items-center justify-between mb-6 pb-4 border-b" style={{ borderColor: 'var(--border-light)' }}>
+            <div className="flex items-center gap-3">
+               <span className="text-2xl">🔗</span>
+               <div>
+                  <h4 className="font-black text-lg tracking-tight" style={{ color: 'var(--text-main)' }}>Topologia (Opcional)</h4>
+                  <p className="text-[10px] font-bold uppercase tracking-widest mt-1 opacity-50" style={{ color: 'var(--text-main)' }}>Vincule a uma máquina existente</p>
+               </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+            <div className="relative w-full" ref={dropdownRef}>
+               <label className="block text-[10px] font-black uppercase opacity-60 mb-1 ml-1" style={{ color: 'var(--text-main)' }}>Pesquisar Equipamento Existente</label>
+               <div className="relative">
+                  <span className="absolute left-4 top-1/2 transform -translate-y-1/2 opacity-50">🔍</span>
+                  <input 
+                     value={buscaVinculo} 
+                     onChange={e => { setBuscaVinculo(e.target.value); setVinculoCMDB({...vinculoCMDB, patrimonio_alvo: ''}); setMostrarDropdown(true); }}
+                     onFocus={() => setMostrarDropdown(true)}
+                     placeholder="Digite patrimônio, IP ou nome..." 
+                     className="w-full pl-10 p-4 rounded-xl border font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all shadow-sm bg-white" 
+                     style={{ borderColor: 'var(--border-light)', color: 'var(--text-main)' }}
+                  />
+               </div>
+               
+               {/* DROPDOWN BUSCADOR */}
+               {mostrarDropdown && buscaVinculo && ativosParaVinculo.length > 0 && (
+                  <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-2xl border z-50 overflow-hidden" style={{borderColor: 'var(--border-light)'}}>
+                     {ativosParaVinculo.map(a => (
+                        <div key={a.patrimonio} onClick={() => selecionarVinculo(a)} className="p-3 hover:bg-indigo-50 cursor-pointer border-b transition-colors flex items-center justify-between" style={{borderColor: 'var(--border-light)'}}>
+                           <div>
+                              <span className="font-black text-indigo-600">{a.patrimonio}</span>
+                              <span className="ml-2 text-xs font-bold text-gray-600">{a.nome_personalizado || a.modelo || 'S/N'}</span>
+                           </div>
+                           <span className="text-[10px] font-mono bg-gray-100 px-2 py-1 rounded text-gray-500">{a.dados_dinamicos?.IP || a.dados_dinamicos?.ip || 'Sem IP'}</span>
+                        </div>
+                     ))}
+                  </div>
+               )}
+            </div>
+            
+            <div className="flex flex-col gap-2">
+               <label className="block text-[10px] font-black uppercase opacity-60 ml-1" style={{ color: 'var(--text-main)' }}>A nova máquina é:</label>
+               <div className="flex items-center gap-2">
+                  <button 
+                    type="button" 
+                    onClick={() => setVinculoCMDB({...vinculoCMDB, tipo_vinculo: 'PAI'})} 
+                    className={`flex-1 p-4 rounded-xl border font-black text-xs transition-all ${vinculoCMDB.tipo_vinculo === 'PAI' ? 'bg-indigo-600 text-white shadow-lg border-indigo-500' : 'bg-white opacity-60 hover:opacity-100'}`} 
+                    style={{ borderColor: vinculoCMDB.tipo_vinculo !== 'PAI' ? 'var(--border-light)' : '', color: vinculoCMDB.tipo_vinculo !== 'PAI' ? 'var(--text-main)' : '' }}
+                  >
+                     DEPENDENTE (Filho)
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => setVinculoCMDB({...vinculoCMDB, tipo_vinculo: 'FILHO'})} 
+                    className={`flex-1 p-4 rounded-xl border font-black text-xs transition-all ${vinculoCMDB.tipo_vinculo === 'FILHO' ? 'bg-indigo-600 text-white shadow-lg border-indigo-500' : 'bg-white opacity-60 hover:opacity-100'}`} 
+                    style={{ borderColor: vinculoCMDB.tipo_vinculo !== 'FILHO' ? 'var(--border-light)' : '', color: vinculoCMDB.tipo_vinculo !== 'FILHO' ? 'var(--text-main)' : '' }}
+                  >
+                     SUPERIOR (Pai)
+                  </button>
+               </div>
+               
+               {vinculoCMDB.patrimonio_alvo && (
+                  <p className="text-[10px] text-indigo-600 font-bold ml-1 mt-1">
+                     {vinculoCMDB.tipo_vinculo === 'PAI' 
+                       ? `A nova máquina será alocada DENTRO do ${vinculoCMDB.patrimonio_alvo}.` 
+                       : `A máquina ${vinculoCMDB.patrimonio_alvo} ficará DENTRO da nova máquina.`}
+                  </p>
+               )}
+            </div>
+          </div>
+        </div>
+
         <div className="pt-6 flex flex-col sm:flex-row items-center justify-end gap-4">
-          <button type="button" onClick={() => { limparFormNovo(); setAbaAtiva('lista'); }} className="w-full sm:w-auto px-8 py-4 rounded-xl font-bold opacity-60 hover:opacity-100 transition-all hover:bg-gray-500/10" style={{ color: 'var(--text-main)' }}>Cancelar Operação</button>
-          <button type="submit" className={`w-full sm:w-auto px-10 py-4 rounded-xl font-black text-white shadow-xl transition-all active:scale-95 ${ativoClonado ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/30' : 'bg-green-600 hover:bg-green-700 shadow-green-500/30'}`}>
+          <button 
+            type="button" 
+            onClick={() => { limparFormNovo(); setAbaAtiva('lista'); }} 
+            className="w-full sm:w-auto px-8 py-4 rounded-xl font-bold opacity-60 hover:opacity-100 transition-all hover:bg-gray-500/10" 
+            style={{ color: 'var(--text-main)' }}
+          >
+            Cancelar Operação
+          </button>
+          <button 
+            type="submit" 
+            className={`w-full sm:w-auto px-10 py-4 rounded-xl font-black text-white shadow-xl transition-all active:scale-95 ${ativoClonado ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/30' : 'bg-green-600 hover:bg-green-700 shadow-green-500/30'}`}
+          >
             {ativoClonado ? '💾 Salvar Clone' : '✨ Cadastrar Equipamento'}
           </button>
         </div>

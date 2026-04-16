@@ -1,6 +1,32 @@
-# Changelog - Nexus.inv
+# Changelog - Nexus.Control
 
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
+## [v6.2.0.0] - 2026-04-16
+### ☁️ Novo Nme
+- **Passamos a ser, agora, Nexus Control**
+
+### 🚀 Adicionado (Added)
+- **Topologia e Vínculos Relacionais (CMDB)**: Implementado novo módulo de relacionamento de hardware.
+  - Substituição de campos textuais legados por banco de dados relacional (`ativo_vinculos`).
+  - Criação de fluxos N:N suportando arquiteturas Pai->Filho (ex: Servidor -> Máquina Virtual; NVR -> Câmeras).
+  - Interfaces visuais em `ModaisEdicao.jsx`, `AbaNovoCadastro.jsx` e `ModalFicha.jsx` com suporte à navegação hierárquica.
+- **Buscador Inteligente de Ativos (Auto-complete)**: Novo motor de busca integrado aos painéis de CMDB.
+  - Pesquisa dinâmica (`useMemo` em React) que varre patrimônio, IP, hostname e apelidos em tempo real.
+  - Dropdown interativo que exibe metadados da máquina antes do vínculo, eliminando a digitação manual de IDs.
+- **Navegação Rápida (Fast-Jump)**: Botão no painel de visualização da ficha que permite pular entre ativos vinculados instantaneamente sem fechar o modal.
+
+### 🔄 Modificado (Changed)
+- **Motor de Exportação de Relatórios**: Evolução da rotina de extração de dados.
+  - Agora suporta seleção híbrida: Exporta itens específicos (se marcados nos checkboxes) ou todos os itens filtrados na tabela de uma só vez (se nenhum marcado).
+  - Geração nativa em múltiplos formatos (XLSX, CSV e PDF) através das rotas de faturamento/relatórios no FastAPI.
+- **Auditoria de IP Dinâmica**: O campo de IP agora conta com trava baseada em contexto (Categoria). Liberado para edição em ativos de infraestrutura (Servidores/Switches) e travado/automático para Multifuncionais e Impressoras.
+- **Refatoração de Layout (UI)**: Ampliação do `max-w` dos componentes `ModalFicha` (para `max-w-6xl`) e `ModaisEdicao` (para `max-w-5xl`) visando acomodar os novos painéis de Topologia sem comprometer a leitura.
+
+### 🐛 Corrigido (Fixed)
+- **Unificação de Nomenclatura (Caçador de Apelidos)**: O sistema agora mapeia automaticamente chaves legadas (`Nome da Máquina`, `Nome Personalizado`) perdidas em cadastros JSON antigos, exibindo-os na interface oficial e migrando o dado de forma irreversível para a coluna estruturada ao salvar.
+- **Falha de Escopo 405 (Method Not Allowed)**: Corrigida a tipagem da URL no FastAPI adicionando `:path` às rotas (`/ficha/detalhes/{patrimonio:path}`), permitindo a leitura e edição de patrimônios antigos que contenham barras (ex: `S/P_8A`).
+- **Erro de Tipagem 422 (Unprocessable Entity)**: Blindagem do Pydantic (`Extra.allow` e campos `Optional`) na modelagem `VinculoNovoRequest`, impedindo que a injeção global de metadados (`usuario_acao`) do React causasse a rejeição do payload.
+
 
 ## [v6.0.0] - 2026-04-08
 ### 🚀 Adicionado (Added)
@@ -119,7 +145,7 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 
 ## [Ajustes de Infraestrutura]
 - **Persistência**: Migração do Watchdog de intervalo fixo (15 min) para `ONLOGON` para evitar múltiplas instâncias.
-- **Segurança**: Adicionada exceção automática no Windows Defender via instalador para a pasta `C:\Nexus.inv`.
+- **Segurança**: Adicionada exceção automática no Windows Defender via instalador para a pasta `C:\NexusControl`.
 - **Performance**: Otimização do timeout de descoberta de IP de 5s para 1.5s para carregamento instantâneo da GUI.
 
 ## [Correções]

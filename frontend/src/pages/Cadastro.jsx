@@ -189,7 +189,15 @@ export default function Cadastro() {
     if(e) e.stopPropagation(); 
     let din = parseJSONSeguro(ativo.dados_dinamicos);
     let dinAdaptado = normalizarDinamicosParaModais(din, ativo.uuid_persistente, ativo.modelo);
-    setModalEdicao({ aberto: true, ativo, form: { ...ativo, dados_dinamicos: dinAdaptado }}); 
+    setModalEdicao({ 
+      aberto: true, 
+      ativo, 
+      form: { 
+        ...ativo, 
+        nome_personalizado: ativo.nome_personalizado || '', // 🎯 Garante que apelido seja carregado
+        dados_dinamicos: dinAdaptado 
+      } 
+    }); 
   };
 
 // =========================================================================

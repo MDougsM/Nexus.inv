@@ -77,6 +77,12 @@ export default function TabelaInventario({
               const din = parseJSONSeguro(ativo.dados_dinamicos);
               const adv = typeof din.dados_avancados === 'string' ? parseJSONSeguro(din.dados_avancados) : (din.dados_avancados || {});
               const online = isOnline(ativo.ultima_comunicacao);
+              
+              // 🚀 Busca o apelido oficial ou "caça" nos dados dinâmicos caso seja um cadastro antigo
+              const apelidoExibicao = ativo.nome_personalizado || 
+                                      din['Nome Personalizado / Apelido'] || 
+                                      din['Nome da máquina / Apelido'] || 
+                                      din['Apelido'];
 
               return (
                 <React.Fragment key={ativo.id}>
@@ -107,9 +113,10 @@ export default function TabelaInventario({
                         {ativo.dominio_proprio && <span className="flex items-center justify-center text-[15px]" title="🔖 Equipamento Próprio">🔖</span>}
                       </div>
 
-                      {ativo.nome_personalizado && (
-                        <div className="text-[10px] font-black uppercase mt-1 px-2 py-0.5 rounded inline-block truncate max-w-[150px]" style={{ backgroundColor: 'var(--border-light)', color: 'var(--text-muted)' }} title={ativo.nome_personalizado}>
-                           {ativo.nome_personalizado}
+                      {/* 🚀 Renderiza o apelido unificado que encontramos lá em cima */}
+                      {apelidoExibicao && (
+                        <div className="text-[10px] font-black uppercase mt-1 px-2 py-0.5 rounded inline-block truncate max-w-[150px]" style={{ backgroundColor: 'var(--border-light)', color: 'var(--text-muted)' }} title={apelidoExibicao}>
+                           {apelidoExibicao}
                         </div>
                       )}
                     </td>
@@ -153,20 +160,20 @@ export default function TabelaInventario({
                     <tr className="border-b animate-fade-in" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
                        <td colSpan="6" className="p-4 relative">
                           <div className="flex flex-wrap gap-3 items-center">
-                             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white" style={{ borderColor: 'var(--border-light)' }}>
+                             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white dark:bg-black/20" style={{ borderColor: 'var(--border-light)' }}>
                                 <span className="text-sm opacity-50">👤</span>
                                 <div><p className="text-[8px] font-black uppercase opacity-50" style={{ color: 'var(--text-main)' }}>Usuário Logado</p><p className="text-xs font-bold truncate max-w-[120px]" style={{ color: 'var(--color-blue)' }}>{din.usuario_pc || adv.usuario_pc || 'Não Logado'}</p></div>
                              </div>
-                             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white" style={{ borderColor: 'var(--border-light)' }}>
+                             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white dark:bg-black/20" style={{ borderColor: 'var(--border-light)' }}>
                                 <span className="text-sm opacity-50">⏳</span>
                                 <div><p className="text-[8px] font-black uppercase opacity-50" style={{ color: 'var(--text-main)' }}>Último Login / Sinc</p><p className={`text-xs font-bold ${online ? 'text-emerald-600' : 'text-amber-600'}`}>{formatarDataUltimoAcesso(ativo.ultima_comunicacao)}</p></div>
                              </div>
-                             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white" style={{ borderColor: 'var(--border-light)' }}>
+                             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white dark:bg-black/20" style={{ borderColor: 'var(--border-light)' }}>
                                 <span className="text-sm opacity-50">🌐</span>
                                 <div><p className="text-[8px] font-black uppercase opacity-50" style={{ color: 'var(--text-main)' }}>IP Local</p><p className="text-xs font-bold font-mono" style={{ color: 'var(--text-main)' }}>{din.ip || din.IP || 'N/A'}</p></div>
                              </div>
                              {din.ram && (
-                               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white hidden md:flex" style={{ borderColor: 'var(--border-light)' }}>
+                               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white dark:bg-black/20 hidden md:flex" style={{ borderColor: 'var(--border-light)' }}>
                                   <span className="text-sm opacity-50">⚡</span>
                                   <div><p className="text-[8px] font-black uppercase opacity-50" style={{ color: 'var(--text-main)' }}>RAM</p><p className="text-xs font-bold" style={{ color: 'var(--text-main)' }}>{din.ram}</p></div>
                                </div>

@@ -146,7 +146,7 @@ def gerar_etiquetas_pdf(req: EtiquetasRequest, db: Session = Depends(get_db)):
     estilos = getSampleStyleSheet()
     
     for ativo in ativos_db:
-        elementos.append(Paragraph("NEXUS.INV", ParagraphStyle('Topo', parent=estilos['Normal'], fontName='Helvetica-Bold', fontSize=10, alignment=TA_CENTER)))
+        elementos.append(Paragraph("NEXUS CONTROL", ParagraphStyle('Topo', parent=estilos['Normal'], fontName='Helvetica-Bold', fontSize=10, alignment=TA_CENTER)))
         elementos.append(Spacer(1, 2*mm))
         linha = Drawing(40*mm, 1*mm)
         linha.add(Line(0, 0, 40*mm, 0, strokeColor=colors.HexColor("#cbd5e1"), strokeWidth=0.8))
@@ -154,7 +154,7 @@ def gerar_etiquetas_pdf(req: EtiquetasRequest, db: Session = Depends(get_db)):
         elementos.append(linha)
         elementos.append(Spacer(1, 4*mm))
 
-        url_qr = f"{req.url_base}/consulta/{ativo.patrimonio}" if req.url_base else f"https://nexus.inv/consulta/{ativo.patrimonio}"
+        url_qr = f"{req.url_base}/consulta/{ativo.patrimonio}" if req.url_base else f"https://nexus-control.com/consulta/{ativo.patrimonio}"
         qr_code = qr.QrCodeWidget(url_qr)
         bounds = qr_code.getBounds()
         w, h = bounds[2] - bounds[0], bounds[3] - bounds[1]

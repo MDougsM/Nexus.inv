@@ -1,4 +1,4 @@
-# SUMMARY - Nexus.inv v5
+# SUMMARY - Nexus Control v5
 
 ## 🎯 Visão Geral
 Sistema de inventário TI com agente C2 para comandos remotos CMD/PowerShell.

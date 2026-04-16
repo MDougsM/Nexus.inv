@@ -61,7 +61,7 @@ export default function GerenciadorPatrimonios() {
       <div style="width: 50mm; height: 80mm; padding: 4mm; box-sizing: border-box; text-align: center; font-family: sans-serif; page-break-after: always; display: flex; flex-direction: column; justify-content: space-between; align-items: center;">
         
         <div style="width: 100%;">
-          <h2 style="margin: 0; font-size: 15px; font-weight: 900; color: #1e293b;">NEXUS.INV</h2>
+          <h2 style="margin: 0; font-size: 15px; font-weight: 900; color: #1e293b;">NEXUS CONTROL</h2>
           <p style="margin: 2px 0 0 0; font-size: 7px; font-weight: bold; color: #94a3b8; text-transform: uppercase;">Patrimônio Oficial</p>
           <hr style="margin: 6px 0; border: none; border-top: 1px solid #cbd5e1; width: 100%;" />
         </div>

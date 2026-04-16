@@ -53,13 +53,13 @@ def enviar_email_recuperacao(destinatario, nova_senha, username):
         return 
 
     msg = EmailMessage()
-    msg['Subject'] = "NEXUS.INV - Recuperação de Acesso"
+    msg['Subject'] = "NEXUS CONTROL - Recuperação de Acesso"
     msg['From'] = EMAIL_REMETENTE
     msg['To'] = destinatario
     msg.set_content(f"""
 Olá, {username}!
 
-Uma solicitação de recuperação de senha foi feita para a sua conta no sistema NEXUS.INV.
+Uma solicitação de recuperação de senha foi feita para a sua conta no sistema NEXUS CONTROL.
 Sua nova senha temporária de acesso é: {nova_senha}
 
 Recomendamos fortemente que você altere esta senha na aba 'Meu Perfil' assim que fizer o login.

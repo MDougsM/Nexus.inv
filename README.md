@@ -1,6 +1,6 @@
-﻿# Nexus.inv - Sistema de Inventário de Ativos
+﻿# Nexus Control - Sistema de Inventário de Ativos
 
-Nexus.inv é uma solução completa para inventário de ativos de TI com:
+Nexus Control é uma solução completa para inventário de ativos de TI com:
 - backend em **FastAPI + SQLAlchemy**
 - frontend em **React 18 + Vite + Tailwind**
 - agente remoto com **C2 / PowerShell / CMD**

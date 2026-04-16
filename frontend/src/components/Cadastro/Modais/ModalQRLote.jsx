@@ -23,7 +23,7 @@ export default function ModalQRLote({ modalQRLote, setModalQRLote, categorias })
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6 print:grid-cols-4 print:gap-4 print:w-full">
           {modalQRLote.ativos.map((ativo, idx) => (
             <div key={idx} className="flex flex-col items-center justify-center p-4 border-2 border-dashed rounded-xl text-center page-break-inside-avoid print:border-gray-800 print:border-solid print:rounded-none">
-               <h4 className="font-black text-xs tracking-widest mb-2 border-b w-full pb-2">NEXUS.INV</h4>
+               <h4 className="font-black text-xs tracking-widest mb-2 border-b w-full pb-2">NEXUS CONTROL</h4>
                <div className="bg-white p-1 rounded-md">
                  <QRCodeSVG value={`${window.location.origin}/consulta/${tenantAtual}/${ativo.patrimonio}`} size={90} level="H" includeMargin={false} />
                </div>

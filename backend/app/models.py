@@ -155,3 +155,11 @@ class RelatorioGerado(Base):
     data_emissao = Column(DateTime, default=datetime.utcnow)
     caminho_arquivo = Column(String)
     tamanho_kb = Column(Float)
+
+class AtivoVinculo(Base):
+    __tablename__ = "ativo_vinculos"
+    id = Column(Integer, primary_key=True, index=True)
+    patrimonio_pai = Column(String, index=True, nullable=False)
+    patrimonio_filho = Column(String, index=True, nullable=False)
+    tipo_relacao = Column(String, default="VINCULADO") # Ex: "Hospeda VM", "Monitor de", "Conectado a"
+    data_vinculo = Column(DateTime, default=datetime.utcnow)

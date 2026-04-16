@@ -29,7 +29,7 @@ Try {
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Nexus.inv - Auto Discovery" Height="480" Width="420"
+        Title="Nexus Control - Auto Discovery" Height="480" Width="420"
         WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
         Background="#0F172A" FontFamily="Segoe UI">
     <Grid>
@@ -40,7 +40,7 @@ Try {
 
         <Border Background="#1E293B" CornerRadius="0,0,15,15" Margin="0,0,0,5">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="25,0,0,0">
-                <TextBlock Text="NEXUS.INV" FontSize="26" FontWeight="Black" Foreground="#F8FAFC"/>
+                <TextBlock Text="NEXUS CONTROL" FontSize="26" FontWeight="Black" Foreground="#F8FAFC"/>
                 <TextBlock Text="AGENTE DE COLETA" FontSize="11" FontWeight="Bold" Foreground="#3B82F6" Margin="10,12,0,0"/>
             </StackPanel>
         </Border>
