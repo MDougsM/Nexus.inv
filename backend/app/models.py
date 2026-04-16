@@ -163,3 +163,9 @@ class AtivoVinculo(Base):
     patrimonio_filho = Column(String, index=True, nullable=False)
     tipo_relacao = Column(String, default="VINCULADO") # Ex: "Hospeda VM", "Monitor de", "Conectado a"
     data_vinculo = Column(DateTime, default=datetime.utcnow)
+
+class DicionarioPropriedade(Base):
+    __tablename__ = "dicionario_propriedades"
+    id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String, unique=True, index=True, nullable=False)
+    descricao = Column(String, nullable=True)

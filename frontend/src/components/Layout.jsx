@@ -147,7 +147,7 @@ export default function Layout({ children, onLogout, usuarioAtual }) {
               {isModoDeus ? 'M' : 'N'}
             </div>
             {isSidebarOpen && (
-              <span>NEXUS<span className={isModoDeus ? 'text-red-500' : 'text-blue-500'}>{isModoDeus ? '.SAAS' : '.INV'}</span></span>
+              <span>NEXUS<span className={isModoDeus ? 'text-red-500' : 'text-blue-500'}>{isModoDeus ? '.SAAS' : '.CONTROL'}</span></span>
             )}
           </h1>
         </div>

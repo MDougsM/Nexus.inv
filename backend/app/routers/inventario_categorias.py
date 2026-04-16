@@ -1,7 +1,7 @@
 from typing import Dict, List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.models import Categoria, Ativo, LogAuditoria
+from app.models import Categoria, Ativo, LogAuditoria, DicionarioPropriedade
 from pydantic import BaseModel
 from .inventario_core import get_db
 
@@ -45,3 +45,25 @@ def deletar_categoria(categoria_id: int, usuario_acao: str = "Admin", db: Sessio
     db.add(LogAuditoria(usuario=usuario_acao, acao="EXCLUSAO", entidade="Categoria", identificador=nome_apagado, detalhes=f"Excluiu '{nome_apagado}'."))
     db.commit()
     return {"message": "Categoria excluída com sucesso!"}
+
+class PropRequest(BaseModel):
+    nome: str
+    descricao: str = ""
+
+@router.get("/propriedades")
+def listar_propriedades(db: Session = Depends(get_db)):
+    return db.query(DicionarioPropriedade).order_by(DicionarioPropriedade.nome).all()
+
+@router.post("/propriedades")
+def criar_propriedade(req: PropRequest, db: Session = Depends(get_db)):
+    existe = db.query(DicionarioPropriedade).filter(DicionarioPropriedade.nome == req.nome.strip()).first()
+    if existe: raise HTTPException(400, "Esta propriedade já existe.")
+    db.add(DicionarioPropriedade(nome=req.nome.strip(), descricao=req.descricao))
+    db.commit()
+    return {"message": "Criado com sucesso!"}
+
+@router.delete("/propriedades/{id_prop}")
+def deletar_propriedade(id_prop: int, db: Session = Depends(get_db)):
+    p = db.query(DicionarioPropriedade).filter(DicionarioPropriedade.id == id_prop).first()
+    if p: db.delete(p); db.commit()
+    return {"message": "Excluído"}

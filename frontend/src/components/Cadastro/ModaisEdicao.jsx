@@ -159,7 +159,7 @@ export default function ModaisEdicao({
   const catsSelecionadas = [...new Set(modalEdicaoMassa.ativos.map(a => a.categoria_id))];
   const categoriaMassa = catsSelecionadas.length === 1 ? categorias.find(c => String(c.id) === String(catsSelecionadas[0])) : null;
   const camposMassa = parseCamposDinamicos(categoriaMassa);
-  const camposBloqueadosBase = ['Hostname', 'Serial', 'Páginas Impressas', 'Toner', 'Drum', '% Toner', '% Drum'];
+  const camposBloqueadosBase = ['Páginas Impressas', 'Toner', 'Drum', '% Toner', '% Drum'];
   const isCategoriaMFA = (catId) => {
       const nomeCat = categorias.find(c => String(c.id) === String(catId))?.nome?.toLowerCase() || '';
       return nomeCat.includes('multifuncional') || nomeCat.includes('impressora');
@@ -230,8 +230,7 @@ export default function ModaisEdicao({
                   {parseCamposDinamicos(categorias.find(c => String(c.id) === String(modalEdicao.form.categoria_id))).map(c => {
                     if (c.toLowerCase().includes('apelido') || c.toLowerCase().includes('personalizado') || c.toLowerCase() === 'nome da máquina' || c.toLowerCase() === 'par_vinculo') return null; 
                     
-                    let isBloqueado = camposBloqueadosBase.includes(c);
-                    if (c.toUpperCase() === 'IP' && isCategoriaMFA(modalEdicao.form.categoria_id)) isBloqueado = true;
+                    const isBloqueado = camposBloqueadosBase.includes(c);
                     const isObservacao = c.toLowerCase() === 'observacao' || c.toLowerCase() === 'observação';
                     
                     return (
