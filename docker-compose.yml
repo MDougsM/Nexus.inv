@@ -1,34 +1,90 @@
-version: '3.8'
-
 services:
-  backend:
-    env_file:
-      - .env
-    build: ./backend
-    container_name: nexus_backend
-    restart: always
+  # O MAESTRO (Traefik)
+  traefik:
+    image: traefik:latest
+    container_name: nexus_traefik
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.watch=true"
+      - "--entrypoints.web.address=:80"
     ports:
-      - "${BACKEND_PORT}:${BACKEND_PORT}"
+      - "80:80"
+      - "8080:8080"
     volumes:
-      - ./backend:/app
+      - "/var/run/docker.sock:/var/run/docker.sock"
     environment:
-      - DATABASE_URL=${DATABASE_URL}
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    privileged: true
+    networks:
+      - nexus_network # 🚀 Entrou na rede
+
+  # O CORAÇÃO (PostgreSQL)
+  db:
+    image: postgres:15-alpine
+    container_name: nexus_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: nexus
+      POSTGRES_PASSWORD: Nexus@Deus2026
+      POSTGRES_DB: nexus_master
+    ports:
+      - "5433:5432"
+    volumes:
+      - nexus_pg_data:/var/lib/postgresql/data
+    networks:
+      - nexus_network # 🚀 Entrou na rede
+
+  # O MOTOR (Backend - API)
+  backend:
+    build: ./backend
+    # 🚀 REMOVIDO o container_name para permitir as 2 réplicas!
+    restart: always
+    depends_on:
+      - db
+    environment:
+      - POSTGRES_USER=nexus
+      - POSTGRES_PASSWORD=Nexus@Deus2026
+      - POSTGRES_SERVER=db
       - VERSAO_ATUAL=${VERSAO_ATUAL}
       - FRONTEND_URL=${FRONTEND_URL}
       - TZ=America/Campo_Grande
-    command: uvicorn app.main:app --host 0.0.0.0 --port ${BACKEND_PORT} ${RELOAD_FLAGS}
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.backend.rule=PathPrefix(`/api`)
+      - traefik.http.routers.backend.entrypoints=web
+      - traefik.http.routers.backend.priority=100
+      - traefik.http.services.backend.loadbalancer.server.port=8001
+    networks:
+      - nexus_network # 🚀 Entrou na rede
 
+  # A TELA (Frontend - React/Vite)
   frontend:
     image: node:20-alpine
     container_name: nexus_frontend
     working_dir: /app
-    ports:
-      - "${FRONTEND_PORT}:${FRONTEND_PORT}"
     environment:
       - VITE_API_URL=${VITE_API_URL}
-      - VITE_VERSAO_SISTEMA=${VITE_VERSAO_SISTEMA} # 🚀 O CANO CONECTADO AQUI!
+      - VITE_VERSAO_SISTEMA=${VITE_VERSAO_SISTEMA}
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    # O comando sh garante que o npm install rode antes de subir o servidor
-    command: sh -c "npm install && npm run dev -- --host"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5174"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.frontend.rule=PathPrefix(`/`)
+      - traefik.http.routers.frontend.entrypoints=web
+      - traefik.http.routers.frontend.priority=1
+      - traefik.http.services.frontend.loadbalancer.server.port=5174
+    networks:
+      - nexus_network # 🚀 Entrou na rede
+
+volumes:
+  nexus_pg_data:
+
+# 🚀 DECLARAÇÃO OFICIAL DA REDE
+networks:
+  nexus_network:
+    driver: bridge

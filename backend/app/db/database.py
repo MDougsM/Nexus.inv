@@ -1,23 +1,29 @@
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, Float, Date
+import urllib.parse
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, Float, Date, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from fastapi import Request, HTTPException
 from datetime import date, timedelta
 from passlib.context import CryptContext
 
-# 🚀 CONFIGURAÇÕES MESTRE
-MASTER_DATABASE_URL = os.getenv("MASTER_DATABASE_URL", "sqlite:///./data/nexus_master.db")
-TENANTS_DB_DIR = os.getenv("TENANTS_DB_DIR", "./data/tenants")
 
-os.makedirs("./data", exist_ok=True)
-os.makedirs(TENANTS_DB_DIR, exist_ok=True)
 
-master_engine = create_engine(MASTER_DATABASE_URL, connect_args={"check_same_thread": False})
+# 🚀 CONFIGURAÇÕES MESTRE - POSTGRESQL (NÍVEL ENTERPRISE)
+POSTGRES_USER = os.getenv("POSTGRES_USER", "nexus")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "Nexus@Deus2026")
+POSTGRES_SERVER = os.getenv("POSTGRES_SERVER", "db")
+
+# 🚀 Codificando a senha para evitar bugs com o caractere '@'
+SENHA_SEGURA = urllib.parse.quote_plus(POSTGRES_PASSWORD)
+
+MASTER_DATABASE_URL = os.getenv("MASTER_DATABASE_URL", f"postgresql://{POSTGRES_USER}:{SENHA_SEGURA}@{POSTGRES_SERVER}:5432/nexus_master")
+TENANTS_DB_DIR = "./data/tenants"
+
+master_engine = create_engine(MASTER_DATABASE_URL)
 MasterSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=master_engine)
 MasterBase = declarative_base()
-Base = declarative_base() # Molde para os inquilinos
+Base = declarative_base()
 
-# Criptografia para a Senha Master
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # ==========================================
@@ -34,17 +40,16 @@ class Empresa(MasterBase):
     dia_vencimento = Column(Integer, default=10)
     proximo_vencimento = Column(Date, nullable=True)
     inadimplente = Column(Boolean, default=False)
-    limite_maquinas = Column(Integer, default=50) # 0 = Ilimitado
-    em_manutencao = Column(Boolean, default=False) # Trava de manutenção
+    limite_maquinas = Column(Integer, default=50)
+    em_manutencao = Column(Boolean, default=False)
 
 class SuperAdmin(MasterBase):
     __tablename__ = "super_admins"
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True)
-    password_hash = Column(String) # Senha agora é fortemente criptografada
-    email_recuperacao = Column(String, nullable=True) # E-mail para reset de emergência
+    password_hash = Column(String) 
+    email_recuperacao = Column(String, nullable=True)
 
-# Cria/Atualiza as tabelas mestres
 MasterBase.metadata.create_all(bind=master_engine)
 
 # ==========================================
@@ -53,32 +58,24 @@ MasterBase.metadata.create_all(bind=master_engine)
 def seed_master_db():
     db = MasterSessionLocal()
     try:
-        # Verifica se o Nexus existe
         admin = db.query(SuperAdmin).filter(SuperAdmin.username == "Nexus").first()
-        
-        # Se não existir, cria!
         if not admin:
-            print("👑 Criando Conta Super Admin Mestre na Matriz...")
+            print("👑 Criando Conta Super Admin Mestre na Matriz PostgreSQL...")
             senha_padrao_crua = os.getenv("MASTER_DEFAULT_PASSWORD", "Nexus@Deus2026")
             hash_senha = pwd_context.hash(senha_padrao_crua)
-            
-            # 🚀 USANDO 'password_hash' AQUI:
             novo_admin = SuperAdmin(
                 username="Nexus", 
                 password_hash=hash_senha, 
                 email_recuperacao="logistica.newpc@gmail.com"
             )
             db.add(novo_admin)
-            
-            # Limpeza do admin antigo, se existir
             db.query(SuperAdmin).filter(SuperAdmin.username == "admin").delete()
                 
-        # Garante a empresa NEWPC
         emp = db.query(Empresa).filter(Empresa.codigo_acesso == "NEWPC").first()
         if not emp:
             db.add(Empresa(
                 codigo_acesso="NEWPC", 
-                db_nome="empresa_newpc.db", 
+                db_nome="empresa_newpc", # 🚀 Removido o ".db" do SQLite
                 ativo=True, 
                 limite_maquinas=0,
                 em_manutencao=False
@@ -92,23 +89,37 @@ def seed_master_db():
         db.close()
 
 # ==========================================
-# 🏢 ROTEADOR DE INQUILINOS (TENANTS)
+# 🏢 ROTEADOR DE INQUILINOS (TENANTS - MULTI DATABASE)
 # ==========================================
 tenant_engines = {}
 
 def get_tenant_engine(db_nome: str):
-    """Cria e guarda o motor do banco de dados de cada empresa na memória"""
-    if db_nome not in tenant_engines:
-        db_url = f"sqlite:///{TENANTS_DB_DIR}/{db_nome}"
-        engine = create_engine(db_url, connect_args={"check_same_thread": False})
+    # Limpamos o nome caso ainda venha com ".db" do banco antigo
+    db_nome_pg = db_nome.replace(".db", "").lower()
+
+    if db_nome_pg not in tenant_engines:
+        # 1. Conecta na raiz do Postgres para verificar se o banco da empresa existe
+        default_url = f"postgresql://{POSTGRES_USER}:{SENHA_SEGURA}@{POSTGRES_SERVER}:5432/postgres"
+        try:
+            temp_engine = create_engine(default_url, isolation_level="AUTOCOMMIT")
+            with temp_engine.connect() as conn:
+                res = conn.execute(text(f"SELECT 1 FROM pg_database WHERE datname='{db_nome_pg}'"))
+                if not res.fetchone():
+                    print(f"🏢 Criando novo Banco de Dados Corporativo para: {db_nome_pg}")
+                    conn.execute(text(f"CREATE DATABASE {db_nome_pg}"))
+        except Exception as e:
+            print(f"Erro ao verificar/criar banco do inquilino: {e}")
+
+        # 2. Cria a conexão oficial de alta performance
+        db_url = f"postgresql://{POSTGRES_USER}:{SENHA_SEGURA}@{POSTGRES_SERVER}:5432/{db_nome_pg}"
+        engine = create_engine(db_url)
         
-        # Usa o Base para gerar as tabelas do cliente na hora que ele logar a primeira vez
         from app.models import Base 
         Base.metadata.create_all(bind=engine)
         
-        tenant_engines[db_nome] = engine
+        tenant_engines[db_nome_pg] = engine
         
-    return tenant_engines[db_nome]
+    return tenant_engines[db_nome_pg]
 
 def get_db(request: Request = None):
     if not request: yield None; return
@@ -127,7 +138,6 @@ def get_db(request: Request = None):
         master_db.close()
         raise HTTPException(status_code=404, detail="Inquilino não identificado.")
 
-    # 🚨 VERIFICAÇÃO AUTOMÁTICA DE VENCIMENTO
     hoje = date.today()
     if empresa.proximo_vencimento and hoje > empresa.proximo_vencimento:
         if not empresa.inadimplente:
@@ -140,16 +150,13 @@ def get_db(request: Request = None):
 
     master_db.close()
     
-    # Conexão normal com o banco do cliente
     engine = get_tenant_engine(empresa.db_nome)
     TenantSessionLocal = sessionmaker(bind=engine)
     db = TenantSessionLocal()
     try: yield db
     finally: db.close()
 
-# 🚀 FUNÇÃO PARA RENOVAÇÃO DE CICLO (Chamar ao confirmar pagamento)
 def renovar_assinatura(empresa: Empresa):
-    # Mantém o dia fixo (ex: todo dia 10)
     hoje = date.today()
     novo_ano = hoje.year
     novo_mes = hoje.month + 1

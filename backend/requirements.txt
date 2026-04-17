@@ -18,3 +18,4 @@ pytz
 reportlab
 cryptography==42.0.5
 reactflow
+psycopg2-binary==2.9.9

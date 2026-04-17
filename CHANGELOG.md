@@ -1,6 +1,26 @@
 # Changelog - Nexus.Control
 
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
+## [v6.2.1.0] - 2026-04-16
+### 🚀 Adicionado (Added)
+- **Dicionário Global de Propriedades (CMDB)**: Criada uma nova base de dados centralizada (`dicionario_propriedades`) para gerenciar as especificações técnicas permitidas no sistema (ex: "Endereço IP", "Processador", "Memória RAM").
+  - Nova aba interativa "Dicionário de Propriedades" adicionada ao painel de Cadastros Auxiliares.
+  - Endpoints de API exclusivos (`/api/inventario/propriedades`) para criação, listagem e exclusão global de atributos.
+- **Sincronização de Dados Legados (Smart Import)**: Implementado um "Botão Mágico" no Dicionário que varre todas as categorias de equipamentos antigas do banco de dados, extrai as propriedades digitadas manualmente no passado e as padroniza dentro do novo Dicionário, ignorando lixos de sistema (como o antigo `par_vinculo`).
+- **Novo Script de Migração (DB)**: Criado o arquivo `atualizar_banco_propriedades.py` com radar dinâmico de pastas, capaz de encontrar bancos SQLite no ecossistema e injetar a nova tabela relacional sem perda de dados.
+
+### 🔄 Modificado (Changed)
+- **Engenharia de Tipos de Equipamentos**: O método de criação de Categorias de Equipamentos (ex: Desktop, Servidor) foi totalmente reescrito.
+  - Removida a necessidade de digitar especificações separadas por vírgula (sujeito a falha humana e duplicidade).
+  - Adicionado um Buscador Inteligente (Dropdown Select) conectado ao Dicionário Global. O administrador agora pesquisa a propriedade desejada e "pluga" no equipamento com um clique, gerando tags visuais.
+  - Ocultação visual irreversível da variável obsoleta `par_vinculo` nas telas de edição de Categorias, forçando o uso do novo motor de Topologia.
+
+### 💅 UI/UX & Frontend
+- **Design System "Nexus Command"**: Refatoração completa da interface das abas de `CadastrosBase`, `DicionarioPropriedades` e `TiposEquipamento`.
+  - Remoção de gradientes, cores quentes excessivas e "remendos" de classes Tailwind estáticas (`dark:bg-gray-800`).
+  - Migração total para as variáveis de ambiente CSS dinâmicas do Nexus (`var(--bg-card)`, `var(--bg-input)`, `var(--text-main)`), garantindo uma transição fluida, suave e 100% nativa entre o Modo Claro e o Modo Escuro.
+  - Substituição de tabelas rústicas por "Cards de Equipamentos" corporativos e painéis de modais minimalistas.
+
 ## [v6.2.0.0] - 2026-04-16
 ### ☁️ Novo Nme
 - **Passamos a ser, agora, Nexus Control**
