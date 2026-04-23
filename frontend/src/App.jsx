@@ -14,6 +14,7 @@ import CadastrosBase from './pages/CadastrosBase';
 import Ajuda from './pages/Ajuda';
 import MeuPerfil from './pages/MeuPerfil';
 import NexusPrint from './pages/NexusPrint';
+import MobileCrud from './pages/MobileCrud';
 import PainelMatriz from './pages/Matriz/PainelMatriz';
 import ConsultaQR from './pages/ConsultaQR';
 
@@ -109,6 +110,7 @@ export default function App() {
         <Route path="/ajuda" element={<RotaProtegida><Layout onLogout={handleLogout} usuarioAtual={usuarioAtualObj}><Ajuda /></Layout></RotaProtegida>} />
         <Route path="/perfil" element={<RotaProtegida><Layout onLogout={handleLogout} usuarioAtual={usuarioAtualObj}><MeuPerfil usuarioAtual={usuarioAtualObj} /></Layout></RotaProtegida>} />
         <Route path="/nexus-print" element={<RotaProtegida><Layout onLogout={handleLogout} usuarioAtual={usuarioAtualObj}><NexusPrint /></Layout></RotaProtegida>} />
+        <Route path="/mobile-crud" element={<RotaProtegida><MobileCrud /></RotaProtegida>} />
         <Route path="/consulta/:tenant/:patrimonio" element={<ConsultaQR />} />
 
         {/* Redirecionamento de rotas inexistentes */}

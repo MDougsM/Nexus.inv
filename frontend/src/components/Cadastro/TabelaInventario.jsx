@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { getStatusBadge, getNomeTipoEquipamento } from '../../utils/helpers';
+import { getStatusBadge, getNomeTipoEquipamento, getStatusExibido } from '../../utils/helpers';
 
 export default function TabelaInventario({
   ativosPaginaAtual,
@@ -42,6 +42,20 @@ export default function TabelaInventario({
     });
   };
 
+  // --- NOVA LÓGICA DE INVENTÁRIO ---
+  const isInventarioValido = (dataAtualizacao) => {
+    if (!dataAtualizacao) return false;
+    const data = new Date(dataAtualizacao + (dataAtualizacao.includes('Z') ? '' : 'Z'));
+    const dataCorte = new Date('2026-01-01T00:00:00Z');
+    return data >= dataCorte;
+  };
+
+  const formatarDataSimples = (isoDate) => {
+    if (!isoDate) return 'Sem registro';
+    return new Date(isoDate + (isoDate.includes('Z') ? '' : 'Z')).toLocaleDateString('pt-BR');
+  };
+  // ---------------------------------
+
   const parseJSONSeguro = (dado) => {
       if (!dado) return {};
       if (typeof dado === 'object') return dado;
@@ -77,8 +91,8 @@ export default function TabelaInventario({
               const din = parseJSONSeguro(ativo.dados_dinamicos);
               const adv = typeof din.dados_avancados === 'string' ? parseJSONSeguro(din.dados_avancados) : (din.dados_avancados || {});
               const online = isOnline(ativo.ultima_comunicacao);
+              const statusExibido = getStatusExibido(ativo);
               
-              // 🚀 Busca o apelido oficial ou "caça" nos dados dinâmicos caso seja um cadastro antigo
               const apelidoExibicao = ativo.nome_personalizado || 
                                       din['Nome Personalizado / Apelido'] || 
                                       din['Nome da máquina / Apelido'] || 
@@ -113,7 +127,6 @@ export default function TabelaInventario({
                         {ativo.dominio_proprio && <span className="flex items-center justify-center text-[15px]" title="🔖 Equipamento Próprio">🔖</span>}
                       </div>
 
-                      {/* 🚀 Renderiza o apelido unificado que encontramos lá em cima */}
                       {apelidoExibicao && (
                         <div className="text-[10px] font-black uppercase mt-1 px-2 py-0.5 rounded inline-block truncate max-w-[150px]" style={{ backgroundColor: 'var(--border-light)', color: 'var(--text-muted)' }} title={apelidoExibicao}>
                            {apelidoExibicao}
@@ -121,7 +134,11 @@ export default function TabelaInventario({
                       )}
                     </td>
                     
-                    <td className="p-4 hidden sm:table-cell">{getStatusBadge(ativo.status)}</td>
+                    <td className="p-4 hidden sm:table-cell">
+                      <div className="flex flex-col items-start gap-1.5">
+                        {getStatusBadge(statusExibido)}
+                      </div>
+                    </td>
                     
                     <td className="p-4">
                       <div className="font-black text-xs md:text-sm" style={{color: 'var(--text-main)'}}>{getNomeTipoEquipamento(ativo, categorias) || '-'}</div>
@@ -160,24 +177,38 @@ export default function TabelaInventario({
                     <tr className="border-b animate-fade-in" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
                        <td colSpan="6" className="p-4 relative">
                           <div className="flex flex-wrap gap-3 items-center">
+                             
+                             {/* 🚀 CARD DA DATA DE ATUALIZAÇÃO */}
+                             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white dark:bg-black/20" style={{ borderColor: 'var(--border-light)' }}>
+                                <span className="text-sm opacity-50">📅</span>
+                                <div>
+                                  <p className="text-[8px] font-black uppercase opacity-50" style={{ color: 'var(--text-main)' }}>Última Atualização</p>
+                                  <p className={`text-xs font-bold ${inventarioOK ? 'text-emerald-600' : 'text-red-600'}`}>{formatarDataSimples(ativo.ultima_atualizacao)}</p>
+                                </div>
+                             </div>
+
                              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white dark:bg-black/20" style={{ borderColor: 'var(--border-light)' }}>
                                 <span className="text-sm opacity-50">👤</span>
                                 <div><p className="text-[8px] font-black uppercase opacity-50" style={{ color: 'var(--text-main)' }}>Usuário Logado</p><p className="text-xs font-bold truncate max-w-[120px]" style={{ color: 'var(--color-blue)' }}>{din.usuario_pc || adv.usuario_pc || 'Não Logado'}</p></div>
                              </div>
+                             
                              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white dark:bg-black/20" style={{ borderColor: 'var(--border-light)' }}>
                                 <span className="text-sm opacity-50">⏳</span>
                                 <div><p className="text-[8px] font-black uppercase opacity-50" style={{ color: 'var(--text-main)' }}>Último Login / Sinc</p><p className={`text-xs font-bold ${online ? 'text-emerald-600' : 'text-amber-600'}`}>{formatarDataUltimoAcesso(ativo.ultima_comunicacao)}</p></div>
                              </div>
+                             
                              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white dark:bg-black/20" style={{ borderColor: 'var(--border-light)' }}>
                                 <span className="text-sm opacity-50">🌐</span>
                                 <div><p className="text-[8px] font-black uppercase opacity-50" style={{ color: 'var(--text-main)' }}>IP Local</p><p className="text-xs font-bold font-mono" style={{ color: 'var(--text-main)' }}>{din.ip || din.IP || 'N/A'}</p></div>
                              </div>
+                             
                              {din.ram && (
                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white dark:bg-black/20 hidden md:flex" style={{ borderColor: 'var(--border-light)' }}>
                                   <span className="text-sm opacity-50">⚡</span>
                                   <div><p className="text-[8px] font-black uppercase opacity-50" style={{ color: 'var(--text-main)' }}>RAM</p><p className="text-xs font-bold" style={{ color: 'var(--text-main)' }}>{din.ram}</p></div>
                                </div>
                              )}
+                             
                              {online && (
                                 <button onClick={(e) => { e.stopPropagation(); setModalTerminal({ aberto: true, ativo: ativo }); }} className="ml-auto flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-md transition-all active:scale-95">
                                    <span className="font-mono font-black text-xs">&gt;_ Terminal</span>

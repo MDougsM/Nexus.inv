@@ -78,6 +78,7 @@ export default function BarraPesquisa({
           <select value={filtroStatus} onChange={(e) => {setFiltroStatus(e.target.value); setPaginaAtual(1);}} className="w-full h-[40px] px-3 rounded-xl border outline-none text-xs font-bold shadow-sm" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
             <option value="">Todos os Status</option>
             <option value="ATIVO">Em Operação (Ativo)</option>
+            <option value="INATIVO">Inativo / Sem Atualização</option>
             <option value="MANUTENÇÃO">Em Manutenção</option>
             <option value="SUCATA">Descartado (Sucata)</option>
           </select>

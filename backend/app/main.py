@@ -164,15 +164,25 @@ def carregar_cron_jobs():
     print(f"⏰ APScheduler iniciado! Escaneando {len(empresas)} empresas.")
 
 # ==========================================
-# 🔒 CONFIGURAÇÃO DE SEGURANÇA (CORS)
+# 🔒 CONFIGURAÇÃO DE SEGURANÇA (CORS BLINDADO)
 # ==========================================
-FRONTEND_URL = os.getenv("FRONTEND_URL", "") 
-origens_permitidas = ["http://localhost", "http://localhost:5174", "http://localhost:8001"]
-if FRONTEND_URL: origens_permitidas.append(FRONTEND_URL)
+FRONTEND_URL = os.getenv("FRONTEND_URL", "")
+
+origens_permitidas = [
+    "http://localhost", 
+    "http://localhost:5174", 
+    "http://localhost:8001"
+]
+
+if FRONTEND_URL:
+    for url in FRONTEND_URL.split(","):
+        if url.strip():
+            origens_permitidas.append(url.strip())
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origens_permitidas, 
+    allow_origins=origens_permitidas,
+    allow_origin_regex=r".*", # 🚀 O CHEAT CODE: Aceita Cloudflare, IP de rede, celular, tudo!
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

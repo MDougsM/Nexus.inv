@@ -18,6 +18,7 @@ export const getStatusBadge = (status) => {
   const s = status?.toUpperCase() || 'ATIVO';
   const styles = {
     'ATIVO': { bg: 'var(--badge-green-bg)', text: 'var(--badge-green-text)' },
+    'INATIVO': { bg: 'var(--badge-red-bg)', text: 'var(--badge-red-text)' },
     'MANUTENÇÃO': { bg: 'var(--badge-yellow-bg)', text: 'var(--badge-yellow-text)' },
     'SUCATA': { bg: 'var(--badge-gray-bg)', text: 'var(--badge-gray-text)' }
   };
@@ -28,6 +29,24 @@ export const getStatusBadge = (status) => {
       {s}
     </span>
   );
+};
+
+export const getStatusExibido = (ativo) => {
+  if (!ativo) return 'INATIVO';
+  const status = (ativo.status || '').toUpperCase();
+  if (status === 'MANUTENÇÃO' || status === 'SUCATA') return status;
+  const ultimaAtualizacao = ativo.ultima_atualizacao ? new Date(ativo.ultima_atualizacao) : null;
+  const dataCorte = new Date('2026-01-01T00:00:00Z');
+  return ultimaAtualizacao && ultimaAtualizacao >= dataCorte ? 'ATIVO' : 'INATIVO';
+};
+
+export const getStatusPriority = (status) => {
+  const s = (status || '').toUpperCase();
+  if (s === 'ATIVO') return 1;
+  if (s === 'MANUTENÇÃO') return 2;
+  if (s === 'SUCATA') return 3;
+  if (s === 'INATIVO') return 4;
+  return 5;
 };
 
 export const getNomeTipoEquipamento = (ativo, categorias) => {

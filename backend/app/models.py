@@ -59,6 +59,7 @@ class Ativo(Base):
     categoria = relationship("Categoria")
     uuid_persistente = Column(String, index=True, nullable=True)
     ultima_comunicacao = Column(DateTime, default=datetime.utcnow)
+    ultima_atualizacao = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow) # <- ADICIONE ESTA LINHA
     dados_avancados = Column(JSON, nullable=True)
     deletado = Column(Boolean, default=False)
 

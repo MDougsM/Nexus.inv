@@ -1,7 +1,11 @@
 import axios from 'axios';
 
+// 🚀 O SEGREDO: Ele tenta ler o .env. Se o .env estiver vazio ou falhar, 
+// ele usa '/' (que significa "use o link atual da tela").
+const urlBase = import.meta.env.VITE_API_URL || '/';
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL
+  baseURL: urlBase
 });
 
 api.interceptors.request.use((config) => {

@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 
-# 🚀 NOVOS IMPORTS DA ARQUITETURA MULTI-TENANT
+# 🚀 IMPORTS DA ARQUITETURA MULTI-TENANT
 from app.db.database import get_db, MasterSessionLocal, Empresa, SuperAdmin, get_tenant_engine
 from app.models import Usuario, LogAuditoria
 
@@ -201,11 +201,9 @@ def fazer_login(dados: dict, request: Request):
         if username.lower() == "nexus":
             super_admin = master_db.query(SuperAdmin).filter(func.lower(SuperAdmin.username) == "nexus").first()
             
-            # 🚀 CORREÇÃO: Barra IMEDIATAMENTE se a senha mestre estiver errada
             if not super_admin or not verify_password(password, super_admin.password_hash):
                 raise HTTPException(status_code=401, detail="Credenciais Mestre Incorretas!")
                 
-            # Se a senha está certa, verifica para onde ele quer ir
             if empresa_cod == "NEXUS_MASTER":
                 return {
                     "message": "Acesso Mestre Concedido.",
@@ -215,7 +213,6 @@ def fazer_login(dados: dict, request: Request):
                     "termos_aceitos": True
                 }
             
-            # 👻 GHOST MODE: Nexus entrando em uma empresa de cliente
             empresa = master_db.query(Empresa).filter(Empresa.codigo_acesso == empresa_cod).first()
             if not empresa:
                 raise HTTPException(status_code=404, detail="Empresa cliente não localizada para acesso Fantasma.")
@@ -251,6 +248,10 @@ def fazer_login(dados: dict, request: Request):
         if not usuario or not verify_password(password, usuario.password):
             raise HTTPException(status_code=401, detail="Usuário ou senha incorretos!")
         
+        # Atualiza o último acesso do usuário
+        usuario.ultimo_acesso = datetime.utcnow()
+        db.commit()
+
         return {
             "message": f"Login efetuado! Conectado a {empresa.codigo_acesso}.",
             "username": usuario.username,
@@ -280,9 +281,82 @@ def recuperar_senha(req: RecuperarSenhaRequest, db: Session = Depends(get_db)):
     enviar_email_recuperacao(user.email, nova_senha, user.username)
     return {"message": "Sua nova senha foi enviada para o e-mail com sucesso!"}
 
+# ==========================================
+# 🔐 ROTAS DE SUPER ADMIN
+# ==========================================
+class AlterarSenhaUsuarioRequest(BaseModel):
+    usuario_alvo: str
+    nova_senha: str
+    usuario_acao: str
+    motivo: Optional[str] = "Alteração direta pelo painel" # 🚀 Adicionado
+
+class ResetSenhasRequest(BaseModel):
+    nova_senha_padrao: str = "Nexus@2026"
+    usuario_acao: Optional[str] = "Admin"
+    motivo: Optional[str] = "Ajuste em massa de segurança" # 🚀 Adicionado
+
+@router.post("/admin/reset-senhas-todas")
+@router.post("/admin/reset-senhas-todas/")
+def reset_todas_senhas(req: ResetSenhasRequest, usuario_acao: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    if not db: raise HTTPException(400, "Ação não permitida na Matriz.")
+    
+    user_executor = usuario_acao or req.usuario_acao or "admin"
+    
+    admin = db.query(Usuario).filter(func.lower(Usuario.username) == user_executor.lower()).first()
+    if not admin or not admin.is_admin: 
+        raise HTTPException(403, f"Acesso negado. O usuário '{user_executor}' não tem privilégios.")
+    
+    todos_usuarios = db.query(Usuario).all()
+    if not todos_usuarios:
+        raise HTTPException(404, "Nenhum usuário encontrado no sistema.")
+    
+    senha_hash = get_password_hash(req.nova_senha_padrao)
+    usuarios_resetados = []
+    
+    for usuario in todos_usuarios:
+        if usuario.username.lower() == "admin":
+            continue 
+            
+        usuario.password = senha_hash
+        usuarios_resetados.append(usuario.username)
+        
+        # 🚀 O motivo agora vai direto para a auditoria!
+        db.add(LogAuditoria(
+            usuario=admin.username, 
+            acao="RESET_SENHA_MASSA", 
+            entidade="Usuário", 
+            identificador=usuario.username, 
+            detalhes=f"Reset para '{req.nova_senha_padrao}'. Motivo: {req.motivo}"
+        ))
+    
+    db.commit()
+    
+    return {
+        "message": f"Senhas de {len(usuarios_resetados)} usuários resetadas para '{req.nova_senha_padrao}'.",
+        "usuarios_afetados": usuarios_resetados
+    }
+
+@router.post("/admin/alterar-senha-usuario")
+def alterar_senha_usuario_admin(req: AlterarSenhaUsuarioRequest, db: Session = Depends(get_db)):
+    if not db: raise HTTPException(400, "Ação não permitida na Matriz.")
+    admin = db.query(Usuario).filter(Usuario.username == req.usuario_acao).first()
+    if not admin or not admin.is_admin: raise HTTPException(403, "Acesso negado.")
+    
+    usuario_alvo = db.query(Usuario).filter(Usuario.username == req.usuario_alvo).first()
+    if not usuario_alvo: raise HTTPException(404, "Usuário não encontrado.")
+    
+    usuario_alvo.password = get_password_hash(req.nova_senha)
+    db.add(LogAuditoria(usuario=req.usuario_acao, acao="ALTERACAO_SENHA_ADMIN", entidade="Usuário", identificador=req.usuario_alvo, detalhes="Senha alterada pelo super admin"))
+    db.commit()
+    return {"message": "Senha alterada com sucesso!"}
+
+# ==========================================
+# ROTAS CRUD NORMAIS (Deixe elas aqui embaixo agora)
+# ==========================================
+
 @router.get("/")
 def listar_usuarios(db: Session = Depends(get_db)):
-    if not db: return [] # Modo Mestre
+    if not db: return [] 
     usuarios = db.query(Usuario).all()
     return [{
         "id": u.id, 
@@ -299,6 +373,12 @@ def listar_usuarios(db: Session = Depends(get_db)):
 @router.post("/")
 def criar_usuario(req: UsuarioCreate, db: Session = Depends(get_db)):
     if not db: raise HTTPException(400, "Ação não permitida na Matriz.")
+    
+    # 🔒 Segurança: Apenas admins podem criar usuários
+    admin = db.query(Usuario).filter(Usuario.username == req.usuario_acao).first()
+    if not admin or not admin.is_admin:
+        raise HTTPException(403, "Apenas administradores podem criar novos usuários.")
+
     if not req.username.strip(): raise HTTPException(400, "Nome não pode ser vazio.")
     if db.query(Usuario).filter(func.lower(Usuario.username) == req.username.strip().lower()).first():
         raise HTTPException(400, "Este usuário já existe.")
@@ -324,6 +404,12 @@ def criar_usuario(req: UsuarioCreate, db: Session = Depends(get_db)):
 @router.put("/{user_id}")
 def editar_usuario(user_id: int, req: UsuarioUpdate, db: Session = Depends(get_db)):
     if not db: raise HTTPException(400, "Ação não permitida na Matriz.")
+    
+    # 🔒 Segurança: Apenas admins podem editar outros usuários
+    admin = db.query(Usuario).filter(Usuario.username == req.usuario_acao).first()
+    if not admin or not admin.is_admin:
+        raise HTTPException(403, "Apenas administradores podem gerenciar usuários.")
+
     user = db.query(Usuario).filter(Usuario.id == user_id).first()
     if not user: raise HTTPException(404, "Usuário não encontrado.")
     if user.username == "admin" and req.username.lower() != "admin":
@@ -343,12 +429,16 @@ def editar_usuario(user_id: int, req: UsuarioUpdate, db: Session = Depends(get_d
     user.is_admin = req.is_admin
     user.permissoes = req.permissoes
 
-    if req.password: 
-        user.password = get_password_hash(req.password)
+    detalhes_log = f"Alterou permissões/cadastro de '{nome_antigo}'. Motivo: {req.motivo}"
 
-    db.add(LogAuditoria(usuario=req.usuario_acao, acao="EDICAO", entidade="Usuário", identificador=novo_nome, detalhes=f"Alterou permissões/cadastro de '{nome_antigo}'. Motivo: {req.motivo}"))
+    # 🚀 O SEGREDO DA SENHA VAZIA RESOLVIDO AQUI
+    if req.password and req.password.strip(): 
+        user.password = get_password_hash(req.password.strip())
+        detalhes_log += " [Senha alterada]"
+
+    db.add(LogAuditoria(usuario=req.usuario_acao, acao="EDICAO", entidade="Usuário", identificador=novo_nome, detalhes=detalhes_log))
     db.commit()
-    return {"message": "Atualizado"}
+    return {"message": "Atualizado com sucesso"}
 
 @router.put("/perfil/atualizar")
 def atualizar_perfil(req: PerfilUpdate, db: Session = Depends(get_db)):
@@ -379,6 +469,12 @@ def trocar_senha(req: SenhaUpdate, db: Session = Depends(get_db)):
 @router.delete("/{user_id}")
 def deletar_usuario(user_id: int, req: JustificativaRequest, db: Session = Depends(get_db)):
     if not db: raise HTTPException(400, "Ação não permitida na Matriz.")
+    
+    # 🔒 Segurança: Apenas admins
+    admin = db.query(Usuario).filter(Usuario.username == req.usuario).first()
+    if not admin or not admin.is_admin:
+        raise HTTPException(403, "Apenas administradores podem excluir usuários.")
+
     user = db.query(Usuario).filter(Usuario.id == user_id).first()
     if not user: raise HTTPException(404, "Usuário não encontrado.")
     if user.username == "admin": raise HTTPException(400, "O admin não pode ser excluído.")
@@ -388,4 +484,3 @@ def deletar_usuario(user_id: int, req: JustificativaRequest, db: Session = Depen
     db.add(LogAuditoria(usuario=req.usuario, acao="EXCLUSAO", entidade="Usuário", identificador=username, detalhes=f"Revogou acesso. Motivo: {req.motivo}"))
     db.commit()
     return {"message": "Excluído"}
-

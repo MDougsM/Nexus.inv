@@ -9,7 +9,7 @@ import AbaNovoCadastro from './AbaNovoCadastro';
 import AbaManutencao from './AbaManutencao';
 import ModaisEdicao from '../components/Cadastro/ModaisEdicao';
 import ModaisOperacao from '../components/Cadastro/ModaisOperacao';
-import { getNomeTipoEquipamento } from '../utils/helpers';
+import { getNomeTipoEquipamento, getStatusExibido, getStatusPriority } from '../utils/helpers';
 import BarraPesquisa from '../components/Cadastro/BarraPesquisa';
 import BarraAcoesLote from '../components/Cadastro/BarraAcoesLote';
 import TabelaInventario from '../components/Cadastro/TabelaInventario';
@@ -92,7 +92,8 @@ export default function Cadastro() {
 
   const ativoPassaNosFiltros = useCallback((a, ignorarFiltro = null) => {
     // 1. Status Físico
-    if (ignorarFiltro !== 'status' && filtroStatus && a.status?.toUpperCase() !== filtroStatus.toUpperCase()) return false;
+    const statusExibido = getStatusExibido(a);
+    if (ignorarFiltro !== 'status' && filtroStatus && statusExibido !== filtroStatus.toUpperCase()) return false;
     
     // 2. Agente (Rede)
     if (ignorarFiltro !== 'agente' && filtroAgente) {
@@ -126,7 +127,16 @@ export default function Cadastro() {
 
   // 🎯 APLICAÇÃO FINAL PARA A TABELA (Usa todos os filtros)
   const ativosFiltrados = useMemo(() => {
-    return ativos.filter(a => ativoPassaNosFiltros(a, null));
+    return ativos
+      .filter(a => ativoPassaNosFiltros(a, null))
+      .sort((a, b) => {
+        const prioridadeA = getStatusPriority(getStatusExibido(a));
+        const prioridadeB = getStatusPriority(getStatusExibido(b));
+        if (prioridadeA !== prioridadeB) return prioridadeA - prioridadeB;
+        const dataA = a.ultima_atualizacao ? new Date(a.ultima_atualizacao) : new Date(0);
+        const dataB = b.ultima_atualizacao ? new Date(b.ultima_atualizacao) : new Date(0);
+        return dataB - dataA;
+      });
   }, [ativos, ativoPassaNosFiltros]);
 
   // 🔮 GERAÇÃO DE DROPDOWNS DEPENDENTES (Exclui o próprio filtro da conta para não travar o usuário)

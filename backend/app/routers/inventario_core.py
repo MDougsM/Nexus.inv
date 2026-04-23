@@ -1,16 +1,20 @@
 import json
 import re
 import os
+import copy # 🚀 IMPORTANTE: Adicionado para clonar o JSON com segurança
+from datetime import datetime # 🚀 IMPORTANTE: Adicionado para pegarmos a hora exata
 from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy import or_
 
 from app.db.database import get_db, MasterSessionLocal, Empresa
 from app.models import Ativo, LogAuditoria, RegistroManutencao, HistoricoLeitura, ComandoAgente
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/inventario", tags=["Inventário"]) # (O seu deve estar parecido com isso)
+
+router = APIRouter(prefix="/inventario", tags=["Inventário"])
 
 # --- SCHEMAS ---
 class AtivoRequest(BaseModel):
@@ -18,7 +22,7 @@ class AtivoRequest(BaseModel):
     categoria_id: int
     marca: Optional[str] = None
     modelo: Optional[str] = None
-    nome_personalizado: Optional[str] = None  # 🎯 Apelido/Nome da máquina
+    nome_personalizado: Optional[str] = None
     secretaria: Optional[str] = None
     local: Optional[str] = None
     setor: Optional[str] = None
@@ -46,6 +50,22 @@ def obter_proximo_patrimonio(db: Session) -> str:
 
     raise ValueError("Nenhum patrimônio NXS livre está disponível.")
 
+# --- LÓGICA DE STATUS POR DATA ---
+
+def calcular_status_por_data(ativo):
+    if not ativo:
+        return "INATIVO"
+
+    status_atual = (ativo.status or "").upper()
+    if status_atual in {"MANUTENÇÃO", "SUCATA"}:
+        return status_atual
+
+    ultima_atualizacao = getattr(ativo, "ultima_atualizacao", None) or getattr(ativo, "data_registro", None)
+    if ultima_atualizacao and ultima_atualizacao >= datetime(2026, 1, 1):
+        return "ATIVO"
+
+    return "INATIVO"
+
 # --- ROTAS ---
 @router.get("/qr-access/{patrimonio}")
 def acesso_inteligente_qr(patrimonio: str, request: Request, db: Session = Depends(get_db)):
@@ -53,12 +73,9 @@ def acesso_inteligente_qr(patrimonio: str, request: Request, db: Session = Depen
     if not ativo:
         raise HTTPException(404, "Patrimônio não encontrado")
 
-    # Verifica se o usuário já está logado (pelo header ou cookie)
-    # Se estiver logado, ele ganha a ficha de edição
     token = request.headers.get("Authorization")
     is_authenticated = False
     if token:
-        # Lógica de validação de token aqui
         is_authenticated = True 
 
     return {
@@ -68,7 +85,7 @@ def acesso_inteligente_qr(patrimonio: str, request: Request, db: Session = Depen
             "patrimonio": ativo.patrimonio,
             "equipamento": ativo.modelo,
             "unidade": ativo.unidade.nome if ativo.unidade else ativo.secretaria,
-            "status": ativo.status
+            "status": calcular_status_por_data(ativo)
         },
         "url_edicao": f"/inventario/editar/{ativo.patrimonio}" if is_authenticated else None
     }
@@ -81,7 +98,10 @@ def listar_ativos(db: Session = Depends(get_db)):
     return [{
         **a.__dict__, 
         "categoria_nome": a.categoria.nome if a.categoria else "Sem Categoria",
-        "nome_personalizado": a.nome_personalizado or ""  # 🎯 Garante que apelido vem sempre
+        "nome_personalizado": a.nome_personalizado or "",
+        "status": calcular_status_por_data(a),
+        # 🚀 Devolve a data de atualização para a tabela do React:
+        "ultima_atualizacao": getattr(a, 'ultima_atualizacao', None) 
     } for a in ativos]
 
 @router.get("/ficha/detalhes/{patrimonio:path}")
@@ -109,10 +129,12 @@ def obter_detalhes_ficha(patrimonio: str, db: Session = Depends(get_db)):
         "secretaria": ativo.secretaria,
         "local": ativo.local,
         "setor": ativo.setor,
-        "status": ativo.status,
+        "status": calcular_status_por_data(ativo),
         "ultima_comunicacao": ativo.ultima_comunicacao.isoformat() if ativo.ultima_comunicacao else None,
+        # 🚀 Envia a data para a ficha do equipamento também:
+        "ultima_atualizacao": getattr(ativo, 'ultima_atualizacao').isoformat() if getattr(ativo, 'ultima_atualizacao', None) else None,
         "numero_licitacao": ativo.numero_licitacao,
-        "data_vencimento_garantia": ativo.data_vencimento_garantia.isoformat() if ativo.data_vencimento_garantia else None,
+        "data_vencimento_garantia": ativo.data_vencimento_garantia.isoformat() if getattr(ativo, 'data_vencimento_garantia', None) else None,
         "responsavel_atual": ativo.responsavel_atual,
         "uuid_persistente": ativo.uuid_persistente,
         "dominio_proprio": ativo.dominio_proprio,
@@ -125,16 +147,12 @@ def obter_detalhes_ficha(patrimonio: str, db: Session = Depends(get_db)):
 
 @router.post("/")
 def criar_ativo(req: AtivoRequest, request: Request, db: Session = Depends(get_db)):
-    from datetime import datetime
-    
-    # 🚀 TRAVA DE COTA (MATRIZ)
     empresa_header = request.headers.get("x-empresa")
     if empresa_header and empresa_header != "NEXUS_MASTER":
         master_db = MasterSessionLocal()
         try:
             empresa = master_db.query(Empresa).filter(Empresa.codigo_acesso == empresa_header).first()
             if empresa and getattr(empresa, 'limite_maquinas', 0) > 0:
-                # Conta apenas ativos reais (não deletados) para a cota
                 total_atual = db.query(Ativo).filter(Ativo.deletado == False).count()
                 if total_atual >= empresa.limite_maquinas:
                     raise HTTPException(
@@ -146,18 +164,20 @@ def criar_ativo(req: AtivoRequest, request: Request, db: Session = Depends(get_d
 
     pat_final = req.patrimonio.strip() if req.patrimonio else obter_proximo_patrimonio(db)
     
-    # Verifica se já existe (mesmo na lixeira) para evitar duplicidade de PK
     existe = db.query(Ativo).filter(Ativo.patrimonio == pat_final).first()
     if existe:
         if existe.deletado:
             raise HTTPException(status_code=400, detail="Este patrimônio está na lixeira. Restaure-o pela Matriz.")
         raise HTTPException(status_code=400, detail="Patrimônio já cadastrado.")
     
+    # 🚀 Registra a data no momento da criação
     novo_ativo = Ativo(
         patrimonio=pat_final, categoria_id=req.categoria_id, marca=req.marca, modelo=req.modelo,
-        nome_personalizado=req.nome_personalizado,  # 🎯 Apelido/Nome da máquina
+        nome_personalizado=req.nome_personalizado,
         secretaria=req.secretaria, local=req.local, setor=req.setor, tecnico=req.usuario_acao,
-        dados_dinamicos=req.dados_dinamicos, ultima_comunicacao=datetime.utcnow(),
+        dados_dinamicos=req.dados_dinamicos, 
+        ultima_comunicacao=datetime.utcnow(),
+        ultima_atualizacao=datetime.utcnow(), # 🚀 NOVA COLUNA AQUI
         deletado=False
     )
     db.add(novo_ativo)
@@ -178,8 +198,9 @@ def obter_ativo_por_id(ativo_id: int, db: Session = Depends(get_db)):
     ativo_formatado = {
         "id": ativo.id, "patrimonio": ativo.patrimonio, "marca": ativo.marca, "modelo": ativo.modelo,
         "categoria_id": int(ativo.categoria_id) if ativo.categoria_id else None,
-        "secretaria": ativo.secretaria, "setor": ativo.setor, "status": ativo.status,
+        "secretaria": ativo.secretaria, "setor": ativo.setor, "status": calcular_status_por_data(ativo),
         "ultima_comunicacao": ativo.ultima_comunicacao.isoformat() if ativo.ultima_comunicacao else None,
+        "ultima_atualizacao": getattr(ativo, 'ultima_atualizacao').isoformat() if getattr(ativo, 'ultima_atualizacao', None) else None, # 🚀 Retorna na busca por ID
         "dados_dinamicos": dados_din,
         "dominio_proprio": ativo.dominio_proprio
     }
@@ -188,11 +209,11 @@ def obter_ativo_por_id(ativo_id: int, db: Session = Depends(get_db)):
 
 @router.delete("/lote")
 def deletar_ativos_lote(req: LoteDeleteRequest, db: Session = Depends(get_db)):
-    """Move múltiplos ativos para a lixeira"""
     try:
         ativos = db.query(Ativo).filter(Ativo.patrimonio.in_(req.patrimonios), Ativo.deletado == False).all()
         for ativo in ativos:
             ativo.deletado = True
+            ativo.ultima_atualizacao = datetime.utcnow() # 🚀 Exclusão tbm é atualização de status
             db.add(LogAuditoria(
                 usuario=req.usuario_acao, 
                 acao="EXCLUSAO_LOTE", 
@@ -208,7 +229,6 @@ def deletar_ativos_lote(req: LoteDeleteRequest, db: Session = Depends(get_db)):
 
 @router.delete("/{patrimonio_ou_id:path}")
 def deletar_ativo(patrimonio_ou_id: str, usuario_acao: str = "Admin", motivo: str = "Sem motivo", db: Session = Depends(get_db)):
-    """Move um ativo para a lixeira (Soft Delete)"""
     ativo = db.query(Ativo).filter(
         or_(Ativo.patrimonio == patrimonio_ou_id, Ativo.id == (int(patrimonio_ou_id) if patrimonio_ou_id.isdigit() else -1)),
         Ativo.deletado == False
@@ -218,7 +238,8 @@ def deletar_ativo(patrimonio_ou_id: str, usuario_acao: str = "Admin", motivo: st
     
     try:
         pat = ativo.patrimonio
-        ativo.deletado = True # 🚀 MÁGICA: Apenas marcamos como deletado
+        ativo.deletado = True
+        ativo.ultima_atualizacao = datetime.utcnow() # 🚀 Exclusão tbm é atualização de status
         
         db.add(LogAuditoria(
             usuario=usuario_acao, 
@@ -235,7 +256,6 @@ def deletar_ativo(patrimonio_ou_id: str, usuario_acao: str = "Admin", motivo: st
 
 @router.get("/auditoria")
 def listar_logs(db: Session = Depends(get_db)):
-    """Filtro de visibilidade para logs do Administrador Mestre (Ghost Mode)"""
     query = db.query(LogAuditoria).filter(LogAuditoria.usuario != "Nexus (Mestre)")
     return query.order_by(LogAuditoria.data_hora.desc()).all()
 
@@ -247,10 +267,9 @@ def editar_ficha_ativo(identificador: str, dados: dict, db: Session = Depends(ge
     usuario_acao = dados.get("usuario_acao", "Sistema")
     motivo = dados.get("motivo", "Edição via painel")
 
-    if "patrimonio" in dados and dados["patrimonio"].strip(): 
+    if "patrimonio" in dados and dados["patrimonio"].strip():
         novo_pat = dados["patrimonio"].strip()
         if novo_pat != ativo.patrimonio:
-            # Se mudou o patrimônio, precisa atualizar as tabelas relacionadas para não perder histórico
             old_pat = ativo.patrimonio
             db.query(HistoricoLeitura).filter(HistoricoLeitura.patrimonio == old_pat).update({"patrimonio": novo_pat})
             db.query(LogAuditoria).filter(LogAuditoria.identificador == old_pat).update({"identificador": novo_pat})
@@ -258,35 +277,61 @@ def editar_ficha_ativo(identificador: str, dados: dict, db: Session = Depends(ge
             db.query(ComandoAgente).filter(ComandoAgente.patrimonio == old_pat).update({"patrimonio": novo_pat})
             ativo.patrimonio = novo_pat
 
-    ativo.categoria_id = dados.get("categoria_id", ativo.categoria_id)
-    ativo.marca = dados.get("marca", ativo.marca)
-    ativo.modelo = dados.get("modelo", ativo.modelo)
-    if "secretaria" in dados: ativo.secretaria = dados["secretaria"]
-    if "local" in dados: ativo.local = dados["local"]
-    if "setor" in dados: ativo.setor = dados["setor"]
-    if "nome_personalizado" in dados: ativo.nome_personalizado = dados["nome_personalizado"]
-    if "dominio_proprio" in dados: ativo.dominio_proprio = dados["dominio_proprio"]
+    # Atualização de campos fixos
+    if "categoria_id" in dados: ativo.categoria_id = dados.get("categoria_id")
+    if "marca" in dados: ativo.marca = dados.get("marca")
+    if "modelo" in dados: ativo.modelo = dados.get("modelo")
+    if "secretaria" in dados: ativo.secretaria = dados.get("secretaria")
+    if "local" in dados: ativo.local = dados.get("local")
+    if "setor" in dados: ativo.setor = dados.get("setor")
+    if "nome_personalizado" in dados: ativo.nome_personalizado = dados.get("nome_personalizado")
+    if "dominio_proprio" in dados: ativo.dominio_proprio = dados.get("dominio_proprio")
 
-    novos_dinamicos = dados.get("dados_dinamicos", {})
-    dict_atual = dict(ativo.dados_dinamicos or {})
-    dict_atual.update(novos_dinamicos)
-    ativo.dados_dinamicos = dict_atual
+    # 🚀 O SEGREDO DO JSON BLINDADO AQUI 
+    if "dados_dinamicos" in dados:
+        novos_dinamicos = dados.get("dados_dinamicos", {})
+        
+        # Pega o atual do banco
+        atuais = ativo.dados_dinamicos
+        
+        # Se por acaso o banco guardou como String de SQLite, tentamos salvar a pátria
+        if isinstance(atuais, str):
+            try: atuais = json.loads(atuais.replace("'", '"'))
+            except: atuais = {}
+            
+        if not isinstance(atuais, dict):
+            atuais = {}
 
+        # Junta as duas informações
+        atuais.update(novos_dinamicos)
+        
+        # 🚀 O COPY é fundamental para quebrar o ponteiro de memória e forçar o SQLAlchemy a salvar
+        ativo.dados_dinamicos = copy.deepcopy(atuais)
+        flag_modified(ativo, "dados_dinamicos")
+
+    # 🚀 ATUALIZA A DATA DEFINITIVA DA FICHA
+    ativo.ultima_atualizacao = datetime.utcnow()
+    ativo.status = calcular_status_por_data(ativo)
+
+    # Registra o log e salva
     db.add(LogAuditoria(usuario=usuario_acao, acao="EDICAO_FICHA", entidade="Ativo", identificador=ativo.patrimonio, detalhes=f"Motivo: {motivo}"))
     db.commit()
+    
     return {"message": "Ficha atualizada com sucesso"}
 
 @router.put("/ficha/{patrimonio}/dominio")
 def alternar_dominio_proprio(patrimonio: str, db: Session = Depends(get_db)):
     ativo = db.query(Ativo).filter(Ativo.patrimonio == patrimonio, Ativo.deletado == False).first()
     if not ativo: raise HTTPException(status_code=404, detail="Máquina não encontrada")
+    
     ativo.dominio_proprio = not ativo.dominio_proprio
+    ativo.ultima_atualizacao = datetime.utcnow() # 🚀 Conta como alteração também
+    
     db.commit()
     return {"status": "success", "dominio_proprio": ativo.dominio_proprio}
 
 @router.get("/topologia")
 def carregar_topologia_global(request: Request):
-    """Carrega o mapa do ReactFlow"""
     empresa_header = request.headers.get("x-empresa", "NEWPC")
     caminho_arquivo = f"./data/tenants/topologia_{empresa_header}.json"
     
@@ -300,23 +345,13 @@ def carregar_topologia_global(request: Request):
 
 @router.post("/topologia")
 async def salvar_topologia_global(request: Request):
-    """Salva o mapa do ReactFlow"""
     empresa_header = request.headers.get("x-empresa", "NEWPC")
     caminho_arquivo = f"./data/tenants/topologia_{empresa_header}.json"
-    
     dados = await request.json()
-    
     with open(caminho_arquivo, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False)
-        
     return {"message": "Topologia salva com sucesso"}
 
-
-# ==========================================
-# 🕸️ MÓDULO DE TOPOLOGIA E VÍNCULOS (CMDB)
-# ==========================================
-from pydantic import BaseModel
-from typing import Optional
 
 # ==========================================
 # 🕸️ MÓDULO DE TOPOLOGIA E VÍNCULOS (CMDB)
@@ -325,7 +360,6 @@ class VinculoNovoRequest(BaseModel):
     patrimonio_alvo: str
     tipo_vinculo: str 
     tipo_relacao: Optional[str] = "VINCULADO"
-    # 🚀 ABSORVEDORES DE INTERCEPTOR: Evitam o erro 422 quando o React injeta dados extras
     usuario_acao: Optional[str] = None 
     motivo: Optional[str] = None
 
