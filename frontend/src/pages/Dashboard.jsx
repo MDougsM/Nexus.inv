@@ -43,24 +43,39 @@ export default function Dashboard() {
       let contagemCat = {};
       
       const agora = new Date();
+      const anoAtual = agora.getFullYear(); // 🚀 Puxa o ano atual (Ex: 2026) automaticamente
       const limiteOnlineDias = 3; 
-      const limiteOfflineDias = 3; 
 
       ativos.forEach(item => {
         const st = (item.status || 'ATIVO').toUpperCase();
-        if (st === 'ATIVO' || st === 'ONLINE') a++;
-        else if (st === 'MANUTENÇÃO') m++;
-        else if (st === 'SUCATA') s++;
+        
+        // Lógica de Validação de Inventário (Auditoria do ano)
+        let anoAtualizacao = 0;
+        if (item.ultima_atualizacao) {
+          const dataAtualizacao = new Date(item.ultima_atualizacao + (item.ultima_atualizacao.includes('Z') ? '' : 'Z'));
+          anoAtualizacao = dataAtualizacao.getFullYear();
+        }
 
+        // 🚀 O NOVO FILTRO DE STATUS
+        if (st === 'ATIVO' || st === 'ONLINE') {
+          if (anoAtualizacao === anoAtual) {
+            a++; // Em Operação (Visto este ano)
+          } else {
+            desaparecidos++; // Ativo no banco, mas não visto este ano
+          }
+        } else if (st === 'MANUTENÇÃO') {
+          m++;
+        } else if (st === 'SUCATA' || st === 'INATIVO') {
+          s++;
+        }
+
+        // Lógica de Agente Online/Offline
         if (item.ultima_comunicacao) {
-          const dataCom = new Date(item.ultima_comunicacao + 'Z');
+          const dataCom = new Date(item.ultima_comunicacao + (item.ultima_comunicacao.includes('Z') ? '' : 'Z'));
           const diffMinutos = (agora - dataCom) / (1000 * 60);
           const diffDias = diffMinutos / (60 * 24);
 
           if (diffDias < limiteOnlineDias) online++;
-          if (diffDias > limiteOfflineDias) desaparecidos++;
-        } else {
-          desaparecidos++; 
         }
 
         const catName = categorias.find(c => c.id === item.categoria_id)?.nome || 'Sem Categoria';
@@ -69,10 +84,12 @@ export default function Dashboard() {
 
       setStats({ total: ativos.length, ativos: a, manutencao: m, sucata: s, online: online, desaparecidos: desaparecidos });
 
+      // 🚀 Atualizando o gráfico de Status para mostrar os desaparecidos
       setDadosStatus([
-        { name: 'Ativos', value: a, color: '#10b981' }, 
-        { name: 'Manutenção', value: m, color: '#f59e0b' }, 
-        { name: 'Sucata', value: s, color: '#ef4444' } 
+        { name: 'Em Operação (Atuais)', value: a, color: '#10b981' }, // Verde
+        { name: 'Desaparecidos', value: desaparecidos, color: '#ef4444' }, // Vermelho Alerta
+        { name: 'Manutenção', value: m, color: '#f59e0b' }, // Amarelo
+        { name: 'Baixados/Sucata', value: s, color: '#64748b' } // Cinza
       ]);
 
       const topCategorias = Object.keys(contagemCat)
@@ -211,7 +228,7 @@ export default function Dashboard() {
           ativosTotais={ativosTotais} 
           getMiniIcon={getMiniIcon} 
           borderStrong={borderStrong} 
-          categorias={categoriasTotais} // 🚀 ADICIONE ESTA LINHA AQUI!
+          categorias={categoriasTotais}
         />
       )}
 

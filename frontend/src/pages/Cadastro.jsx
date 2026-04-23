@@ -35,7 +35,10 @@ export default function Cadastro() {
   const [filtroAgente, setFiltroAgente] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('');
   const [filtroMarca, setFiltroMarca] = useState('');
-  const [filtroUnidade, setFiltroUnidade] = useState('');
+  
+  // 🚀 NOVOS ESTADOS: Multi-select para Secretarias e Setores
+  const [filtroSecretarias, setFiltroSecretarias] = useState([]);
+  const [filtroSetores, setFiltroSetores] = useState([]);
 
   const [itensPorPagina, setItensPorPagina] = useState(10);
   const [paginaAtual, setPaginaAtual] = useState(1);
@@ -82,93 +85,132 @@ export default function Cadastro() {
   }, [location]);
 
   // =========================================================================
-  // 🧠 MOTOR DE FILTRAGEM FACETADA (Filtros Dependentes Inteligentes)
+  // 🧠 OPÇÕES DINÂMICAS PARA OS DROPDOWNS
   // =========================================================================
+  const opcoesCategorias = useMemo(() => [...new Set(ativos.map(a => getNomeTipoEquipamento(a, categorias)))].filter(Boolean).sort(), [ativos, categorias]);
+  const opcoesMarcas = useMemo(() => [...new Set(ativos.map(a => a.marca))].filter(Boolean).sort(), [ativos]);
   
+  const secretariasDisponiveis = useMemo(() => {
+    return [...new Set(ativos.map(a => a.unidade?.nome || a.secretaria || 'Não Alocado'))].filter(Boolean).sort();
+  }, [ativos]);
+
+  const setoresDisponiveis = useMemo(() => {
+    let ativosBase = ativos;
+    if (filtroSecretarias.length > 0) {
+      ativosBase = ativos.filter(a => filtroSecretarias.includes(a.unidade?.nome || a.secretaria || 'Não Alocado'));
+    }
+    return [...new Set(ativosBase.map(a => a.unidade?.tipo || a.setor || 'Sem Setor'))].filter(Boolean).sort();
+  }, [ativos, filtroSecretarias]);
+
   const verificarOnline = (ultima_comunicacao) => {
     if (!ultima_comunicacao) return false;
     return ((new Date() - new Date(ultima_comunicacao + 'Z')) / (1000 * 60)) < 4320;
   };
 
-  const ativoPassaNosFiltros = useCallback((a, ignorarFiltro = null) => {
-    // 1. Status Físico
-    const statusExibido = getStatusExibido(a);
-    if (ignorarFiltro !== 'status' && filtroStatus && statusExibido !== filtroStatus.toUpperCase()) return false;
-    
-    // 2. Agente (Rede)
-    if (ignorarFiltro !== 'agente' && filtroAgente) {
-      const online = verificarOnline(a.ultima_comunicacao);
-      if (filtroAgente === 'ONLINE' && !online) return false;
-      if (filtroAgente === 'OFFLINE' && online) return false;
-    }
-
-    // 3. Categoria
-    if (ignorarFiltro !== 'categoria' && filtroCategoria && (getNomeTipoEquipamento(a, categorias) || '') !== filtroCategoria) return false;
-
-    // 4. Marca
-    if (ignorarFiltro !== 'marca' && filtroMarca && a.marca !== filtroMarca) return false;
-
-    // 5. Unidade
-    if (ignorarFiltro !== 'unidade' && filtroUnidade && (a.unidade?.nome || a.secretaria || '') !== filtroUnidade) return false;
-
-    // 6. Busca Geral (Livre)
-    if (ignorarFiltro !== 'busca' && buscaGeral) {
-      const termos = buscaGeral.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-      const tipoNome = getNomeTipoEquipamento(a, categorias)?.toLowerCase() || '';
-      let dinStr = '';
-      try { dinStr = typeof a.dados_dinamicos === 'object' ? JSON.stringify(a.dados_dinamicos) : String(a.dados_dinamicos || ''); } catch(e){}
-      
-      const stringTotal = `${a.patrimonio} ${a.marca} ${a.modelo} ${a.nome_personalizado} ${tipoNome} ${a.secretaria} ${a.setor} ${dinStr}`.toLowerCase();
-      if (!termos.every(termo => stringTotal.includes(termo))) return false;
-    }
-
-    return true;
-  }, [filtroStatus, filtroAgente, filtroCategoria, filtroMarca, filtroUnidade, buscaGeral, categorias]);
-
-  // 🎯 APLICAÇÃO FINAL PARA A TABELA (Usa todos os filtros)
-  const ativosFiltrados = useMemo(() => {
-    return ativos
-      .filter(a => ativoPassaNosFiltros(a, null))
-      .sort((a, b) => {
-        const prioridadeA = getStatusPriority(getStatusExibido(a));
-        const prioridadeB = getStatusPriority(getStatusExibido(b));
-        if (prioridadeA !== prioridadeB) return prioridadeA - prioridadeB;
-        const dataA = a.ultima_atualizacao ? new Date(a.ultima_atualizacao) : new Date(0);
-        const dataB = b.ultima_atualizacao ? new Date(b.ultima_atualizacao) : new Date(0);
-        return dataB - dataA;
-      });
-  }, [ativos, ativoPassaNosFiltros]);
-
-  // 🔮 GERAÇÃO DE DROPDOWNS DEPENDENTES (Exclui o próprio filtro da conta para não travar o usuário)
-  const opcoesCategorias = useMemo(() => 
-    Array.from(new Set(ativos.filter(a => ativoPassaNosFiltros(a, 'categoria')).map(a => getNomeTipoEquipamento(a, categorias)).filter(Boolean))).sort(), 
-  [ativos, ativoPassaNosFiltros, categorias]);
-
-  const opcoesMarcas = useMemo(() => 
-    Array.from(new Set(ativos.filter(a => ativoPassaNosFiltros(a, 'marca')).map(a => a.marca).filter(Boolean))).sort(), 
-  [ativos, ativoPassaNosFiltros]);
-
-  const opcoesUnidades = useMemo(() => 
-    Array.from(new Set(ativos.filter(a => ativoPassaNosFiltros(a, 'unidade')).map(a => a.unidade?.nome || a.secretaria).filter(Boolean))).sort(), 
-  [ativos, ativoPassaNosFiltros]);
   // =========================================================================
+  // 🎯 MOTOR DE FILTRAGEM FINAL
+  // =========================================================================
+  const ativosFiltrados = useMemo(() => {
+    const anoAtual = new Date().getFullYear();
+    let resultado = ativos;
 
-  const totalPaginas = Math.ceil(ativosFiltrados.length / itensPorPagina);
-  const ativosPaginaAtual = ativosFiltrados.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
-  
-  const handleSelectAll = (e) => setSelecionados(e.target.checked ? ativosPaginaAtual.map(a => a.patrimonio) : []);
-  const handleSelectOne = (e, pat) => setSelecionados(prev => e.target.checked ? [...prev, pat] : prev.filter(p => p !== pat));
+    // 1. Status e Agente (com a lógica de Desaparecidos)
+    if (filtroStatus === 'ATIVO') {
+      resultado = resultado.filter(a => {
+         if (a.status?.toUpperCase() !== 'ATIVO' && a.status?.toUpperCase() !== 'ONLINE') return false;
+         if (!a.ultima_atualizacao) return false;
+         const anoData = new Date(a.ultima_atualizacao + (a.ultima_atualizacao.includes('Z') ? '' : 'Z')).getFullYear();
+         return anoData === anoAtual;
+      });
+    } else if (filtroStatus === 'DESAPARECIDOS') {
+      resultado = resultado.filter(a => {
+         if (a.status?.toUpperCase() !== 'ATIVO' && a.status?.toUpperCase() !== 'ONLINE') return false;
+         if (!a.ultima_atualizacao) return true;
+         const anoData = new Date(a.ultima_atualizacao + (a.ultima_atualizacao.includes('Z') ? '' : 'Z')).getFullYear();
+         return anoData < anoAtual;
+      });
+    } else if (filtroStatus) {
+      resultado = resultado.filter(a => (a.status?.toUpperCase() || 'ATIVO') === filtroStatus);
+    }
 
+    if (filtroAgente) {
+      resultado = resultado.filter(a => {
+        const online = verificarOnline(a.ultima_comunicacao);
+        if (filtroAgente === 'ONLINE') return online;
+        if (filtroAgente === 'OFFLINE') return !online;
+        return true;
+      });
+    }
+
+    // 2. Categoria e Marca
+    if (filtroCategoria) resultado = resultado.filter(a => (getNomeTipoEquipamento(a, categorias) || '') === filtroCategoria);
+    if (filtroMarca) resultado = resultado.filter(a => a.marca === filtroMarca);
+
+    // 3. 🚀 Filtro Múltiplo: Secretarias
+    if (filtroSecretarias.length > 0) {
+      resultado = resultado.filter(a => filtroSecretarias.includes(a.unidade?.nome || a.secretaria || 'Não Alocado'));
+    }
+
+    // 4. 🚀 Filtro Múltiplo: Setores
+    if (filtroSetores.length > 0) {
+      resultado = resultado.filter(a => filtroSetores.includes(a.unidade?.tipo || a.setor || 'Sem Setor'));
+    }
+
+    // 5. Busca Geral Livre
+    if (buscaGeral) {
+      const termos = buscaGeral.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+      resultado = resultado.filter(a => {
+        const tipoNome = getNomeTipoEquipamento(a, categorias)?.toLowerCase() || '';
+        let dinStr = '';
+        try { dinStr = typeof a.dados_dinamicos === 'object' ? JSON.stringify(a.dados_dinamicos) : String(a.dados_dinamicos || ''); } catch(e){}
+        const stringTotal = `${a.patrimonio} ${a.marca} ${a.modelo} ${a.nome_personalizado} ${tipoNome} ${a.secretaria} ${a.setor} ${dinStr}`.toLowerCase();
+        return termos.every(termo => stringTotal.includes(termo));
+      });
+    }
+
+    // Ordenação Final (Maior prioridade primeiro, depois Data)
+    return resultado.sort((a, b) => {
+      const pA = getStatusPriority(getStatusExibido(a));
+      const pB = getStatusPriority(getStatusExibido(b));
+      if (pA !== pB) return pA - pB;
+      const dataA = a.ultima_atualizacao ? new Date(a.ultima_atualizacao) : new Date(0);
+      const dataB = b.ultima_atualizacao ? new Date(b.ultima_atualizacao) : new Date(0);
+      return dataB - dataA;
+    });
+  }, [ativos, filtroStatus, filtroAgente, filtroCategoria, filtroMarca, filtroSecretarias, filtroSetores, buscaGeral, categorias]);
+
+  // =========================================================================
+  // 📄 PAGINAÇÃO E SELEÇÃO
+  // =========================================================================
+  const totalPaginas = Math.ceil(ativosFiltrados.length / itensPorPagina) || 1;
+  const ativosPaginaAtual = useMemo(() => {
+    const inicio = (paginaAtual - 1) * itensPorPagina;
+    return ativosFiltrados.slice(inicio, inicio + itensPorPagina);
+  }, [ativosFiltrados, paginaAtual, itensPorPagina]);
+
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      const novos = e.target.list.map(a => a.patrimonio);
+      setSelecionados([...new Set([...selecionados, ...novos])]);
+    } else {
+      const remover = e.target.list.map(a => a.patrimonio);
+      setSelecionados(selecionados.filter(s => !remover.includes(s)));
+    }
+  };
+
+  const handleSelectOne = (e, patrimonio) => {
+    if (e.target.checked) setSelecionados([...selecionados, patrimonio]);
+    else setSelecionados(selecionados.filter(s => s !== patrimonio));
+  };
+
+  // =========================================================================
+  // 🛠️ FUNÇÕES DE MODAIS
+  // =========================================================================
   const parseJSONSeguro = (dado) => {
       if (!dado) return {};
       if (typeof dado === 'object') return dado;
-      if (typeof dado === 'string') {
-          try { return JSON.parse(dado); } 
-          catch(e1) {
-              try { return JSON.parse(dado.replace(/'/g, '"').replace(/None/g, 'null').replace(/False/g, 'false').replace(/True/g, 'true')); } catch(e2) { return {}; }
-          }
-      }
-      return {};
+      try { return JSON.parse(dado.replace(/'/g, '"').replace(/None/g, 'null').replace(/False/g, 'false').replace(/True/g, 'true')); } 
+      catch(e) { return {}; }
   };
 
   const normalizarDinamicosParaModais = (din, uuid_persistente, modelo) => {
@@ -204,25 +246,19 @@ export default function Cadastro() {
       ativo, 
       form: { 
         ...ativo, 
-        nome_personalizado: ativo.nome_personalizado || '', // 🎯 Garante que apelido seja carregado
+        nome_personalizado: ativo.nome_personalizado || '', 
         dados_dinamicos: dinAdaptado 
       } 
     }); 
   };
 
-// =========================================================================
-  // 📊 EXPORTAÇÃO DE DADOS (PDF & EXCEL/CSV) COM DETALHAMENTO PROFUNDO
   // =========================================================================
-
+  // 📊 EXPORTAÇÃO DE DADOS
+  // =========================================================================
   const exportarParaExcel = () => {
     if (ativosFiltrados.length === 0) return toast.warn("Nenhum dado para exportar.");
-    
-    // Se tiver marcado a checkbox, exporta só os selecionados. Senão, exporta todos da tela.
-    const ativosExportar = selecionados.length > 0 
-      ? ativosFiltrados.filter(a => selecionados.includes(a.patrimonio)) 
-      : ativosFiltrados;
+    const ativosExportar = selecionados.length > 0 ? ativosFiltrados.filter(a => selecionados.includes(a.patrimonio)) : ativosFiltrados;
 
-    // 1. Descobre TODAS as colunas técnicas que existem nos ativos que serão exportados
     let chavesDinamicas = new Set();
     const ativosComDinamicos = ativosExportar.map(a => {
        const dyn = parseJSONSeguro(a.dados_dinamicos);
@@ -231,12 +267,10 @@ export default function Cadastro() {
     });
     const colunasExtras = Array.from(chavesDinamicas).sort();
 
-    // 2. Monta o Cabeçalho da Planilha
     let csv = "Patrimônio;Status;Equipamento;Marca;Modelo;Nome/Apelido;Equip. Próprio;Secretaria;Setor";
     if (colunasExtras.length > 0) csv += ";" + colunasExtras.join(";");
     csv += "\n";
 
-    // 3. Monta as Linhas com os dados
     ativosComDinamicos.forEach(a => {
       const catNome = getNomeTipoEquipamento(a, categorias) || 'Sem Categoria';
       const sec = (a.secretaria || '').replace(/;/g, ',');
@@ -248,7 +282,6 @@ export default function Cadastro() {
       
       let linha = `${a.patrimonio};${a.status};${catNome};${mar};${mod};${apelido};${proprio};${sec};${set}`;
       
-      // Insere os dados técnicos extras na mesma ordem do cabeçalho
       colunasExtras.forEach(col => {
           const val = (a.dynParsed[col] || '').toString().replace(/;/g, ',');
           linha += `;${val}`;
@@ -256,7 +289,6 @@ export default function Cadastro() {
       csv += linha + "\n";
     });
 
-    // 4. Força o Download
     const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -270,10 +302,7 @@ export default function Cadastro() {
 
   const exportarParaPDF = () => {
     if (ativosFiltrados.length === 0) return toast.warn("Nenhum dado para exportar.");
-    
-    const ativosExportar = selecionados.length > 0 
-      ? ativosFiltrados.filter(a => selecionados.includes(a.patrimonio)) 
-      : ativosFiltrados;
+    const ativosExportar = selecionados.length > 0 ? ativosFiltrados.filter(a => selecionados.includes(a.patrimonio)) : ativosFiltrados;
 
     const empresaNome = localStorage.getItem('empresaNome') || 'Nexus Inventory';
     const empresaDoc = localStorage.getItem('empresaDoc') || '';
@@ -287,31 +316,26 @@ export default function Cadastro() {
     if (empresaDoc) doc.text(empresaDoc, 14, 26);
     doc.text(`Relatório Detalhado de Equipamentos - ${agora.toLocaleDateString('pt-BR')} ${agora.toLocaleTimeString('pt-BR')}`, 14, empresaDoc ? 36 : 26);
 
-    // Mágica para varrer e formatar todos os detalhes técnicos em um bloco de texto legível
     const formatarDetalhes = (ativo) => {
       let linhas = [];
       if (ativo.nome_personalizado) linhas.push(`Apelido: ${ativo.nome_personalizado}`);
       if (ativo.dominio_proprio) linhas.push(`[Equipamento Próprio]`);
-
       const dyn = parseJSONSeguro(ativo.dados_dinamicos);
       if (dyn && typeof dyn === 'object') {
         Object.entries(dyn).forEach(([key, val]) => {
-          if (val && val !== '-' && val !== 'N/A' && val !== '') {
-             linhas.push(`${key}: ${val}`);
-          }
+          if (val && val !== '-' && val !== 'N/A' && val !== '') linhas.push(`${key}: ${val}`);
         });
       }
       return linhas.length > 0 ? linhas.join('\n') : 'Sem detalhes extras';
     };
 
     const headers = [["Patrimônio", "Equipamento", "Localização", "Status", "Especificações Técnicas"]];
-    
     const body = ativosExportar.map(a => [
       a.patrimonio || '-',
       `${getNomeTipoEquipamento(a, categorias) || 'Sem Categoria'}\n${a.marca || '-'} ${a.modelo || '-'}`,
       `${a.secretaria || '-'}\nSetor: ${a.setor || '-'}`,
       a.status || '-',
-      formatarDetalhes(a) // O novo bloco de detalhes entra aqui!
+      formatarDetalhes(a)
     ]);
 
     autoTable(doc, {
@@ -325,7 +349,7 @@ export default function Cadastro() {
         1: { cellWidth: 45 },
         2: { cellWidth: 45 },
         3: { cellWidth: 20 },
-        4: { cellWidth: 'auto' } // Adapta o tamanho da coluna baseada no texto técnico
+        4: { cellWidth: 'auto' } 
       },
       alternateRowStyles: { fillColor: '#F8FAFC' },
       margin: { left: 14, right: 14 }
@@ -358,8 +382,13 @@ export default function Cadastro() {
             filtroAgente={filtroAgente} setFiltroAgente={setFiltroAgente}
             filtroCategoria={filtroCategoria} setFiltroCategoria={setFiltroCategoria}
             filtroMarca={filtroMarca} setFiltroMarca={setFiltroMarca}
-            filtroUnidade={filtroUnidade} setFiltroUnidade={setFiltroUnidade}
-            opcoesCategorias={opcoesCategorias} opcoesMarcas={opcoesMarcas} opcoesUnidades={opcoesUnidades}
+            
+            // 🚀 Aqui passamos os novos estados para a Barra de Pesquisa:
+            filtroSecretarias={filtroSecretarias} setFiltroSecretarias={setFiltroSecretarias}
+            filtroSetores={filtroSetores} setFiltroSetores={setFiltroSetores}
+            secretariasDisponiveis={secretariasDisponiveis} setoresDisponiveis={setoresDisponiveis}
+            
+            opcoesCategorias={opcoesCategorias} opcoesMarcas={opcoesMarcas} 
             setPaginaAtual={setPaginaAtual} exportarParaExcel={exportarParaExcel} exportarParaPDF={exportarParaPDF} totalFiltrados={ativosFiltrados.length}
           />
 

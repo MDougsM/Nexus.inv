@@ -46,8 +46,9 @@ export default function TabelaInventario({
   const isInventarioValido = (dataAtualizacao) => {
     if (!dataAtualizacao) return false;
     const data = new Date(dataAtualizacao + (dataAtualizacao.includes('Z') ? '' : 'Z'));
-    const dataCorte = new Date('2026-01-01T00:00:00Z');
-    return data >= dataCorte;
+    // 🚀 Dinamizado para puxar o ano atual, sem fixar em 2026!
+    const anoAtual = new Date().getFullYear(); 
+    return data.getFullYear() === anoAtual;
   };
 
   const formatarDataSimples = (isoDate) => {
@@ -93,6 +94,9 @@ export default function TabelaInventario({
               const online = isOnline(ativo.ultima_comunicacao);
               const statusExibido = getStatusExibido(ativo);
               
+              // 🚀 CORREÇÃO DE BUG: Definir o inventarioOK para a renderização visual
+              const inventarioOK = isInventarioValido(ativo.ultima_atualizacao);
+              
               const apelidoExibicao = ativo.nome_personalizado || 
                                       din['Nome Personalizado / Apelido'] || 
                                       din['Nome da máquina / Apelido'] || 
@@ -137,6 +141,13 @@ export default function TabelaInventario({
                     <td className="p-4 hidden sm:table-cell">
                       <div className="flex flex-col items-start gap-1.5">
                         {getStatusBadge(statusExibido)}
+                        
+                        {/* 🚀 TAG VISUAL DE DESAPARECIDO NA TABELA */}
+                        {statusExibido.toUpperCase() === 'ATIVO' && !inventarioOK && (
+                          <span className="text-[9px] font-black uppercase bg-red-100 text-red-600 px-2 py-0.5 rounded-md border border-red-200" title="Necessita validação este ano">
+                            Desaparecido
+                          </span>
+                        )}
                       </div>
                     </td>
                     
@@ -178,8 +189,7 @@ export default function TabelaInventario({
                        <td colSpan="6" className="p-4 relative">
                           <div className="flex flex-wrap gap-3 items-center">
                              
-                             {/* 🚀 CARD DA DATA DE ATUALIZAÇÃO */}
-                             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm bg-white dark:bg-black/20" style={{ borderColor: 'var(--border-light)' }}>
+                             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm ${inventarioOK ? 'bg-white dark:bg-black/20' : 'bg-red-50 dark:bg-red-900/10 border-red-200'}`} style={{ borderColor: inventarioOK ? 'var(--border-light)' : '' }}>
                                 <span className="text-sm opacity-50">📅</span>
                                 <div>
                                   <p className="text-[8px] font-black uppercase opacity-50" style={{ color: 'var(--text-main)' }}>Última Atualização</p>
