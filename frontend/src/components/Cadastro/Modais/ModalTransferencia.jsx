@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'react-toastify';
 import api from '../../../api/api';
@@ -9,19 +9,32 @@ export default function ModalTransferencia({
 }) {
   if (!modalTransferencia.aberto) return null;
 
+  const unidadeSelecionada = secretarias.find(s => s.nome === formTransfer.nova_secretaria);
+  const setoresDisponiveis = useMemo(() => {
+    if (!unidadeSelecionada) return [];
+    if (Array.isArray(unidadeSelecionada.setores) && unidadeSelecionada.setores.length > 0) {
+      return unidadeSelecionada.setores;
+    }
+    return secretarias.filter(s => 
+      String(s.secretaria_id) === String(unidadeSelecionada.id) ||
+      String(s.parent_id) === String(unidadeSelecionada.id) ||
+      String(s.unidade_pai_id) === String(unidadeSelecionada.id)
+    );
+  }, [secretarias, unidadeSelecionada]);
+
   const confirmarTransferencia = async () => {
-    // Nota: backend 'nova_secretaria' será ajustado depois para 'nova_unidade_id'
-    // Mas a UI já usa o Select correto de Unidades
-    if (!formTransfer.nova_secretaria || !formTransfer.motivo) return toast.warn("Preencha todos os campos.");
+    if (!formTransfer.nova_secretaria || !formTransfer.novo_setor || !formTransfer.motivo) {
+      return toast.warn("Preencha todos os campos.");
+    }
     try {
       const promises = modalTransferencia.ativos.map(ativo => api.post('/api/transferencias/', { 
         patrimonio: typeof ativo === 'string' ? ativo : ativo.patrimonio, 
         nova_secretaria: formTransfer.nova_secretaria, 
-        novo_setor: "Migrado", // Temporário até a API de transferência suportar ID
+        novo_setor: formTransfer.novo_setor,
         motivo: formTransfer.motivo, 
         usuario_acao: typeof usuarioAtual === 'object' ? usuarioAtual.nome : usuarioAtual 
       }));
-      await Promise.all(promises); 
+      await Promise.all(promises);
       toast.success(`Transferido(s)!`); 
       setModalTransferencia({ aberto: false, ativos: [] }); 
       setFormTransfer({ nova_secretaria: '', novo_setor: '', motivo: '' });
@@ -46,11 +59,47 @@ export default function ModalTransferencia({
                 className="w-full p-3 rounded-lg border outline-none font-bold" 
                 style={{ backgroundColor: 'var(--bg-input)' }} 
                 value={formTransfer.nova_secretaria} 
-                onChange={e => setFormTransfer({...formTransfer, nova_secretaria: e.target.value})}
+                onChange={e => setFormTransfer({...formTransfer, nova_secretaria: e.target.value, novo_setor: ''})}
             >
               <option value="">Selecione a Unidade Alvo...</option>
               {secretarias.map(s => <option key={s.id} value={s.nome}>{s.nome} ({s.tipo})</option>)}
             </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold mb-1 opacity-60">NOVO SETOR / SALA *</label>
+            {formTransfer.nova_secretaria ? (
+              setoresDisponiveis.length > 0 ? (
+                <select
+                  className="w-full p-3 rounded-lg border outline-none font-bold"
+                  style={{ backgroundColor: 'var(--bg-input)' }}
+                  value={formTransfer.novo_setor}
+                  onChange={e => setFormTransfer({...formTransfer, novo_setor: e.target.value})}
+                >
+                  <option value="">Selecione o setor...</option>
+                  {setoresDisponiveis.map(setor => (
+                    <option key={setor.id || setor.nome || setor} value={setor.nome || setor}>{setor.nome || setor}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  placeholder="Digite o setor ou sala..."
+                  className="w-full p-3 rounded-lg border outline-none font-bold"
+                  style={{ backgroundColor: 'var(--bg-input)' }}
+                  value={formTransfer.novo_setor}
+                  onChange={e => setFormTransfer({...formTransfer, novo_setor: e.target.value})}
+                />
+              )
+            ) : (
+              <input
+                type="text"
+                disabled
+                placeholder="Selecione a unidade antes de escolher o setor"
+                className="w-full p-3 rounded-lg border outline-none font-bold opacity-50 cursor-not-allowed"
+                style={{ backgroundColor: 'var(--bg-input)' }}
+                value=""
+              />
+            )}
           </div>
           <div>
              <div className="flex justify-between items-center mb-1">
