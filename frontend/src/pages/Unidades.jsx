@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'react-toastify';
 import api from '../api/api';
@@ -6,186 +6,254 @@ import api from '../api/api';
 export default function Unidades() {
   const [unidades, setUnidades] = useState([]);
   const [novaUnidade, setNovaUnidade] = useState('');
+  const [tipoNovaUnidade, setTipoNovaUnidade] = useState('SECRETARIA');
+  const [paiSelecionado, setPaiSelecionado] = useState('');
+  
+  // Controle de quais "pastas" estão abertas na árvore
   const [expandidos, setExpandidos] = useState({});
   
-  // Controle de Modais
-  const [modalEdit, setModalEdit] = useState({ aberto: false, item: null, novoNome: '' });
   const [modalDel, setModalDel] = useState({ aberto: false, item: null });
   const [motivo, setMotivo] = useState('');
 
   const usuarioAtual = localStorage.getItem('usuario') || 'Admin';
 
-  const presetsEdicao = ["Correção de Digitação", "Atualização de Nomenclatura", "Reestruturação de Setores", "Mudança de Prédio"];
-  const presetsExclusao = ["Setor Desativado", "Cadastro Duplicado", "Erro de Lançamento", "Reestruturação Organizacional"];
-
   const carregarDados = async () => {
     try {
       const response = await api.get('/api/unidades/');
       setUnidades(response.data);
-    } catch (error) { toast.error('Erro ao carregar dados.'); }
+      
+      const pref = response.data.find(u => u.tipo === 'PREFEITURA');
+      if (pref && !paiSelecionado) setPaiSelecionado(pref.id);
+    } catch (error) { toast.error('Erro ao carregar unidades.'); }
   };
 
   useEffect(() => { carregarDados(); }, []);
 
-  const toggleGrupo = (id) => setExpandidos(prev => ({ ...prev, [id]: !prev[id] }));
+  const criarUnidade = async (e) => {
+    e.preventDefault();
+    if (!novaUnidade) return toast.warn('Preencha o nome da unidade.');
+    if (!paiSelecionado) return toast.warn('Selecione a qual unidade ela pertence.');
 
-  // --- AÇÕES ---
-  const handleCriar = async (nome, tipo, paiId = null) => {
-    if (!nome.trim()) return;
     try {
-      await api.post('/api/unidades/', { nome: nome.toUpperCase(), tipo, pai_id: paiId, usuario_acao: usuarioAtual });
-      toast.success("Cadastrado!");
+      await api.post('/api/unidades/', {
+        nome: novaUnidade,
+        tipo: tipoNovaUnidade,
+        pai_id: parseInt(paiSelecionado),
+        usuario_acao: usuarioAtual
+      });
+      toast.success(`${tipoNovaUnidade} cadastrada com sucesso!`);
       setNovaUnidade('');
       carregarDados();
-    } catch (e) { toast.error("Erro ao criar."); }
-  };
-
-  const confirmarEdicao = async () => {
-    if (!motivo.trim() || !modalEdit.novoNome.trim()) return toast.warn("Nome e Motivo são obrigatórios.");
-    try {
-      await api.put(`/api/unidades/${modalEdit.item.id}`, {
-        nome: modalEdit.novoNome.toUpperCase(),
-        tipo: modalEdit.item.tipo,
-        usuario_acao: usuarioAtual,
-        motivo: motivo
-      });
-      toast.success("Alteração salva!");
-      fecharModais();
-      carregarDados();
-    } catch (e) { toast.error("Erro na edição."); }
+    } catch (error) {
+      toast.error('Erro ao criar unidade.');
+    }
   };
 
   const confirmarExclusao = async () => {
-    if (!motivo.trim()) return toast.warn("Justificativa obrigatória.");
+    if (!motivo) return toast.warn('Justificativa obrigatória.');
     try {
-      await api.delete(`/api/unidades/${modalDel.item.id}`, { data: { usuario: usuarioAtual, motivo: motivo } });
-      toast.success("Removido!");
-      fecharModais();
+      await api.delete(`/api/unidades/${modalDel.item.id}`, { data: { usuario: usuarioAtual, motivo } });
+      toast.success('Unidade removida definitivamente.');
+      setModalDel({ aberto: false, item: null });
+      setMotivo('');
       carregarDados();
-    } catch (e) { toast.error("Erro ao excluir."); }
+    } catch (error) { toast.error('Erro ao excluir unidade.'); }
   };
 
-  const fecharModais = () => {
-    setModalEdit({ aberto: false, item: null, novoNome: '' });
-    setModalDel({ aberto: false, item: null });
-    setMotivo('');
+  const toggleExpandir = (id) => {
+    setExpandidos(prev => ({ ...prev, [id]: prev[id] === false ? true : false }));
   };
 
-  const unidadesRaiz = unidades.filter(u => u.pai_id === null);
+  const getIcone = (tipo) => {
+    switch(tipo) {
+      case 'PREFEITURA': return '🏛️';
+      case 'SECRETARIA': return '🏢';
+      case 'DEPARTAMENTO': return '📂';
+      case 'SETOR': return '🚪';
+      case 'SALA': return '🪑';
+      default: return '📍';
+    }
+  };
 
-  return (
-    <div className="space-y-6 animate-fade-in max-w-5xl">
-      
-      {/* CADASTRO TOPO */}
-      <div className="p-6 rounded-2xl border bg-white shadow-sm flex gap-3 items-end" style={{ borderColor: 'var(--border-light)' }}>
-        <div className="flex-1">
-          <label className="block text-[10px] font-black text-blue-600 uppercase mb-2">Nova Unidade / Secretaria</label>
-          <input value={novaUnidade} onChange={e => setNovaUnidade(e.target.value)} placeholder="NOME DA SECRETARIA..." className="w-full p-3 rounded-xl border bg-gray-50 outline-none font-bold uppercase" />
-        </div>
-        <button onClick={() => handleCriar(novaUnidade, 'SECRETARIA')} className="px-8 py-3 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 transition-all shadow-md active:scale-95">ADICIONAR</button>
-      </div>
+  // Mágica para indentar as opções no Dropdown (Pertence a)
+  const opcoesHierarquicas = useMemo(() => {
+    const resultado = [];
+    const construirLista = (paiId, nivel) => {
+      const filhas = unidades.filter(u => u.pai_id === paiId);
+      filhas.forEach(f => {
+        resultado.push({ ...f, nivel });
+        construirLista(f.id, nivel + 1);
+      });
+    };
+    construirLista(null, 0);
+    return resultado;
+  }, [unidades]);
 
-      {/* LISTA ACORDEÃO */}
-      <div className="space-y-3">
-        {unidadesRaiz.sort((a,b)=>a.nome.localeCompare(b.nome)).map(raiz => {
-          const isExpanded = expandidos[raiz.id];
-          const filhos = unidades.filter(u => u.pai_id === raiz.id);
+  // Função recursiva para desenhar a árvore visual
+  const renderizarArvore = (paiId = null) => {
+    const filhas = unidades.filter(u => u.pai_id === paiId);
+    if (filhas.length === 0) return null;
+
+    return (
+      <div className="space-y-3 mt-2">
+        {filhas.map(unidade => {
+          const temFilhas = unidades.some(u => u.pai_id === unidade.id);
+          const estaExpandido = expandidos[unidade.id] !== false; // Default: Aberto
 
           return (
-            <div key={raiz.id} className="rounded-2xl border bg-white overflow-hidden shadow-sm transition-all" style={{ borderColor: 'var(--border-light)' }}>
-              <div className={`p-4 flex items-center justify-between cursor-pointer ${isExpanded ? 'bg-blue-50/30' : 'hover:bg-gray-50'}`} onClick={() => toggleGrupo(raiz.id)}>
-                <div className="flex items-center gap-4">
-                  <span className="text-xl">{isExpanded ? '📂' : '📁'}</span>
+            <div key={unidade.id} className="relative animate-fade-in">
+              {/* O Card do Item */}
+              <div 
+                className="flex items-center justify-between p-3 rounded-xl border shadow-sm transition-all hover:shadow-md group" 
+                style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}
+              >
+                <div className="flex items-center gap-3">
+                  {/* Botão de Expandir/Recolher */}
+                  {temFilhas ? (
+                    <button onClick={() => toggleExpandir(unidade.id)} className="w-6 h-6 flex items-center justify-center rounded bg-black/5 hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10 transition-colors text-[10px]">
+                      {estaExpandido ? '▼' : '▶'}
+                    </button>
+                  ) : (
+                    <div className="w-6 h-6" /> // Espaçador
+                  )}
+                  
+                  <span className="text-xl shadow-sm bg-white dark:bg-black/40 p-1.5 rounded-lg border" style={{ borderColor: 'var(--border-light)' }}>
+                    {getIcone(unidade.tipo)}
+                  </span>
+                  
                   <div>
-                    <h4 className="font-black text-sm text-gray-800 uppercase">{raiz.nome}</h4>
-                    <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest">{filhos.length} SETORES VINCULADOS</p>
+                    <p className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>{unidade.nome}</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest opacity-50" style={{ color: 'var(--text-main)' }}>{unidade.tipo}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                  <button onClick={() => setModalEdit({ aberto: true, item: raiz, novoNome: raiz.nome })} className="p-2 hover:bg-blue-100 rounded-lg text-blue-600 transition-colors">✏️</button>
-                  <button onClick={() => setModalDel({ aberto: true, item: raiz })} className="p-2 hover:bg-red-100 rounded-lg text-red-500 transition-colors">🗑️</button>
-                  <span className="ml-4 opacity-30 font-black text-lg">{isExpanded ? '−' : '＋'}</span>
-                </div>
+                
+                {unidade.tipo !== 'PREFEITURA' && (
+                  <button 
+                    onClick={() => setModalDel({ aberto: true, item: unidade })} 
+                    className="w-8 h-8 flex items-center justify-center text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                    title="Remover Unidade"
+                  >
+                    🗑️
+                  </button>
+                )}
               </div>
-
-              {isExpanded && (
-                <div className="bg-gray-50/50 border-t p-4 space-y-2 animate-fade-in">
-                  {filhos.sort((a,b)=>a.nome.localeCompare(b.nome)).map(filho => (
-                    <div key={filho.id} className="flex items-center justify-between pl-10 pr-4 py-2 bg-white rounded-xl border border-gray-100 shadow-sm group">
-                      <span className="font-bold text-sm text-gray-600 uppercase"><span className="text-gray-300 mr-2">↳</span>{filho.nome}</span>
-                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                         <button onClick={() => setModalEdit({ aberto: true, item: filho, novoNome: filho.nome })} className="p-1 hover:text-blue-600">✏️</button>
-                         <button onClick={() => setModalDel({ aberto: true, item: filho })} className="p-1 hover:text-red-500 text-lg">×</button>
-                      </div>
-                    </div>
-                  ))}
-                  <input 
-                    placeholder="Adicionar novo setor... (Enter ↵)" 
-                    onKeyDown={e => e.key === 'Enter' && (handleCriar(e.target.value, 'SETOR', raiz.id), e.target.value='')}
-                    className="ml-10 w-[calc(100%-40px)] p-2 bg-transparent border-b border-dashed border-gray-300 outline-none text-[11px] font-bold focus:border-blue-500 uppercase"
-                  />
+              
+              {/* Linha conectora e filhas */}
+              {temFilhas && estaExpandido && (
+                <div className="pl-6 ml-[22px] border-l-2 border-dashed mt-3 mb-2" style={{ borderColor: 'var(--border-light)' }}>
+                  {renderizarArvore(unidade.id)}
                 </div>
               )}
             </div>
           );
         })}
       </div>
+    );
+  };
 
-      {/* --- MODAIS (PORTAIS) --- */}
-
-      {/* MODAL EDIÇÃO */}
-      {modalEdit.aberto && createPortal(
-        <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-[9999] backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-scale-up">
-            <div className="p-6 bg-blue-600 text-white font-black uppercase tracking-tighter">✏️ Editar Unidade</div>
-            <div className="p-6 space-y-5">
-              <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Novo Nome</label>
-                <input value={modalEdit.novoNome} onChange={e => setModalEdit({...modalEdit, novoNome: e.target.value})} className="w-full p-3 rounded-xl border bg-gray-50 font-bold uppercase outline-none focus:border-blue-500" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Motivo da Alteração</label>
-                <textarea value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Descreva o motivo..." className="w-full p-3 rounded-xl border bg-gray-50 font-bold outline-none min-h-[80px]" />
-                <div className="flex flex-wrap gap-2 mt-2">
-                   {presetsEdicao.map(p => (
-                     <button key={p} onClick={() => setMotivo(p)} className="text-[9px] font-black px-2 py-1 bg-blue-50 text-blue-600 rounded-md border border-blue-100 hover:bg-blue-600 hover:text-white transition-all">{p}</button>
-                   ))}
-                </div>
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button onClick={fecharModais} className="flex-1 py-3 font-black text-gray-400 uppercase text-xs">Cancelar</button>
-                <button onClick={confirmarEdicao} className="flex-[2] py-3 bg-blue-600 text-white font-black rounded-xl shadow-lg shadow-blue-200 uppercase text-xs">Salvar Alterações</button>
-              </div>
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      
+      {/* COLUNA ESQUERDA: Formulário de Criação Ramificada */}
+      <div className="lg:col-span-1 space-y-6">
+        <div className="p-6 rounded-3xl border shadow-sm sticky top-6" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 flex items-center justify-center text-xl shadow-inner border border-blue-100 dark:border-blue-800">
+              ➕
+            </div>
+            <div>
+              <h3 className="text-lg font-black tracking-tight" style={{ color: 'var(--text-main)' }}>Nova Unidade</h3>
+              <p className="text-[10px] font-bold uppercase opacity-50" style={{ color: 'var(--text-main)' }}>Adicionar Ramificação</p>
             </div>
           </div>
-        </div>, document.body
-      )}
+          
+          <form onSubmit={criarUnidade} className="space-y-4">
+            <div>
+              <label className="block text-[10px] font-black uppercase opacity-60 mb-1" style={{ color: 'var(--text-main)' }}>Nome da Unidade / Setor</label>
+              <input value={novaUnidade} onChange={e => setNovaUnidade(e.target.value)} type="text" placeholder="Ex: Setor de Triagem" className="w-full p-3 rounded-xl border font-bold text-sm outline-none shadow-sm focus:ring-2 focus:ring-blue-500/20 transition-all" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} />
+            </div>
 
-      {/* MODAL EXCLUSÃO */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-black uppercase opacity-60 mb-1" style={{ color: 'var(--text-main)' }}>Tipo Estrutural</label>
+                <select value={tipoNovaUnidade} onChange={e => setTipoNovaUnidade(e.target.value)} className="w-full p-3 rounded-xl border font-bold text-xs outline-none shadow-sm focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
+                  <option value="SECRETARIA">🏢 Secretaria</option>
+                  <option value="DEPARTAMENTO">📂 Departamento</option>
+                  <option value="SETOR">🚪 Setor</option>
+                  <option value="SALA">🪑 Sala</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase opacity-60 mb-1" style={{ color: 'var(--text-main)' }}>Fica dentro de:</label>
+                <select value={paiSelecionado} onChange={e => setPaiSelecionado(e.target.value)} className="w-full p-3 rounded-xl border font-bold text-xs outline-none shadow-sm focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer truncate" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }}>
+                  <option value="">Selecione...</option>
+                  {opcoesHierarquicas.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.nivel > 0 ? `${'│ '.repeat(u.nivel - 1)}└─ ` : ''} {u.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <button type="submit" className="w-full py-3.5 mt-2 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/30 active:scale-95">
+              Cadastrar na Estrutura
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* COLUNA DIREITA: Árvore Hierárquica */}
+      <div className="lg:col-span-2">
+        <div className="rounded-3xl border shadow-sm overflow-hidden h-full" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
+          <div className="p-5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-light)', backgroundColor: 'var(--bg-page)' }}>
+            <div>
+              <h3 className="font-black text-base tracking-tight" style={{ color: 'var(--text-main)' }}>Mapa da Infraestrutura</h3>
+              <p className="text-[10px] font-bold uppercase opacity-50" style={{ color: 'var(--text-main)' }}>Organização Hierárquica do Órgão</p>
+            </div>
+            <div className="text-2xl opacity-80">🗺️</div>
+          </div>
+          
+          <div className="p-6 overflow-y-auto max-h-[600px] custom-scrollbar">
+            {unidades.length === 0 ? (
+              <div className="py-12 text-center opacity-40 font-bold" style={{ color: 'var(--text-main)' }}>
+                <span className="text-4xl block mb-2">🏗️</span>
+                Nenhuma infraestrutura mapeada.
+              </div>
+            ) : (
+              renderizarArvore(null)
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Modal de Exclusão Blindado */}
       {modalDel.aberto && createPortal(
-        <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-[9999] backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-scale-up">
-            <div className="p-6 bg-red-600 text-white font-black uppercase tracking-tighter">⚠️ Confirmar Exclusão</div>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
+            <div className="p-6 border-b text-center space-y-2 bg-red-50 dark:bg-red-900/10" style={{ borderColor: 'var(--border-light)' }}>
+              <div className="w-16 h-16 bg-white dark:bg-black/20 text-red-500 rounded-full flex items-center justify-center text-3xl mx-auto shadow-sm border border-red-100 dark:border-red-900/30">⚠️</div>
+              <h2 className="text-xl font-black text-red-600 tracking-tight">Atenção Crítica!</h2>
+            </div>
             <div className="p-6 space-y-5">
-              <p className="text-sm font-bold text-gray-600 text-center italic">Deseja realmente remover permanentemente a unidade <strong>"{modalDel.item.nome}"</strong>?</p>
+              <p className="text-sm font-bold text-center leading-relaxed" style={{ color: 'var(--text-main)' }}>
+                Deseja realmente remover a unidade <br/> <strong className="text-red-500 text-lg">"{modalDel.item.nome}"</strong>?<br/>
+                <span className="text-xs opacity-60">Todas as sub-unidades (setores, salas) dentro dela também serão apagadas.</span>
+              </p>
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Justificativa da Exclusão</label>
-                <textarea value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Obrigatório para auditoria..." className="w-full p-3 rounded-xl border bg-gray-50 font-bold outline-none min-h-[80px]" />
-                <div className="flex flex-wrap gap-2 mt-2">
-                   {presetsExclusao.map(p => (
-                     <button key={p} onClick={() => setMotivo(p)} className="text-[9px] font-black px-2 py-1 bg-red-50 text-red-600 rounded-md border border-red-100 hover:bg-red-600 hover:text-white transition-all">{p}</button>
-                   ))}
-                </div>
+                <label className="block text-[10px] font-black uppercase opacity-60 mb-1.5" style={{ color: 'var(--text-main)' }}>Justificativa Obrigatória</label>
+                <input value={motivo} onChange={e => setMotivo(e.target.value)} type="text" placeholder="Motivo da remoção estrutural..." className="w-full p-3 rounded-xl border font-bold outline-none shadow-sm focus:ring-2 focus:ring-red-500/20" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)', color: 'var(--text-main)' }} />
               </div>
-              <div className="flex gap-3 pt-4">
-                <button onClick={fecharModais} className="flex-1 py-3 font-black text-gray-400 uppercase text-xs">Voltar</button>
-                <button onClick={confirmarExclusao} className="flex-[2] py-3 bg-red-600 text-white font-black rounded-xl shadow-lg shadow-red-200 uppercase text-xs">Confirmar Remoção</button>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setModalDel({aberto: false, item: null})} className="flex-1 py-3 font-black uppercase text-xs opacity-60 hover:opacity-100 transition-opacity" style={{ color: 'var(--text-main)' }}>Cancelar</button>
+                <button onClick={confirmarExclusao} className="flex-[2] py-3 bg-red-600 text-white rounded-xl font-black uppercase tracking-wider text-xs hover:bg-red-700 shadow-lg shadow-red-600/20 active:scale-95 transition-all">Destruir Unidade</button>
               </div>
             </div>
           </div>
-        </div>, document.body
+        </div>,
+        document.body
       )}
-
     </div>
   );
 }
