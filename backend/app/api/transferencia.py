@@ -8,7 +8,7 @@ router = APIRouter(prefix="/transferencias", tags=["Transferências de Ativos"])
 
 class TransferenciaCreate(BaseModel):
     patrimonio: str
-    nova_secretaria: str # O frontend manda o nome da Unidade Alvo
+    nova_secretaria: str
     novo_setor: str
     motivo: str
     usuario_acao: str
@@ -19,17 +19,24 @@ def realizar_transferencia(req: TransferenciaCreate, db: Session = Depends(get_d
     if not ativo:
         raise HTTPException(404, "Ativo não encontrado com este patrimônio.")
     
-    sec_antiga = ativo.unidade.nome if ativo.unidade else (ativo.secretaria or "Não informada")
-    setor_antigo = ativo.unidade.tipo if ativo.unidade else (ativo.setor or "Não informado")
+    # Prepara os nomes antigos para o histórico de auditoria
+    sec_antiga = ativo.secretaria or "Não informada"
+    setor_antigo = ativo.setor or "Não informado"
     
-    # 🚀 VINCULAÇÃO COM A NOVA HIERARQUIA
-    nova_unidade = db.query(UnidadeAdministrativa).filter(UnidadeAdministrativa.nome == req.nova_secretaria).first()
+    # 🚀 O MISTÉRIO RESOLVIDO:
+    # O frontend manda o degrau final escolhido na variável "novo_setor".
+    # Se o usuário transferir pra sala 5, o "novo_setor" será "Sala 5".
+    nome_alvo = req.novo_setor if req.novo_setor else req.nova_secretaria
+    
+    # Busca a unidade EXATA onde o cara colocou a máquina
+    nova_unidade = db.query(UnidadeAdministrativa).filter(UnidadeAdministrativa.nome == nome_alvo).first()
+    
     if nova_unidade:
         ativo.unidade_id = nova_unidade.id
-        ativo.secretaria = nova_unidade.nome
-        ativo.setor = nova_unidade.tipo
+        ativo.secretaria = req.nova_secretaria # Mantém a Secretaria Raiz
+        ativo.setor = nova_unidade.nome # 🔥 Salva o nome EXATO do setor/sala
     else:
-        # Fallback de compatibilidade
+        # Fallback de compatibilidade caso algo dê errado
         ativo.secretaria = req.nova_secretaria
         ativo.setor = req.novo_setor
         ativo.unidade_id = None
@@ -45,12 +52,15 @@ def realizar_transferencia(req: TransferenciaCreate, db: Session = Depends(get_d
     )
     db.add(nova_transf)
     
+    # 📜 LOG DE AUDITORIA PERFEITO
+    detalhes_log = f"Movido de {sec_antiga} ({setor_antigo}) para {ativo.secretaria} ({ativo.setor}). Motivo: {req.motivo}"
+    
     db.add(LogAuditoria(
         usuario=req.usuario_acao,
         acao="TRANSFERENCIA", 
         entidade="Ativo",
         identificador=req.patrimonio,
-        detalhes=f"Movido de {sec_antiga} para {req.nova_secretaria}. Motivo: {req.motivo}"
+        detalhes=detalhes_log
     ))
     
     db.commit()

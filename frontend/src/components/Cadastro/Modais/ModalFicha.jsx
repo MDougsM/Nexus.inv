@@ -6,11 +6,9 @@ import ModalDashboardAvancado from '../ModalDashboardAvancado';
 import { QRCodeSVG } from 'qrcode.react';
 import { parseCamposDinamicos, getNomeTipoEquipamento, getStatusBadge } from '../../../utils/helpers';
 
-export default function ModalFicha({ modalFicha, setModalFicha, categorias, usuarioAtual, carregarDados }) {
+export default function ModalFicha({ modalFicha, setModalFicha, categorias, usuarioAtual, carregarDados, secretarias }) {
   const [modalAvancado, setModalAvancado] = useState(false);
   const [loadingSecurity, setLoadingSecurity] = useState(false);
-  
-  // 🚀 ESTADO PARA CARREGAR OS VÍNCULOS DO CMDB
   const [vinculos, setVinculos] = useState({ pais: [], filhos: [] });
 
   const tenantAtual = localStorage.getItem('tenant_id') || 'NEWPC';
@@ -18,7 +16,6 @@ export default function ModalFicha({ modalFicha, setModalFicha, categorias, usua
 
   useEffect(() => {
     if (modalFicha.aberto && modalFicha.dados?.ativo) {
-       // Busca a árvore genealógica da máquina no CMDB
        api.get(`/api/inventario/vinculos/${encodeURIComponent(modalFicha.dados.ativo.patrimonio)}`)
           .then(res => setVinculos(res.data))
           .catch(() => setVinculos({ pais: [], filhos: [] }));
@@ -28,8 +25,6 @@ export default function ModalFicha({ modalFicha, setModalFicha, categorias, usua
   if (!modalFicha.aberto || !modalFicha.dados) return null;
 
   const { ativo, historico } = modalFicha.dados;
-  
-  // 🛡️ BLINDAGEM CONTRA TELA BRANCA: Garante que a categoria seja encontrada mesmo se o ID for string
   const categoriaEncontrada = categorias.find(c => String(c.id) === String(ativo.categoria_id));
   const camposPermitidos = parseCamposDinamicos(categoriaEncontrada || null);
 
@@ -77,49 +72,108 @@ export default function ModalFicha({ modalFicha, setModalFicha, categorias, usua
       }
   };
 
+  // --- LÓGICA DO BREADCRUMB DA LOCALIZAÇÃO ---
+  const construirCaminho = () => {
+    // 1. Procura na árvore oficial se a prop secretarias foi passada
+    if (secretarias && secretarias.length > 0) {
+      // Tenta achar a Unidade Final (Onde o item realmente está, usando o nome salvo em ativo.setor)
+      const unidadeFinal = secretarias.find(s => s.nome === ativo.setor) || secretarias.find(s => s.nome === ativo.secretaria);
+      
+      if (unidadeFinal) {
+        const caminho = [];
+        let atual = unidadeFinal;
+        while (atual) {
+          caminho.unshift(atual.nome);
+          atual = secretarias.find(s => s.id === atual.pai_id);
+        }
+        return caminho.join(" > ");
+      }
+    }
+
+    // 2. Fallback caso a prop não tenha sido passada ou não tenha achado (modo clássico)
+    if (ativo.secretaria && ativo.setor && ativo.secretaria !== ativo.setor) {
+      return `${ativo.secretaria} > ${ativo.setor}`;
+    }
+    
+    // 3. Fallback final
+    return ativo.setor || ativo.secretaria || 'Não Alocado';
+  };
+
   return createPortal(
-    <div className="fixed inset-0 z-[9998] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in print:bg-white print:p-0 print:block" onClick={() => setModalFicha({ aberto: false, dados: null })}>
-      <div className="w-full max-w-6xl max-h-[95vh] rounded-3xl shadow-2xl border overflow-hidden flex flex-col print:border-none print:shadow-none print:max-h-none print:h-auto" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }} onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[9998] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in print:bg-white print:p-0 print:block" onClick={() => setModalFicha({ aberto: false, dados: null })}>
+      <div className="w-full max-w-6xl max-h-[95vh] rounded-[2rem] shadow-2xl border overflow-hidden flex flex-col print:border-none print:shadow-none print:max-h-none print:h-auto" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }} onClick={e => e.stopPropagation()}>
         
-        <div className="p-8 border-b flex justify-between items-center bg-gradient-to-r from-blue-600 to-blue-800 text-white print:bg-none print:text-black print:border-b-2 print:border-black">
-          <div className="flex gap-6 items-center">
-            <div className="hidden md:flex flex-col items-center bg-white/10 p-4 rounded-2xl border shadow-lg print:flex print:bg-gray-100 print:border-gray-300">
+        {/* CABEÇALHO HERO */}
+        <div className="relative p-8 border-b flex justify-between items-center bg-blue-600 text-white overflow-hidden print:bg-none print:text-black print:border-b-2 print:border-black">
+          {/* Fundo Decorativo */}
+          <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500 rounded-full blur-3xl opacity-50 -translate-y-1/2 translate-x-1/3"></div>
+          
+          <div className="relative z-10 flex gap-6 items-center">
+            <div className="hidden md:flex flex-col items-center bg-white/10 p-3 rounded-2xl border border-white/20 shadow-lg backdrop-blur-md print:flex print:bg-gray-100 print:border-gray-300">
               <div className="bg-white p-2 rounded-xl"><QRCodeSVG value={`${window.location.origin}/consulta/${tenantAtual}/${ativo.patrimonio}`} size={64} level="H" includeMargin={false} /></div>
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-200 mb-1 print:text-gray-500">Registro Geral de Ativo</p>
-              <h3 className="text-4xl font-black tracking-tight mb-2 text-white print:text-black">{ativo.patrimonio}</h3>
+              <h3 className="text-4xl md:text-5xl font-black tracking-tight mb-2 text-white print:text-black drop-shadow-md">{ativo.patrimonio}</h3>
               <p className="text-sm font-bold uppercase tracking-widest text-blue-100 print:text-gray-700">{getNomeTipoEquipamento(ativo, categorias)} • {ativo.marca} {ativo.modelo}</p>
             </div>
           </div>
-          <div className="flex gap-2 print:hidden">
-            <button onClick={() => window.print()} className="w-12 h-12 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-xl transition-all border border-white/10">🖨️</button>
-            <button onClick={() => setModalFicha({ aberto: false, dados: null })} className="w-12 h-12 rounded-xl bg-white/10 hover:bg-red-500 flex items-center justify-center text-2xl transition-all border border-white/10">&times;</button>
+          
+          <div className="relative z-10 flex gap-2 print:hidden">
+            <button onClick={() => window.print()} className="w-12 h-12 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-xl transition-all border border-white/10 shadow-sm backdrop-blur-sm">🖨️</button>
+            <button onClick={() => setModalFicha({ aberto: false, dados: null })} className="w-12 h-12 rounded-xl bg-white/10 hover:bg-red-500 flex items-center justify-center text-2xl transition-all border border-white/10 shadow-sm backdrop-blur-sm">&times;</button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 custom-scrollbar print:p-4">
+        {/* CORPO */}
+        <div className="flex-1 overflow-y-auto p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 custom-scrollbar print:p-4">
           
           <div className="lg:col-span-5 space-y-6">
             
-            <div className="p-6 rounded-3xl border shadow-sm" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
-              <h4 className="text-[11px] font-black mb-6 uppercase tracking-widest flex items-center gap-2" style={{ color: 'var(--text-main)' }}>📍 Localização Oficial</h4>
-              <div className="space-y-4">
-                <div><p className="text-[9px] font-black opacity-50 uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Unidade de Lotação</p><p className="font-black text-sm text-blue-600">{ativo.unidade?.nome || ativo.secretaria || 'Não Alocado'}</p></div>
-                <div><p className="text-[9px] font-black opacity-50 uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Sub-Unidade / Sala</p><p className="font-black text-sm" style={{ color: 'var(--text-main)' }}>{ativo.unidade?.tipo || ativo.setor || '-'}</p></div>
+            {/* LOCALIZAÇÃO (REDESIGN) */}
+            <div className="p-6 rounded-3xl border shadow-sm relative overflow-hidden" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
+              {/* Detalhe de cor lateral */}
+              <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-blue-500"></div>
+              
+              <div className="flex justify-between items-start mb-4">
+                <h4 className="text-[11px] font-black uppercase tracking-widest flex items-center gap-2" style={{ color: 'var(--text-main)' }}>📍 Localização Oficial</h4>
                 {getStatusBadge(ativo.status)}
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <p className="text-[9px] font-black opacity-50 uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>Caminho de Lotação</p>
+                  <p className="font-black text-sm text-blue-600 flex items-center flex-wrap gap-1 leading-relaxed">
+                    {construirCaminho().split(' > ').map((parte, index, array) => (
+                      <React.Fragment key={index}>
+                        <span>{parte}</span>
+                        {index < array.length - 1 && <span className="text-gray-400 opacity-50 text-xs mx-1">/</span>}
+                      </React.Fragment>
+                    ))}
+                  </p>
+                </div>
+                
+                {/* Fallback de Organização Estrutural Opcional (Se necessário) */}
+                {(ativo.unidade?.tipo && ativo.unidade.tipo !== 'SETOR' && ativo.unidade.tipo !== 'SALA') && (
+                  <div>
+                    <p className="text-[9px] font-black opacity-50 uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Classificação da Lotação Final</p>
+                    <p className="font-bold text-xs mt-0.5" style={{ color: 'var(--text-main)' }}>{ativo.unidade.tipo}</p>
+                  </div>
+                )}
               </div>
             </div>
 
+            {/* LICITAÇÃO / CAUTELA */}
             <div className="p-6 rounded-3xl border shadow-sm bg-gradient-to-br from-amber-50 to-orange-50 border-amber-100 print:border-gray-300">
               <h4 className="text-[11px] font-black mb-4 uppercase tracking-widest flex items-center gap-2 text-amber-700">🏛️ Licitação / Cautela</h4>
               <div className="space-y-4">
-                <div><p className="text-[9px] font-black opacity-50 uppercase tracking-widest text-amber-900">Processo Licitatório</p><p className="font-black text-sm text-amber-800">{ativo.numero_licitacao || 'Não Informado'}</p></div>
-                <div><p className="text-[9px] font-black opacity-50 uppercase tracking-widest text-amber-900">Garantia / Vigência</p><p className="font-black text-sm text-amber-800">{ativo.data_vencimento_garantia ? new Date(ativo.data_vencimento_garantia).toLocaleDateString('pt-BR') : 'Sem registro'}</p></div>
-                <div><p className="text-[9px] font-black opacity-50 uppercase tracking-widest text-amber-900">Servidor com a Cautela</p><p className="font-black text-sm text-amber-800">{ativo.responsavel_atual || 'Sem responsável assinado'}</p></div>
+                <div><p className="text-[9px] font-black opacity-60 uppercase tracking-widest text-amber-900">Processo Licitatório</p><p className="font-black text-sm text-amber-800">{ativo.numero_licitacao || 'Não Informado'}</p></div>
+                <div><p className="text-[9px] font-black opacity-60 uppercase tracking-widest text-amber-900">Garantia / Vigência</p><p className="font-black text-sm text-amber-800">{ativo.data_vencimento_garantia ? new Date(ativo.data_vencimento_garantia).toLocaleDateString('pt-BR') : 'Sem registro'}</p></div>
+                <div><p className="text-[9px] font-black opacity-60 uppercase tracking-widest text-amber-900">Servidor com a Cautela</p><p className="font-black text-sm text-amber-800">{ativo.responsavel_atual || 'Sem responsável assinado'}</p></div>
               </div>
             </div>
 
+             {/* HARDWARE */}
              {ativo.dados_dinamicos && camposPermitidos.length > 0 && (
               <div className="p-6 rounded-3xl border shadow-sm print:border-gray-300" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
                 <div className="flex items-center justify-between mb-6">
@@ -128,16 +182,14 @@ export default function ModalFicha({ modalFicha, setModalFicha, categorias, usua
                 </div>
                 <div className="space-y-4">
                   {camposPermitidos.map((campo) => {
-                    // 🚀 REMOVE O PAR VINCULADO E APELIDOS DA FICHA DE VISUALIZAÇÃO
                     if (campo.toLowerCase().includes('apelido') || campo.toLowerCase().includes('personalizado') || campo.toLowerCase() === 'nome da máquina' || campo.toLowerCase() === 'par_vinculo') return null;
-
                     if (!dadosDin[campo]) return null;
                     return (
                       <div key={campo}>
                         <p className="text-[9px] font-black opacity-50 uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>{campo}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <p className="font-black text-sm flex-1 whitespace-pre-wrap" style={{ color: 'var(--text-main)' }}>{dadosDin[campo]}</p>
-                          {campo.toUpperCase() === 'IP' && <button onClick={() => abrirIP(dadosDin[campo])} className="w-7 h-7 bg-emerald-600 text-white rounded flex items-center justify-center hover:bg-emerald-700 print:hidden">🌐</button>}
+                          {campo.toUpperCase() === 'IP' && <button onClick={() => abrirIP(dadosDin[campo])} className="w-7 h-7 bg-emerald-600 text-white rounded flex items-center justify-center hover:bg-emerald-700 print:hidden shadow-sm">🌐</button>}
                         </div>
                       </div>
                     );
@@ -146,17 +198,18 @@ export default function ModalFicha({ modalFicha, setModalFicha, categorias, usua
               </div>
             )}
             
+            {/* SEGURANÇA */}
             <div className="p-6 rounded-3xl border shadow-sm print:hidden" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>
                 <div className="flex items-center gap-2 mb-4 border-b pb-3" style={{ borderColor: 'var(--border-light)' }}>
                   <span className="text-gray-500 text-lg">🛡️</span>
                   <h4 className="text-[11px] font-black uppercase tracking-widest" style={{ color: 'var(--text-main)' }}>Segurança e C2</h4>
                 </div>
-                <div className="flex flex-col gap-1 mb-5">
+                <div className="flex flex-col gap-1 mb-2">
                   <span className="text-[9px] font-black opacity-50 uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Status de Proteção</span>
                   <div className="flex items-center justify-between mt-1">
                     <span className={`text-sm font-black ${isVIP ? 'text-amber-600' : 'text-emerald-600'}`}>{isVIP ? '🔒 MÁXIMA (VIP)' : '🔓 PADRÃO'}</span>
                     {isUserAdmin && (
-                      <button onClick={toggleProtecaoC2} disabled={loadingSecurity} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all shadow-sm ${isVIP ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-amber-100 text-amber-700 border border-amber-200'}`}>
+                      <button onClick={toggleProtecaoC2} disabled={loadingSecurity} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all shadow-sm ${isVIP ? 'bg-red-100 text-red-700 border border-red-200 hover:bg-red-200' : 'bg-amber-100 text-amber-700 border border-amber-200 hover:bg-amber-200'}`}>
                         {loadingSecurity ? '...' : (isVIP ? 'Revogar VIP' : 'Tornar VIP')}
                       </button>
                     )}
@@ -168,9 +221,9 @@ export default function ModalFicha({ modalFicha, setModalFicha, categorias, usua
 
           <div className="lg:col-span-7 flex flex-col gap-6 print:block">
             
-            {/* 🚀 BLOCO DE TOPOLOGIA E RELACIONAMENTOS */}
+            {/* TOPOLOGIA */}
             {(vinculos?.pais?.length > 0 || vinculos?.filhos?.length > 0) && (
-               <div className="p-8 rounded-3xl border shadow-sm print:border-gray-300 bg-indigo-50/20 dark:bg-indigo-900/10" style={{ borderColor: 'var(--border-light)' }}>
+               <div className="p-8 rounded-3xl border shadow-sm print:border-gray-300 bg-indigo-50/30 dark:bg-indigo-900/10" style={{ borderColor: 'var(--border-light)' }}>
                   <h4 className="text-[11px] font-black mb-6 uppercase tracking-widest flex items-center gap-2 text-indigo-600">🕸️ Topologia & Relacionamentos (CMDB)</h4>
                   
                   <div className="space-y-6">
@@ -211,7 +264,7 @@ export default function ModalFicha({ modalFicha, setModalFicha, categorias, usua
                </div>
             )}
 
-            {/* Histórico */}
+            {/* AUDITORIA */}
             <div className="p-8 rounded-3xl border shadow-sm flex-1 print:border-none print:shadow-none print:p-0" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-light)' }}>
               <h4 className="text-[11px] font-black mb-8 uppercase tracking-widest flex items-center gap-2" style={{ color: 'var(--text-main)' }}>📜 Ciclo de Vida (Auditoria)</h4>
               <div className="relative pl-8 border-l-2 space-y-8" style={{ borderColor: 'var(--border-light)' }}>
@@ -220,7 +273,7 @@ export default function ModalFicha({ modalFicha, setModalFicha, categorias, usua
                   <div key={idx} className="relative group">
                     <div className="absolute -left-[41px] top-1.5 w-5 h-5 rounded-full border-4 bg-blue-500"></div>
                     <p className="text-[10px] font-black uppercase text-blue-500">{log.acao} - {new Date(log.data_hora).toLocaleDateString()}</p>
-                    <div className="mt-2 p-4 rounded-2xl border text-sm font-medium leading-relaxed" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>{log.detalhes}</div>
+                    <div className="mt-2 p-4 rounded-2xl border text-sm font-medium leading-relaxed shadow-sm" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-light)' }}>{log.detalhes}</div>
                   </div>
                 ))}
               </div>
